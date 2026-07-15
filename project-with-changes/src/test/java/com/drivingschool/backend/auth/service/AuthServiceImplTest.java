@@ -25,6 +25,7 @@ import com.drivingschool.backend.security.jwt.JwtTokenProvider;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
+import com.drivingschool.backend.user.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -67,6 +68,7 @@ class AuthServiceImplTest {
     @Mock private Authentication authentication;
     @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
     @Mock private EmailService emailService;
+    @Mock private UserService userService;
 
     private AuthServiceImpl authService;
 
@@ -87,7 +89,7 @@ class AuthServiceImplTest {
         authService = new AuthServiceImpl(authenticationManager, userRepository, roleRepository,
                 schoolRepository, studentProfileRepository, instructorProfileRepository,
                 passwordEncoder, jwtTokenProvider, authMapper, currentUserMapper, currentUserService,
-                passwordResetTokenRepository, emailService, 3_600_000L);
+                passwordResetTokenRepository, emailService, userService, 3_600_000L);
     }
 
     // --- login ---
@@ -394,5 +396,16 @@ class AuthServiceImplTest {
                 .isInstanceOf(BadRequestException.class);
 
         verify(userRepository, never()).save(any(User.class));
+    }
+
+    // --- deleteCurrentAccount ---
+
+    @Test
+    void deleteCurrentAccount_delegatesToUserServiceWithCurrentUserId() {
+        when(currentUserService.requireUserId()).thenReturn(1L);
+
+        authService.deleteCurrentAccount();
+
+        verify(userService, times(1)).softDelete(1L);
     }
 }

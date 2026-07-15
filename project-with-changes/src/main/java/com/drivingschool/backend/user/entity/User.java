@@ -49,6 +49,9 @@ public class User extends BaseEntity {
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
 
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "user_roles",
@@ -89,6 +92,21 @@ public class User extends BaseEntity {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
+    /**
+     * Hides the account (blocks login via the existing enabled=false check)
+     * and marks when, without touching any row that references this user -
+     * bookings, quiz submissions, assessments, and lesson notes are all
+     * preserved. There is no corresponding hard-delete path.
+     */
+    public void softDelete() {
+        this.deletedAt = LocalDateTime.now();
+        this.enabled = false;
     }
 
     public String getDisplayName() {

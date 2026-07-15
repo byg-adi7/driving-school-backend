@@ -30,6 +30,7 @@ import com.drivingschool.backend.student.enums.StudentStatus;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
+import com.drivingschool.backend.user.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -60,6 +61,7 @@ public class AuthServiceImpl implements AuthService {
     private final CurrentUserService currentUserService;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final EmailService emailService;
+    private final UserService userService;
     private final long passwordResetTokenExpirationMs;
 
     public AuthServiceImpl(AuthenticationManager authenticationManager,
@@ -75,6 +77,7 @@ public class AuthServiceImpl implements AuthService {
                            CurrentUserService currentUserService,
                            PasswordResetTokenRepository passwordResetTokenRepository,
                            EmailService emailService,
+                           UserService userService,
                            @Value("${app.password-reset.token-expiration-ms}") long passwordResetTokenExpirationMs) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
@@ -89,6 +92,7 @@ public class AuthServiceImpl implements AuthService {
         this.currentUserService = currentUserService;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.emailService = emailService;
+        this.userService = userService;
         this.passwordResetTokenExpirationMs = passwordResetTokenExpirationMs;
     }
 
@@ -252,6 +256,12 @@ public class AuthServiceImpl implements AuthService {
         passwordResetTokenRepository.save(resetToken);
 
         log.info("Password reset completed for user: {}", user.getEmail());
+    }
+
+    @Override
+    @Transactional
+    public void deleteCurrentAccount() {
+        userService.softDelete(currentUserService.requireUserId());
     }
 
     private void validateRoleSpecificFields(RegisterRequest request) {
