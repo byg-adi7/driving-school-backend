@@ -96,6 +96,22 @@ on pushes to `main` (never on pull requests), and only after both prior jobs suc
   set (see the table above) - deliberately not defaulted to an empty string, since that
   specific case throws at startup instead of disabling cleanly.
 
+## Secrets management
+
+All secrets (`JWT_SECRET`, `DB_PASSWORD`, `SENTRY_DSN`, etc. - the full list is the table
+in step 2 above) are stored as encrypted Railway environment variables, scoped per-service
+- never committed to the repo, never visible in build logs.
+
+**Rotation**: update the value in Railway's dashboard, then redeploy (Settings → Variables
+→ Deploy). No code change needed for any secret in the table above.
+
+**If you outgrow this** - multiple environments needing centrally-managed/audited secrets,
+automatic rotation, dynamic short-lived database credentials - the next step is HashiCorp
+Vault or a cloud provider's secrets manager (AWS Secrets Manager, GCP Secret Manager).
+That's deliberately not set up now: it requires running infrastructure this project doesn't
+have yet, and would be premature complexity for a single-environment Railway deployment.
+Revisit if/when that changes.
+
 ## Migration rollback
 
 Flyway (community edition, which this project uses) has no native "undo migration". Once
