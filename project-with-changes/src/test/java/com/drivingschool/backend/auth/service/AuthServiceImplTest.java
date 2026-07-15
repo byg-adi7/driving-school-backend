@@ -1,11 +1,15 @@
 package com.drivingschool.backend.auth.service;
 
 import com.drivingschool.backend.auth.dto.AuthResponse;
+import com.drivingschool.backend.auth.dto.ForgotPasswordRequest;
 import com.drivingschool.backend.auth.dto.LoginRequest;
 import com.drivingschool.backend.auth.dto.RefreshTokenRequest;
 import com.drivingschool.backend.auth.dto.RegisterRequest;
+import com.drivingschool.backend.auth.dto.ResetPasswordRequest;
+import com.drivingschool.backend.auth.entity.PasswordResetToken;
 import com.drivingschool.backend.auth.mapper.AuthMapper;
 import com.drivingschool.backend.auth.mapper.CurrentUserMapper;
+import com.drivingschool.backend.auth.repository.PasswordResetTokenRepository;
 import com.drivingschool.backend.common.exception.AuthenticationException;
 import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
@@ -32,11 +36,13 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -59,6 +65,8 @@ class AuthServiceImplTest {
     @Mock private CurrentUserMapper currentUserMapper;
     @Mock private CurrentUserService currentUserService;
     @Mock private Authentication authentication;
+    @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
+    @Mock private EmailService emailService;
 
     private AuthServiceImpl authService;
 
@@ -78,7 +86,8 @@ class AuthServiceImplTest {
     void setUp() {
         authService = new AuthServiceImpl(authenticationManager, userRepository, roleRepository,
                 schoolRepository, studentProfileRepository, instructorProfileRepository,
-                passwordEncoder, jwtTokenProvider, authMapper, currentUserMapper, currentUserService);
+                passwordEncoder, jwtTokenProvider, authMapper, currentUserMapper, currentUserService,
+                passwordResetTokenRepository, emailService, 3_600_000L);
     }
 
     // --- login ---
@@ -281,5 +290,109 @@ class AuthServiceImplTest {
 
         assertThat(response).isEqualTo(expectedResponse);
         verify(jwtTokenProvider, times(1)).generateAccessToken(any(UserPrincipal.class));
+    }
+
+    // --- forgotPassword ---
+
+    @Test
+    void forgotPassword_withExistingEmail_createsTokenAndSendsEmail() {
+        User user = existingUser(RoleName.STUDENT);
+        ForgotPasswordRequest request = ForgotPasswordRequest.builder().email("user@example.com").build();
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+
+        authService.forgotPassword(request);
+
+        verify(passwordResetTokenRepository, times(1)).save(any(PasswordResetToken.class));
+        verify(emailService, times(1)).sendPasswordResetEmail(eq("user@example.com"), anyString(), anyLong());
+    }
+
+    @Test
+    void forgotPassword_withUnknownEmail_doesNothingAndDoesNotThrow() {
+        ForgotPasswordRequest request = ForgotPasswordRequest.builder().email("ghost@example.com").build();
+        when(userRepository.findByEmail("ghost@example.com")).thenReturn(Optional.empty());
+
+        authService.forgotPassword(request);
+
+        verify(passwordResetTokenRepository, never()).save(any(PasswordResetToken.class));
+        verify(emailService, never()).sendPasswordResetEmail(anyString(), anyString(), anyLong());
+    }
+
+    // --- resetPassword ---
+
+    @Test
+    void resetPassword_withValidToken_updatesPasswordAndMarksTokenUsed() {
+        User user = existingUser(RoleName.STUDENT);
+        PasswordResetToken resetToken = PasswordResetToken.builder()
+                .user(user)
+                .token("valid-token")
+                .expiresAt(LocalDateTime.now().plusHours(1))
+                .build();
+        ResetPasswordRequest request = ResetPasswordRequest.builder()
+                .token("valid-token")
+                .newPassword("newPassword123")
+                .build();
+
+        when(passwordResetTokenRepository.findByToken("valid-token")).thenReturn(Optional.of(resetToken));
+        when(passwordEncoder.encode("newPassword123")).thenReturn("encoded-new-password");
+
+        authService.resetPassword(request);
+
+        assertThat(user.getPassword()).isEqualTo("encoded-new-password");
+        assertThat(resetToken.isUsed()).isTrue();
+        verify(userRepository, times(1)).save(user);
+        verify(passwordResetTokenRepository, times(1)).save(resetToken);
+    }
+
+    @Test
+    void resetPassword_withUnknownToken_throwsBadRequestException() {
+        ResetPasswordRequest request = ResetPasswordRequest.builder()
+                .token("missing-token")
+                .newPassword("newPassword123")
+                .build();
+        when(passwordResetTokenRepository.findByToken("missing-token")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.resetPassword(request))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void resetPassword_withExpiredToken_throwsBadRequestException() {
+        User user = existingUser(RoleName.STUDENT);
+        PasswordResetToken resetToken = PasswordResetToken.builder()
+                .user(user)
+                .token("expired-token")
+                .expiresAt(LocalDateTime.now().minusMinutes(1))
+                .build();
+        ResetPasswordRequest request = ResetPasswordRequest.builder()
+                .token("expired-token")
+                .newPassword("newPassword123")
+                .build();
+        when(passwordResetTokenRepository.findByToken("expired-token")).thenReturn(Optional.of(resetToken));
+
+        assertThatThrownBy(() -> authService.resetPassword(request))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void resetPassword_withAlreadyUsedToken_throwsBadRequestException() {
+        User user = existingUser(RoleName.STUDENT);
+        PasswordResetToken resetToken = PasswordResetToken.builder()
+                .user(user)
+                .token("used-token")
+                .expiresAt(LocalDateTime.now().plusHours(1))
+                .build();
+        resetToken.markUsed();
+        ResetPasswordRequest request = ResetPasswordRequest.builder()
+                .token("used-token")
+                .newPassword("newPassword123")
+                .build();
+        when(passwordResetTokenRepository.findByToken("used-token")).thenReturn(Optional.of(resetToken));
+
+        assertThatThrownBy(() -> authService.resetPassword(request))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(userRepository, never()).save(any(User.class));
     }
 }

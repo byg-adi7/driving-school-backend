@@ -105,6 +105,13 @@ app:
     gcs:
       bucket-name: ${GCS_BUCKET_NAME}
       project-id: ${GCP_PROJECT_ID:}
+
+  mail:
+    from: ${MAIL_FROM:no-reply@drivingschool.com}
+
+  password-reset:
+    token-expiration-ms: ${PASSWORD_RESET_TOKEN_EXPIRATION_MS:3600000}
+    reset-url: ${PASSWORD_RESET_URL:https://app.drivingschool.com/reset-password}
   bootstrap:
      admin:
         # DISABLED in production for security - must be explicitly enabled

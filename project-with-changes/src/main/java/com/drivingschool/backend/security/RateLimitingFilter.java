@@ -34,9 +34,11 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         String requestURI = request.getRequestURI();
 
         // Apply rate limiting to auth endpoints
-        if (requestURI.contains("/api/v1/auth/login") || 
+        if (requestURI.contains("/api/v1/auth/login") ||
             requestURI.contains("/api/v1/auth/register") ||
-            requestURI.contains("/api/v1/auth/refresh-token")) {
+            requestURI.contains("/api/v1/auth/refresh-token") ||
+            requestURI.contains("/api/v1/auth/forgot-password") ||
+            requestURI.contains("/api/v1/auth/reset-password")) {
             
             ConsumptionProbe probe = authBucket.tryConsumeAndReturnRemaining(1);
             

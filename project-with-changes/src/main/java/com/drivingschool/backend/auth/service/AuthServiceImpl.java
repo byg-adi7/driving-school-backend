@@ -3,11 +3,15 @@ package com.drivingschool.backend.auth.service;
 import com.drivingschool.backend.auth.dto.AdminRegisterRequest;
 import com.drivingschool.backend.auth.dto.AuthResponse;
 import com.drivingschool.backend.auth.dto.CurrentUserResponse;
+import com.drivingschool.backend.auth.dto.ForgotPasswordRequest;
 import com.drivingschool.backend.auth.dto.LoginRequest;
 import com.drivingschool.backend.auth.dto.RefreshTokenRequest;
 import com.drivingschool.backend.auth.dto.RegisterRequest;
+import com.drivingschool.backend.auth.dto.ResetPasswordRequest;
+import com.drivingschool.backend.auth.entity.PasswordResetToken;
 import com.drivingschool.backend.auth.mapper.AuthMapper;
 import com.drivingschool.backend.auth.mapper.CurrentUserMapper;
+import com.drivingschool.backend.auth.repository.PasswordResetTokenRepository;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.common.exception.AuthenticationException;
 import com.drivingschool.backend.common.exception.BadRequestException;
@@ -27,6 +31,7 @@ import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -35,6 +40,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -51,6 +58,9 @@ public class AuthServiceImpl implements AuthService {
     private final AuthMapper authMapper;
     private final CurrentUserMapper currentUserMapper;
     private final CurrentUserService currentUserService;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final EmailService emailService;
+    private final long passwordResetTokenExpirationMs;
 
     public AuthServiceImpl(AuthenticationManager authenticationManager,
                            UserRepository userRepository,
@@ -62,7 +72,10 @@ public class AuthServiceImpl implements AuthService {
                            JwtTokenProvider jwtTokenProvider,
                            AuthMapper authMapper,
                            CurrentUserMapper currentUserMapper,
-                           CurrentUserService currentUserService) {
+                           CurrentUserService currentUserService,
+                           PasswordResetTokenRepository passwordResetTokenRepository,
+                           EmailService emailService,
+                           @Value("${app.password-reset.token-expiration-ms}") long passwordResetTokenExpirationMs) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -74,6 +87,9 @@ public class AuthServiceImpl implements AuthService {
         this.authMapper = authMapper;
         this.currentUserMapper = currentUserMapper;
         this.currentUserService = currentUserService;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.emailService = emailService;
+        this.passwordResetTokenExpirationMs = passwordResetTokenExpirationMs;
     }
 
     @Override
@@ -194,6 +210,48 @@ public class AuthServiceImpl implements AuthService {
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(principal);
 
         return authMapper.toAuthResponse(user, newAccessToken, newRefreshToken);
+    }
+
+    @Override
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequest request) {
+        // Always behaves the same regardless of whether the email is
+        // registered, so the response can never be used to enumerate
+        // accounts.
+        userRepository.findByEmail(request.getEmail()).ifPresent(user -> {
+            String token = UUID.randomUUID().toString();
+            LocalDateTime expiresAt = LocalDateTime.now().plusNanos(passwordResetTokenExpirationMs * 1_000_000L);
+
+            PasswordResetToken resetToken = PasswordResetToken.builder()
+                    .user(user)
+                    .token(token)
+                    .expiresAt(expiresAt)
+                    .build();
+            passwordResetTokenRepository.save(resetToken);
+
+            emailService.sendPasswordResetEmail(user.getEmail(), token, passwordResetTokenExpirationMs / 60_000);
+            log.info("Password reset requested for user: {}", user.getEmail());
+        });
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(request.getToken())
+                .orElseThrow(() -> new BadRequestException("Invalid or expired reset token"));
+
+        if (resetToken.isUsed() || resetToken.isExpired()) {
+            throw new BadRequestException("Invalid or expired reset token");
+        }
+
+        User user = resetToken.getUser();
+        user.updatePassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        resetToken.markUsed();
+        passwordResetTokenRepository.save(resetToken);
+
+        log.info("Password reset completed for user: {}", user.getEmail());
     }
 
     private void validateRoleSpecificFields(RegisterRequest request) {
