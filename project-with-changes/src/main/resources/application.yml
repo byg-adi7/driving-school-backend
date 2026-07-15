@@ -127,7 +127,11 @@ springdoc:
     operations-sorter: method
     tags-sorter: alpha
 
-    management:
+management:
+  # Pre-existing indentation bug: `management:` was nested (wrongly) under
+  # springdoc.swagger-ui with its own children dedented back out to the
+  # top level, so none of this ever actually bound to `management.*` in
+  # dev/test - endpoints ran on Spring Boot's hardcoded defaults instead.
   endpoints:
     web:
       exposure:
@@ -135,6 +139,12 @@ springdoc:
   endpoint:
     health:
       show-details: always
+  health:
+    # EmailService already catches and logs send failures without
+    # propagating them - mail being unreachable (e.g. unconfigured SMTP
+    # in dev) shouldn't fail liveness/readiness for the same reason.
+    mail:
+      enabled: false
 
 
 
