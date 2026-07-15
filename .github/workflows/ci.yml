@@ -27,8 +27,10 @@ jobs:
 
       - name: Build and run tests
         # DB_PASSWORD/JWT_SECRET are placeholder values satisfying the app's
-        # fail-fast startup check - the test suite is entirely unit tests and
-        # needs no real database.
+        # fail-fast startup check for the app's own datasource config.
+        # SchemaValidationTest uses a separate Testcontainers-managed Postgres
+        # (real Docker daemon access, provided by this runner) - these two
+        # values are unrelated to that.
         env:
           DB_PASSWORD: ci_build_only
           JWT_SECRET: ci_build_only_secret_at_least_32_characters_long
@@ -52,3 +54,37 @@ jobs:
           tags: driving-school-backend:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Railway
+    runs-on: ubuntu-latest
+    needs: [test, docker-build]
+    # Only deploy from main itself, never from a PR branch, and only once
+    # RAILWAY_TOKEN has actually been added as a repo secret (see
+    # project-with-changes/DEPLOYMENT.md) - until then this job is skipped
+    # rather than failing the whole workflow.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check RAILWAY_TOKEN is configured
+        id: check-token
+        run: |
+          if [ -z "${{ secrets.RAILWAY_TOKEN }}" ]; then
+            echo "RAILWAY_TOKEN secret not set - see project-with-changes/DEPLOYMENT.md. Skipping deploy."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Railway CLI
+        if: steps.check-token.outputs.configured == 'true'
+        run: npm install -g @railway/cli
+
+      - name: Deploy
+        if: steps.check-token.outputs.configured == 'true'
+        working-directory: project-with-changes
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service="${{ vars.RAILWAY_SERVICE_NAME }}" --detach
