@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -35,7 +36,7 @@ import java.util.Arrays;
  * 
  * Key Security Features:
  * 1. All endpoints require authentication by default (except public auth endpoints)
- * 2. Swagger/API docs restricted to ADMIN role (not public)
+ * 2. Swagger/API docs public in dev/test, disabled entirely in production
  * 3. Schools list restricted to authenticated users only (not public)
  * 4. Rate limiting on login/register endpoints (10 req/min)
  * 5. CORS restricted to configured origins only
@@ -139,9 +140,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/schools").authenticated()
                         .requestMatchers("/api/v1/schools/**").hasRole("ADMIN")
                         
-                        // API Documentation: Public access for development/testing
-                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers("/api-docs/**", "/v3/api-docs/**").permitAll()
+                        // API Documentation: public in dev/test for convenience, but
+                        // never in production - also disabled outright via
+                        // springdoc.api-docs.enabled/swagger-ui.enabled in
+                        // application-prod.yml; this is defense in depth in case
+                        // that config is ever removed.
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**")
+                        .access((authentication, context) -> new AuthorizationDecision(!isProduction))
 
                         // OPTIONS: Allow CORS preflight
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
