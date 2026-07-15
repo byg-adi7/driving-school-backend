@@ -9,13 +9,12 @@ COPY pom.xml .
 RUN mvn -q -B dependency:go-offline
 
 COPY src src
-# Full verify (compiles + runs the unit test suite) so a broken build can never
-# produce a deployable image. No CI pipeline exists yet - this is the safety net
-# until one does. DB_PASSWORD/JWT_SECRET are dummy values satisfying the
-# fail-fast startup check; the test suite itself needs no real database.
-RUN --mount=type=cache,target=/root/.m2 \
-    DB_PASSWORD=build_only JWT_SECRET=build_only_secret_at_least_32_characters_long \
-    mvn -q -B clean verify
+# Tests already ran (and gate this job via `needs: test`) in ci.yml's separate
+# test job, which has real Docker daemon access for the Testcontainers-based
+# tests. This RUN step, by contrast, executes inside a `docker build` layer
+# with no daemon access, so it can never run those tests - re-running the
+# suite here would be redundant even where it could run. Package only.
+RUN --mount=type=cache,target=/root/.m2 mvn -q -B clean package -DskipTests
 
 # --- Runtime stage ---
 FROM eclipse-temurin:21-jre-jammy
