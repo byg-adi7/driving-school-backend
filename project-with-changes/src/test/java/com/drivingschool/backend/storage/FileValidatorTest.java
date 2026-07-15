@@ -1,6 +1,7 @@
 package com.drivingschool.backend.storage;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockMultipartFile;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -9,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class FileValidatorTest {
 
     private StorageProperties propertiesWith(long maxFileSizeMb, String allowedMimeTypes) {
-        StorageProperties properties = new StorageProperties();
+        StorageProperties properties = new StorageProperties(new MockEnvironment());
         properties.setMaxFileSizeMb(maxFileSizeMb);
         properties.setAllowedMimeTypes(allowedMimeTypes);
         return properties;
