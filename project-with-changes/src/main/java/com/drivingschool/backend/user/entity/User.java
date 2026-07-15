@@ -1,0 +1,105 @@
+package com.drivingschool.backend.user.entity;
+
+import com.drivingschool.backend.common.base.BaseEntity;
+import com.drivingschool.backend.instructor.entity.InstructorProfile;
+import com.drivingschool.backend.role.entity.Role;
+import com.drivingschool.backend.student.entity.StudentProfile;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import lombok.AccessLevel;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
+
+@Entity
+@Table(name = "users", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_users_email", columnNames = "email")
+}, indexes = {
+        @Index(name = "idx_users_email", columnList = "email"),
+        @Index(name = "idx_users_enabled", columnList = "enabled")
+})
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class User extends BaseEntity {
+
+    @Column(nullable = false, length = 255)
+    private String email;
+
+    @Column(nullable = false, length = 255)
+    private String password;
+
+    @Column(nullable = false)
+    private boolean enabled;
+
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
+    @Column(name = "last_login_at")
+    private LocalDateTime lastLoginAt;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "user_roles",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "role_id")
+    )
+    private Set<Role> roles = new HashSet<>();
+
+    @OneToOne(mappedBy = "user", fetch = FetchType.LAZY)
+    private StudentProfile studentProfile;
+
+    @OneToOne(mappedBy = "user", fetch = FetchType.LAZY)
+    private InstructorProfile instructorProfile;
+
+    @Builder
+    public User(String email, String password, boolean enabled, boolean emailVerified) {
+        this.email = email;
+        this.password = password;
+        this.enabled = enabled;
+        this.emailVerified = emailVerified;
+    }
+
+    public void addRole(Role role) {
+        this.roles.add(role);
+    }
+
+    public void updatePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
+
+    public void recordLogin() {
+        this.lastLoginAt = LocalDateTime.now();
+    }
+
+    public void verifyEmail() {
+        this.emailVerified = true;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public String getDisplayName() {
+        if (studentProfile != null) {
+            return studentProfile.getFirstName() + " " + studentProfile.getLastName();
+        }
+
+        if (instructorProfile != null) {
+            return instructorProfile.getFirstName() + " " + instructorProfile.getLastName();
+        }
+
+        return email;
+    }
+}

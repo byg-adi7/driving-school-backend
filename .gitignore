@@ -1,0 +1,31 @@
+# Build output
+project-with-changes/target/
+target/
+*.class
+
+# Logs (can contain sensitive data - SQL bind params, stack traces, PII)
+logs/
+project-with-changes/logs/
+*.log
+*.log.*.gz
+
+# Secrets / local environment overrides
+.env
+.env.*
+!.env.example
+
+# Uploaded files (local file storage - not source, and may contain user data)
+uploads/
+project-with-changes/uploads/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code local session/tooling state (not project source)
+.claude/

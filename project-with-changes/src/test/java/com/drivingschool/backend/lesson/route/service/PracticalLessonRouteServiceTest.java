@@ -1,0 +1,102 @@
+package com.drivingschool.backend.lesson.route.service;
+
+import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ResourceNotFoundException;
+import com.drivingschool.backend.instructor.entity.InstructorProfile;
+import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
+import com.drivingschool.backend.lesson.route.entity.PracticalLessonRoute;
+import com.drivingschool.backend.lesson.route.repository.PracticalLessonRouteRepository;
+import com.drivingschool.backend.lesson.route.validator.RouteValidator;
+import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.user.entity.User;
+import com.drivingschool.backend.user.repository.UserRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class PracticalLessonRouteServiceTest {
+
+    @Mock private PracticalLessonRouteRepository routeRepository;
+    @Mock private UserRepository userRepository;
+    @Mock private InstructorProfileRepository instructorProfileRepository;
+    @Mock private OpenRouteServiceIntegration openRouteService;
+    private final RouteValidator validator = new RouteValidator();
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private PracticalLessonRouteService routeService;
+
+    @BeforeEach
+    void setUp() {
+        routeService = new PracticalLessonRouteService(routeRepository, userRepository,
+                instructorProfileRepository, openRouteService, validator, objectMapper);
+    }
+
+    private User userWithId(Long id) {
+        User user = User.builder().email("u" + id + "@example.com").password("x").enabled(true).emailVerified(true).build();
+        ReflectionTestUtils.setField(user, "id", id);
+        return user;
+    }
+
+    private InstructorProfile instructorProfile(Long profileId, User user) {
+        InstructorProfile instructor = InstructorProfile.builder().user(user).active(true).school(School.builder().active(true).build()).build();
+        ReflectionTestUtils.setField(instructor, "id", profileId);
+        return instructor;
+    }
+
+    @Test
+    void getInstructorRoutes_asSelf_returnsRoutes() {
+        InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
+        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
+        when(routeRepository.findByInstructorId(50L, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of()));
+
+        assertThatCode(() -> routeService.getInstructorRoutes(1L, Pageable.unpaged(), 1L, "INSTRUCTOR"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void getInstructorRoutes_asDifferentInstructor_isDenied() {
+        InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
+        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
+
+        assertThatThrownBy(() -> routeService.getInstructorRoutes(1L, Pageable.unpaged(), 999L, "INSTRUCTOR"))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(routeRepository, never()).findByInstructorId(any(), any());
+    }
+
+    @Test
+    void getInstructorRoutes_asAdmin_isAllowedRegardlessOfIdentity() {
+        InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
+        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
+        when(routeRepository.findByInstructorId(50L, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of()));
+
+        assertThatCode(() -> routeService.getInstructorRoutes(1L, Pageable.unpaged(), 999L, "ADMIN"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void getInstructorRoutes_unknownInstructor_throwsResourceNotFoundException() {
+        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.empty());
+        when(instructorProfileRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> routeService.getInstructorRoutes(1L, Pageable.unpaged(), 1L, "ADMIN"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+}

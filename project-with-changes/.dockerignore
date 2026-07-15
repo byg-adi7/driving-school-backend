@@ -1,0 +1,15 @@
+target/
+logs/
+uploads/
+.git/
+.idea/
+.vscode/
+*.iml
+
+.env
+.env.*
+!.env.example
+
+debug-*.log
+*.log
+*.log.*.gz
