@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+defaults:
+  run:
+    working-directory: project-with-changes
+
+jobs:
+  test:
+    name: Build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: project-with-changes/pom.xml
+
+      - name: Build and run tests
+        # DB_PASSWORD/JWT_SECRET are placeholder values satisfying the app's
+        # fail-fast startup check - the test suite is entirely unit tests and
+        # needs no real database.
+        env:
+          DB_PASSWORD: ci_build_only
+          JWT_SECRET: ci_build_only_secret_at_least_32_characters_long
+        run: mvn -B clean verify
+
+  docker-build:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: project-with-changes
+          push: false
+          tags: driving-school-backend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
