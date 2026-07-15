@@ -36,6 +36,8 @@ In the app service's "Variables" tab, set:
 | `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM` | your SMTP relay's details | Needed for password-reset emails to actually send |
 | `PASSWORD_RESET_URL` | your frontend's reset-password page URL | e.g. `https://yourapp.com/reset-password` |
 | `STORAGE_PROVIDER` | `local` (default) or `gcs` | **See the storage caveat below before going live.** |
+| `SENTRY_DSN` | your Sentry project's DSN | Optional - error tracking stays off (no-op) if unset. Get a DSN from [sentry.io](https://sentry.io) (or self-hosted Sentry). |
+| `SENTRY_TRACES_SAMPLE_RATE` | a number 0.0-1.0, default `0.1` | Fraction of requests to trace for performance monitoring; only matters if `SENTRY_DSN` is set. |
 
 `PORT` is injected by Railway automatically and is already wired up (`application-prod.yml`
 reads `${PORT:8080}`) - don't set it yourself.
@@ -75,6 +77,24 @@ only builds the image to prove the Dockerfile still works (matches what Railway 
 build) - it doesn't push anywhere. `deploy` runs `railway up` from
 `project-with-changes/`, which builds from the same Dockerfile and deploys it. It only runs
 on pushes to `main` (never on pull requests), and only after both prior jobs succeed.
+
+## Observability
+
+- **Metrics**: `/actuator/prometheus` exposes Micrometer/Prometheus-format metrics in
+  prod. It's still behind `SecurityConfig`'s `/actuator/** -> hasRole('ADMIN')` rule, so
+  a real Prometheus server needs either network-level access to the app (e.g. both
+  running on Railway's private network) or a scrape credential with the ADMIN role -
+  it isn't openly scrapeable just because the endpoint is enabled.
+- **Logs**: prod logs are structured JSON (Elastic Common Schema) via Spring Boot's
+  built-in structured logging, not the old plain-text pattern - point a log aggregator
+  (Loki, ELK, Cloud Logging, etc.) at stdout or `logs/driving-school-backend.log` and it
+  parses fields directly instead of regexing a line. Every MDC key - including
+  `requestId`, already populated per-request by `ApiVersioningFilter` - is folded into
+  each JSON line automatically, so request correlation across log lines still works the
+  same way it always did. Dev/local logs are unchanged (still human-readable).
+- **Error tracking**: Sentry integration is wired in but inert until `SENTRY_DSN` is
+  set (see the table above) - deliberately not defaulted to an empty string, since that
+  specific case throws at startup instead of disabling cleanly.
 
 ## Migration rollback
 
