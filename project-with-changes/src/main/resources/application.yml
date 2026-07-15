@@ -40,6 +40,18 @@ spring:
     encoding: UTF-8
     schemas: public
 
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
 server:
   port: ${SERVER_PORT:8080}
   compression:
@@ -95,6 +107,15 @@ app:
       # Bootstrap admin password - MUST change after first login!
        # For production, use environment variable: BOOTSTRAP_ADMIN_PASSWORD
        password: ${BOOTSTRAP_ADMIN_PASSWORD}
+
+  mail:
+    from: ${MAIL_FROM:no-reply@drivingschool.local}
+
+  password-reset:
+    # How long a requested reset link stays valid.
+    token-expiration-ms: ${PASSWORD_RESET_TOKEN_EXPIRATION_MS:3600000}
+    # Frontend page that reads the ?token= query param and calls reset-password.
+    reset-url: ${PASSWORD_RESET_URL:http://localhost:3000/reset-password}
 
 
 

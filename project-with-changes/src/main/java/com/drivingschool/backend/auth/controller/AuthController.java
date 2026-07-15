@@ -3,9 +3,11 @@ package com.drivingschool.backend.auth.controller;
 import com.drivingschool.backend.auth.dto.AdminRegisterRequest;
 import com.drivingschool.backend.auth.dto.AuthResponse;
 import com.drivingschool.backend.auth.dto.CurrentUserResponse;
+import com.drivingschool.backend.auth.dto.ForgotPasswordRequest;
 import com.drivingschool.backend.auth.dto.LoginRequest;
 import com.drivingschool.backend.auth.dto.RefreshTokenRequest;
 import com.drivingschool.backend.auth.dto.RegisterRequest;
+import com.drivingschool.backend.auth.dto.ResetPasswordRequest;
 import com.drivingschool.backend.auth.service.AuthService;
 import com.drivingschool.backend.common.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -58,6 +60,21 @@ public class AuthController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<CurrentUserResponse>> me() {
         return ResponseEntity.ok(ApiResponse.success(authService.getCurrentUser()));
+    }
+
+    @PostMapping("/forgot-password")
+    @Operation(summary = "Request a password reset email")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return ResponseEntity.ok(ApiResponse.success(
+                "If an account with that email exists, a password reset link has been sent.", null));
+    }
+
+    @PostMapping("/reset-password")
+    @Operation(summary = "Reset password using a valid reset token")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.success("Password has been reset successfully.", null));
     }
 
     @PostMapping("/admin/register")
