@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.core.io.Resource;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.IOException;
@@ -24,7 +25,7 @@ class LocalStorageServiceTest {
 
     @BeforeEach
     void setUp() {
-        StorageProperties properties = new StorageProperties();
+        StorageProperties properties = new StorageProperties(new MockEnvironment());
         properties.getLocal().setBasePath(tempDir.toString());
         service = new LocalStorageService(properties, new FileValidator(properties));
     }

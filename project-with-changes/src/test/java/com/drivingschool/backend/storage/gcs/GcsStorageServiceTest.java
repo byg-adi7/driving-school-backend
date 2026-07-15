@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.io.Resource;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.IOException;
@@ -35,7 +36,7 @@ class GcsStorageServiceTest {
 
     @BeforeEach
     void setUp() {
-        StorageProperties properties = new StorageProperties();
+        StorageProperties properties = new StorageProperties(new MockEnvironment());
         properties.getGcs().setBucketName(BUCKET);
         service = new GcsStorageService(storage, properties, new FileValidator(properties));
     }
