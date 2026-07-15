@@ -1,0 +1,125 @@
+spring:
+  application:
+    name: driving-school-backend
+  
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+          batch_size: 25
+          fetch_size: 50
+        order_inserts: true
+        order_updates: true
+  
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    out-of-order: false
+    validate-on-migrate: true
+    clean-disabled: true
+    encoding: UTF-8
+    schemas: public
+
+server:
+  # Cloud Run injects PORT; GKE/other targets fall back to 8080.
+  port: ${PORT:8080}
+  compression:
+    enabled: true
+    min-response-size: 1024
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain
+  shutdown: graceful
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 10
+    max-connections: 10000
+    accept-count: 100
+    connection-timeout: 30000ms
+    # Empty = strict validation (no relaxed characters allowed in query/path)
+    relaxed-query-chars: ""
+    relaxed-path-chars: ""
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+    include-exception: false
+  # No server.ssl block: TLS terminates at the platform (Cloud Run, or GKE
+  # Ingress/managed cert) - the app always receives plain HTTP internally.
+  # (http2.enabled was also removed: Tomcat's HTTP/2 support requires ALPN,
+  # which requires TLS at this layer - it was a no-op without server.ssl.)
+
+logging:
+  level:
+    root: WARN
+    com.drivingschool.backend: INFO
+
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{requestId}] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{requestId}] %logger{36} - %msg%n"
+  file:
+    name: logs/driving-school-backend.log
+    max-size: 10MB
+    max-history: 30
+    total-size-cap: 1GB
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+        exclude: "*"
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    access-token-expiration-ms: ${JWT_ACCESS_EXPIRATION_MS:900000}
+    refresh-token-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://app.drivingschool.com}
+    allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
+    allowed-headers: Authorization,Content-Type,Accept,X-Requested-With,X-API-Version,X-Request-ID
+    allow-credentials: true
+    max-age: 3600
+
+  storage:
+    provider: ${STORAGE_PROVIDER:gcs}
+    max-file-size-mb: 50
+    allowed-mime-types: application/pdf
+    gcs:
+      bucket-name: ${GCS_BUCKET_NAME}
+      project-id: ${GCP_PROJECT_ID:}
+  bootstrap:
+     admin:
+        # DISABLED in production for security - must be explicitly enabled
+        enabled: ${BOOTSTRAP_ADMIN_ENABLED:false}
+        # Production admin email - set via environment variable
+        email: ${BOOTSTRAP_ADMIN_EMAIL:admin@company.com}
+        # Production admin password - MUST be set via environment variable
+        # NEVER include actual passwords in configuration files
+        password: ${BOOTSTRAP_ADMIN_PASSWORD}
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    disable-swagger-default-url: true

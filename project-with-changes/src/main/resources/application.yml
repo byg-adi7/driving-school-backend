@@ -1,0 +1,137 @@
+spring:
+  application:
+    name: driving-school-backend
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:driving_school}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+    defer-datasource-initialization: false
+
+  sql:
+    init:
+      mode: never
+  
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    out-of-order: false
+    validate-on-migrate: false
+    clean-disabled: true
+    encoding: UTF-8
+    schemas: public
+
+server:
+  port: ${SERVER_PORT:8080}
+  compression:
+    enabled: true
+    min-response-size: 1024
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain
+  http2:
+    enabled: true
+  shutdown: graceful
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 10
+    max-connections: 10000
+    accept-count: 100
+    connection-timeout: 30000ms
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    access-token-expiration-ms: ${JWT_ACCESS_EXPIRATION_MS:900000}
+    refresh-token-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+    allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
+    allowed-headers: "*"
+    allow-credentials: true
+    max-age: 3600
+  storage:
+    # "local" (disk) or "gcs" (Google Cloud Storage). See application-prod.yml for gcs.
+    provider: ${STORAGE_PROVIDER:local}
+
+    # Maximum file size in megabytes
+    max-file-size-mb: 50
+
+    # Allowed MIME types (comma-separated). Currently only PDF is supported.
+    allowed-mime-types: application/pdf
+
+    local:
+      # Base directory for storing uploaded files (used when provider=local).
+      base-path: ./uploads
+
+  bootstrap:
+    admin:
+      # Enable automatic creation of bootstrap admin on first startup
+       enabled: true
+      # Bootstrap admin email address - change after first login!
+       email: ${BOOTSTRAP_ADMIN_EMAIL:admin@drivingschool.local}
+      # Bootstrap admin password - MUST change after first login!
+       # For production, use environment variable: BOOTSTRAP_ADMIN_PASSWORD
+       password: ${BOOTSTRAP_ADMIN_PASSWORD}
+
+
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+
+    management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: always
+
+
+
+
+logging:
+  level:
+    root: INFO
+    com.drivingschool.backend: DEBUG
+    org.springframework.security: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/driving-school-backend.log
+
+# OpenRouteService Configuration
+openroute:
+  apiKey: ${OPENROUTE_API_KEY:demo-key-for-testing}
+  directionsUrl: https://api.openrouteservice.org/v2/directions/driving-car
+  timeout: 5000
+

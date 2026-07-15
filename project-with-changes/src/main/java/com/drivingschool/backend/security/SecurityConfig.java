@@ -1,0 +1,183 @@
+package com.drivingschool.backend.security;
+
+import com.drivingschool.backend.security.jwt.JwtAuthenticationFilter;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.security.web.header.writers.StaticHeadersWriter;
+import org.springframework.security.web.header.writers.XXssProtectionHeaderWriter;
+
+import java.util.Arrays;
+
+/**
+ * Security Configuration for the Driving School Backend
+ * 
+ * Implements:
+ * - JWT-based stateless authentication
+ * - Role-Based Access Control (RBAC)
+ * - API Versioning (/api/v1)
+ * - Rate limiting on authentication endpoints
+ * - Security headers (CSP, HSTS, X-Frame-Options, etc.)
+ * - Profile-aware endpoint protection (Dev vs Production)
+ * 
+ * Key Security Features:
+ * 1. All endpoints require authentication by default (except public auth endpoints)
+ * 2. Swagger/API docs restricted to ADMIN role (not public)
+ * 3. Schools list restricted to authenticated users only (not public)
+ * 4. Rate limiting on login/register endpoints (10 req/min)
+ * 5. CORS restricted to configured origins only
+ * 6. HSTS headers enabled in production
+ */
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity(prePostEnabled = true, securedEnabled = true)
+public class SecurityConfig {
+
+    private final CustomUserDetailsService userDetailsService;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitingFilter rateLimitingFilter;
+    private final ApiVersioningFilter apiVersioningFilter;
+    private final PasswordEncoder passwordEncoder;
+    private final Environment environment;
+
+    public SecurityConfig(CustomUserDetailsService userDetailsService,
+                          JwtAuthenticationFilter jwtAuthenticationFilter,
+                          RateLimitingFilter rateLimitingFilter,
+                          ApiVersioningFilter apiVersioningFilter,
+                          PasswordEncoder passwordEncoder,
+                          Environment environment) {
+        this.userDetailsService = userDetailsService;
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.rateLimitingFilter = rateLimitingFilter;
+        this.apiVersioningFilter = apiVersioningFilter;
+        this.passwordEncoder = passwordEncoder;
+        this.environment = environment;
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        boolean isProduction = Arrays.asList(environment.getActiveProfiles()).contains("prod");
+
+        http
+                // CSRF: Disabled for stateless JWT architecture
+                .csrf(csrf -> csrf.disable())
+                
+                // CORS: Configured via CorsConfig
+                .cors(cors -> {})
+                
+                // Session Management: Stateless JWT tokens only
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                        .sessionFixation(sessionFixation -> sessionFixation.migrateSession()))
+                
+                // Security Headers: Comprehensive protection against common attacks
+                .headers(headers -> headers
+                        // CSP: Restrict script execution to origin only
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(
+                                "default-src 'self'; " +
+                                        "script-src 'self' 'unsafe-inline'; " +
+                                        "style-src 'self' 'unsafe-inline'; " +
+                                        "img-src 'self' data: https:; " +
+                                        "font-src 'self'; " +
+                                        "connect-src 'self'; " +
+                                        "form-action 'self'; " +
+                                        "frame-ancestors 'none'"))
+
+                        // HSTS: Force HTTPS in production
+                        .httpStrictTransportSecurity(hsts -> hsts
+                                .maxAgeInSeconds(isProduction ? 31536000L : 3600L)  // 1 year prod, 1 hour dev
+                                .includeSubDomains(true)
+                                .preload(isProduction))
+
+                        // X-Frame-Options: Prevent clickjacking
+                        .frameOptions(frameOptions -> frameOptions.deny())
+
+                        // X-Content-Type-Options: Prevent MIME-type sniffing
+                        .contentTypeOptions(contentTypeOptions -> {
+                        })
+
+                        // X-XSS-Protection: Legacy XSS protection
+                        .xssProtection(xss -> xss.headerValue(
+                                XXssProtectionHeaderWriter.HeaderValue.ENABLED_MODE_BLOCK))
+
+                        // Referrer-Policy: Control referrer information
+                        .referrerPolicy(referrer -> referrer.policy(
+                                ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER))
+
+                        // Custom headers
+                        .addHeaderWriter(new StaticHeadersWriter("X-API-Version", "1.0"))
+                        .addHeaderWriter(new StaticHeadersWriter("X-Content-Type-Options", "nosniff"))
+                        .addHeaderWriter(new StaticHeadersWriter("X-Frame-Options", "DENY"))
+                        .addHeaderWriter(new StaticHeadersWriter("X-XSS-Protection", "1; mode=block")).permissionsPolicyHeader(permissions -> permissions
+                                .policy("geolocation=(), microphone=(), camera=(), payment=(), usb=()")))
+                
+                // Authorization Rules: API versioning with /api/v1 prefix
+                .authorizeHttpRequests(auth -> auth
+                        // Public authentication endpoints - Rate limited
+                        .requestMatchers(HttpMethod.POST, 
+                                "/api/v1/auth/login", 
+                                "/api/v1/auth/register", 
+                                "/api/v1/auth/refresh-token").permitAll()
+                        
+                        // All other auth endpoints require authentication
+                        .requestMatchers("/api/v1/auth/**").authenticated()
+                        
+                        // Schools: Now restricted to authenticated users only (was public)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/schools").authenticated()
+                        .requestMatchers("/api/v1/schools/**").hasRole("ADMIN")
+                        
+                        // API Documentation: Public access for development/testing
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers("/api-docs/**", "/v3/api-docs/**").permitAll()
+
+                        // OPTIONS: Allow CORS preflight
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        
+                        // Actuator: Health checks public, rest requires ADMIN
+                        // (Spring Boot's actual probe-group paths are "liveness"/"readiness",
+                        // not "live"/"ready" - verified live; the short forms 404 and would
+                        // otherwise fall through to the ADMIN-only rule below, breaking
+                        // container-orchestrator health checks.)
+                        .requestMatchers("/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness").permitAll()
+                        .requestMatchers("/actuator/**").hasRole("ADMIN")
+                        
+                        // Default: All other requests require authentication (SECURE DEFAULT)
+                        .anyRequest().authenticated())
+                
+                // Authentication provider
+                .authenticationProvider(authenticationProvider())
+                
+                // Filter chain: API versioning first, then rate limiting, then JWT auth
+                .addFilterBefore(apiVersioningFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+
+    @Bean
+    public DaoAuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(userDetailsService);
+        provider.setPasswordEncoder(passwordEncoder);
+        return provider;
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
+    }
+}

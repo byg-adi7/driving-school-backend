@@ -1,0 +1,64 @@
+spring:
+  jpa:
+    hibernate:
+     ddl-auto: update
+     show-sql: true
+  flyway:
+    enabled: true
+    repair-on-migrate: true
+    validate-on-migrate: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080
+
+app:
+   bootstrap:
+     admin:
+       # Enable bootstrap admin for development convenience
+       enabled: true
+       # Development admin credentials - safe for dev only
+       email: ${BOOTSTRAP_ADMIN_EMAIL:admin@dev.local}
+       password: ${BOOTSTRAP_ADMIN_PASSWORD:DevPassword123!}
+
+# Development: Allow Swagger docs and detailed error responses
+server:
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: always
+    include-exception: true
+
+logging:
+  level:
+    root: DEBUG
+    com.drivingschool.backend: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{requestId}] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{requestId}] %logger{36} - %msg%n"
+  file:
+    name: logs/driving-school-backend-dev.log
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    # In dev: Swagger is publicly accessible (requires auth in prod)
+    disable-swagger-default-url: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
