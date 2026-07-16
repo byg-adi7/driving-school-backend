@@ -119,6 +119,36 @@ That's deliberately not set up now: it requires running infrastructure this proj
 have yet, and would be premature complexity for a single-environment Railway deployment.
 Revisit if/when that changes.
 
+## Backups
+
+Railway's Postgres plugin supports both on-demand and scheduled backups from its
+dashboard (Postgres service → "Backups" tab) - this project doesn't run its own backup
+tooling, since duplicating what the platform already does well would be pure overhead.
+That tab being available isn't itself a backup *strategy* though, so here's the concrete
+one for this project:
+
+1. **Turn on scheduled backups** for the Postgres service, not just on-demand ones.
+   Daily is the practical minimum for a system tracking bookings, quiz submissions, and
+   driving assessments - losing a day of that data to an unnoticed bad deploy is a real
+   cost, not a hypothetical one. Pick the longest retention window your Railway plan
+   offers that you're comfortable paying for; retention options and pricing are a
+   dashboard/plan detail that can change, so check what's actually offered rather than
+   assuming a specific number here.
+2. **Always take a manual on-demand backup immediately before a risky migration** (see
+   the migration-rollback runbook below) - scheduled backups cover the general case, but
+   don't rely on the schedule happening to line up with the one deploy that actually
+   needed it.
+3. **To restore**: Postgres service → "Backups" → select a snapshot → restore. Railway
+   restores into a fresh instance rather than overwriting the live one in place, so after
+   restoring, update the app service's `DB_HOST`/`DB_PORT`/etc. variables (step 2 above)
+   to point at the restored instance if Railway assigns it new connection details, then
+   redeploy and verify `/actuator/health/readiness` before considering the incident
+   closed.
+4. **Test a restore at least once before you actually need it.** A backup nobody has ever
+   restored from is a hope, not a plan - the failure mode (a snapshot that turns out to
+   be corrupt, or connection details that don't work the way you expected) is much better
+   discovered during a calm dry run than during an actual incident.
+
 ## Migration rollback
 
 Flyway (community edition, which this project uses) has no native "undo migration". Once
