@@ -10,10 +10,7 @@ import lombok.Builder;
 import java.util.List;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 
 @Entity
@@ -55,13 +52,10 @@ public class LessonNote extends BaseEntity {
     @Column(name = "recommendations", length = 1500)
     private String recommendations;
 
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    @UpdateTimestamp
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
+    // createdAt and updatedAt are inherited from BaseEntity to centralize auditing.
+    // (Previously redeclared here with Hibernate's @CreationTimestamp/@UpdateTimestamp,
+    // which shadowed BaseEntity's Spring Data JPA auditing fields of the same name and
+    // meant created_at never actually got populated - see PRODUCTION_READINESS.md.)
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "updated_by_id")

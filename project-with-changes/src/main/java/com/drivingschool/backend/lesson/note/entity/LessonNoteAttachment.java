@@ -7,9 +7,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-
-import java.time.LocalDateTime;
 
 /**
  * LessonNoteAttachment Entity
@@ -95,13 +92,10 @@ public class LessonNoteAttachment extends BaseEntity {
     @JoinColumn(name = "uploaded_by_id", nullable = false)
     private User uploadedBy;
 
-    /**
-     * Timestamp when file was uploaded
-     * Immutable - never changes after creation
-     */
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    // createdAt is inherited from BaseEntity to centralize auditing. (Previously
+    // redeclared here with Hibernate's @CreationTimestamp, which shadowed BaseEntity's
+    // Spring Data JPA auditing field of the same name and meant created_at never
+    // actually got populated - see PRODUCTION_READINESS.md.)
 
     /**
      * Optional description or notes about the attachment
