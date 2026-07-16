@@ -10,6 +10,7 @@ import lombok.Builder;
 import java.util.List;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.util.ArrayList;
 
@@ -67,6 +68,12 @@ public class LessonNote extends BaseEntity {
      * Cascade delete: if lesson note is deleted, all attachments are deleted
      * Lazy loading: attachments are loaded only when accessed
      */
+    // @ToString.Exclude: LessonNoteAttachment's own @Data-generated toString() includes
+    // its back-reference to this LessonNote, so including this collection here would
+    // recurse infinitely (LessonNote -> attachments -> LessonNoteAttachment -> lessonNote
+    // -> LessonNote -> ...) and crash with a StackOverflowError the moment either side's
+    // toString() is ever called with both directions loaded - see PRODUCTION_READINESS.md.
+    @ToString.Exclude
     @OneToMany(
             mappedBy = "lessonNote",
             cascade = CascadeType.ALL,

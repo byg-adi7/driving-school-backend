@@ -45,7 +45,7 @@ public class LocalStorageService implements StorageService {
         String storagePath = StoragePaths.generate(folder, identifier, extension);
         String fileHash = FileHasher.sha256Hex(file.getBytes());
 
-        Path basePath = Paths.get(properties.getLocal().getBasePath());
+        Path basePath = basePath();
         Path filePath = basePath.resolve(storagePath);
         Path parentDir = filePath.getParent();
         if (parentDir == null) {
@@ -54,6 +54,10 @@ public class LocalStorageService implements StorageService {
         Files.createDirectories(parentDir);
 
         try {
+            // MultipartFile#transferTo(File) resolves a *relative* File against
+            // Tomcat's own internal temp/work directory, not the JVM's working
+            // directory - basePath() being absolute is what makes this land in the
+            // real uploads directory instead of silently failing there.
             file.transferTo(filePath.toFile());
             log.info("File uploaded successfully: {} (size: {} bytes)", storagePath, file.getSize());
         } catch (IOException e) {
@@ -76,7 +80,7 @@ public class LocalStorageService implements StorageService {
             throw new IllegalArgumentException("Invalid file path");
         }
 
-        Path basePath = Paths.get(properties.getLocal().getBasePath());
+        Path basePath = basePath();
         Path filePath = basePath.resolve(storagePath);
 
         if (!Files.exists(filePath)) {
@@ -103,7 +107,7 @@ public class LocalStorageService implements StorageService {
             throw new IllegalArgumentException("Invalid file path");
         }
 
-        Path basePath = Paths.get(properties.getLocal().getBasePath());
+        Path basePath = basePath();
         Path filePath = basePath.resolve(storagePath);
 
         try {
@@ -115,5 +119,9 @@ public class LocalStorageService implements StorageService {
             log.error("Failed to delete file: {}", storagePath, e);
             throw new IOException("Failed to delete file: " + e.getMessage(), e);
         }
+    }
+
+    private Path basePath() {
+        return Paths.get(properties.getLocal().getBasePath()).toAbsolutePath().normalize();
     }
 }
