@@ -1,8 +1,8 @@
 # Production Readiness TODO
 
-Compiled 2026-07-15 from a full audit of the codebase (security, data layer, test coverage, ops/deployment). Reflects state after the V8/V9 schema-alignment migrations landed on `main`. Updated 2026-07-15 as items below were resolved — see `DEPLOYMENT.md` for the operational detail behind the deployment/secrets/observability items.
+Compiled 2026-07-15 from a full audit of the codebase (security, data layer, test coverage, ops/deployment). Reflects state after the V8/V9 schema-alignment migrations landed on `main`. Updated 2026-07-15 and 2026-07-16 as items below were resolved — see `DEPLOYMENT.md` for the operational detail behind the deployment/secrets/observability items.
 
-**Overall assessment:** all seven items originally listed as blockers are now resolved except one, which needs a five-minute human decision rather than code. The remaining open items are lower-severity cleanup, not launch blockers.
+**Overall assessment:** all seven items originally listed as blockers are now resolved. The remaining open items are lower-severity cleanup, not launch blockers.
 
 ---
 
@@ -14,7 +14,7 @@ Compiled 2026-07-15 from a full audit of the codebase (security, data layer, tes
 4. ~~**No migration rollback plan.**~~ — ✅ **Documented.** `DEPLOYMENT.md` has a full runbook (fix-forward pattern, pre-migration backup discipline, recovery steps). Flyway community still has no native undo — this is process, not tooling.
 5. ~~**Local file storage has no production guard rail.**~~ — ✅ **Fixed.** `StorageProperties` fails fast at startup if `app.storage.provider=local` while the `prod` profile is active. Verified both directions against a real boot.
 6. ~~**No test would catch a repeat of the V8/V9 bug.**~~ — ✅ **Fixed.** `SchemaValidationTest` boots the full app against a genuinely fresh Testcontainers Postgres with `ddl-auto=validate`. Verified it actually catches drift (it caught two more gaps — `lesson_note_attachments`/`lesson_question_status_history` missing `updated_at` — while being added).
-7. **Confirm whether vehicle/instructor-profile/student-profile management is actually missing, or just handled elsewhere.** — ⏳ **Still open.** This is a product-scope question, not something to resolve by writing code speculatively.
+7. ~~**Confirm whether vehicle/instructor-profile/student-profile management is actually missing, or just handled elsewhere.**~~ — ✅ **Resolved.** Decision: it was a real gap, not handled elsewhere — built all three. `VehicleController`/`VehicleService` (admin create/update/status-change, authenticated read), `InstructorProfileController`/`InstructorProfileService` (self-service `/me`, admin list-by-school and activate/deactivate), `StudentProfileController`/`StudentProfileService` (self-service `/me`, admin list-by-school and status-update) — all following the existing `SchoolController` pattern. Verified against a real Postgres boot for each.
 
 ---
 
@@ -36,7 +36,7 @@ Compiled 2026-07-15 from a full audit of the codebase (security, data layer, tes
 
 | Status | Item | Notes |
 |---|---|---|
-| ⏳ Open | Cascade-delete chains, no soft-delete | Deleting a `User` cascades through `student_profiles`/`instructor_profiles` and destroys bookings, quiz submissions, assessments, and lesson notes with no recovery. No delete endpoint exists yet, so still dormant — decide the policy before one is added. |
+| ✅ Fixed | Cascade-delete chains, no soft-delete | Decision: soft-delete over hard cascade-delete. Added `users.deleted_at` (V12), `User.softDelete()`/`isDeleted()` (reuses the existing `enabled=false` gate on login — no auth-flow changes needed), admin `DELETE /api/v1/users/{id}`, and self-service `DELETE /api/v1/auth/me`. Verified against a real boot: login is rejected afterward while the user row and linked profile rows survive intact; re-deleting an already-deleted account returns 400. |
 | ⚠️ Partially addressed | V9's `ADD COLUMN IF NOT EXISTS ... NOT NULL` can silently skip tightening | V11 directly tightened the columns originally flagged in this session's audit (`video_lessons`, `quizzes`, `quiz_questions`, `quiz_submissions`, `attendances`, `lesson_question_submissions`, `notifications`). The columns V9 itself added with this pattern (`vehicles.color`/`status`, `student_profiles.status`, `notifications.channel`/`status`, `license_workflows.*`) weren't re-touched — low risk in practice since Hibernate's `ddl-auto=update` would have created them correctly on any DB that hit this path, but not verified. |
 | ✅ Fixed | Two entity-declared indexes were never created | `idx_video_lessons_order` and `idx_schools_name`/`idx_schools_active` added in V11. |
 | ✅ Fixed | Nullable-in-DB vs. `nullable=false`-in-entity mismatches | Tightened in V11 for all columns identified in the original audit. |
@@ -54,7 +54,7 @@ Compiled 2026-07-15 from a full audit of the codebase (security, data layer, tes
 |---|---|---|
 | ✅ Fixed | No integration/DB tests existed | `SchemaValidationTest` — see blocker #6. |
 | ✅ Fixed | No migration/boot-validation test | Same as above. |
-| ⏳ Open | No service/controller layer for vehicles, instructor profiles, or student profiles | See blocker #7 — product-scope question. |
+| ✅ Fixed | No service/controller layer for vehicles, instructor profiles, or student profiles | See blocker #7 above. Each module has both service-layer unit tests and `@WebMvcTest` security tests covering every `@PreAuthorize` check. |
 | ✅ Fixed | Security testing was inconsistent | See Security table above. |
 | ⏳ Open | `LessonQuestionSubmissionService` has zero unit tests | Its sibling `LessonQuestionStatusHistoryService` is tested; this one still isn't, beyond the indirect HTTP-layer coverage from the new security tests. |
 | ⏳ Open | No static analysis or coverage tooling | No Jacoco, Checkstyle, PMD, or SpotBugs configured. |
@@ -84,6 +84,4 @@ Compiled 2026-07-15 from a full audit of the codebase (security, data layer, tes
 
 ## What's actually left
 
-1. **Confirm vehicle/instructor/student profile management scope** (blocker #7) — needs a product decision, not code.
-2. **Decide the cascade-delete / soft-delete policy** — needs a product decision before any user/profile-deletion feature ships.
-3. Everything else above marked ⏳ Open is lower-severity cleanup (rate-limit breadth, refresh-token revocation, N+1 risk, static analysis tooling, one untested service) — reasonable to pick up incrementally, none of it blocks going live.
+Everything above marked ⏳ Open is lower-severity cleanup (rate-limit breadth, refresh-token revocation, N+1 risk, static analysis tooling, one untested service, the not-fully-reverified V9 `ADD COLUMN IF NOT EXISTS` columns) — reasonable to pick up incrementally, none of it blocks going live. Both former blockers (#7 profile-management scope, cascade-delete policy) are resolved.
