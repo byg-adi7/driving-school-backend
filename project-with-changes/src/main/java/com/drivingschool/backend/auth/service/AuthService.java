@@ -26,4 +26,6 @@ public interface AuthService {
     void resetPassword(ResetPasswordRequest request);
 
     void deleteCurrentAccount();
+
+    void logout(String refreshToken);
 }

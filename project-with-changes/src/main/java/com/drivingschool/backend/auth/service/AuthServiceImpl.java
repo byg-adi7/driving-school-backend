@@ -13,6 +13,7 @@ import com.drivingschool.backend.auth.mapper.AuthMapper;
 import com.drivingschool.backend.auth.mapper.CurrentUserMapper;
 import com.drivingschool.backend.auth.repository.PasswordResetTokenRepository;
 import com.drivingschool.backend.security.CurrentUserService;
+import com.drivingschool.backend.security.RefreshTokenRevocationService;
 import com.drivingschool.backend.common.exception.AuthenticationException;
 import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
@@ -62,6 +63,7 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final EmailService emailService;
     private final UserService userService;
+    private final RefreshTokenRevocationService refreshTokenRevocationService;
     private final long passwordResetTokenExpirationMs;
 
     public AuthServiceImpl(AuthenticationManager authenticationManager,
@@ -78,6 +80,7 @@ public class AuthServiceImpl implements AuthService {
                            PasswordResetTokenRepository passwordResetTokenRepository,
                            EmailService emailService,
                            UserService userService,
+                           RefreshTokenRevocationService refreshTokenRevocationService,
                            @Value("${app.password-reset.token-expiration-ms}") long passwordResetTokenExpirationMs) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
@@ -93,6 +96,7 @@ public class AuthServiceImpl implements AuthService {
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.emailService = emailService;
         this.userService = userService;
+        this.refreshTokenRevocationService = refreshTokenRevocationService;
         this.passwordResetTokenExpirationMs = passwordResetTokenExpirationMs;
     }
 
@@ -205,6 +209,10 @@ public class AuthServiceImpl implements AuthService {
             throw new AuthenticationException("Invalid refresh token");
         }
 
+        if (refreshTokenRevocationService.isRevoked(jwtTokenProvider.getJtiFromToken(refreshToken))) {
+            throw new AuthenticationException("Refresh token has been revoked");
+        }
+
         String email = jwtTokenProvider.getEmailFromToken(refreshToken);
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new AuthenticationException("User not found"));
@@ -262,6 +270,19 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public void deleteCurrentAccount() {
         userService.softDelete(currentUserService.requireUserId());
+    }
+
+    @Override
+    public void logout(String refreshToken) {
+        if (!jwtTokenProvider.validateToken(refreshToken) || !jwtTokenProvider.isRefreshToken(refreshToken)) {
+            throw new AuthenticationException("Invalid refresh token");
+        }
+
+        String jti = jwtTokenProvider.getJtiFromToken(refreshToken);
+        long remainingMs = jwtTokenProvider.getExpirationFromToken(refreshToken).getTime() - System.currentTimeMillis();
+        refreshTokenRevocationService.revoke(jti, remainingMs);
+
+        log.info("Refresh token revoked for user: {}", jwtTokenProvider.getEmailFromToken(refreshToken));
     }
 
     private void validateRoleSpecificFields(RegisterRequest request) {

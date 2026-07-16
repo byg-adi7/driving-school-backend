@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -55,6 +56,7 @@ public class JwtTokenProvider {
                 .collect(Collectors.toList());
 
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(principal.getEmail())
                 .claim(CLAIM_USER_ID, principal.getId())
                 .claim(CLAIM_ROLES, roles)
@@ -71,6 +73,14 @@ public class JwtTokenProvider {
 
     public Long getUserIdFromToken(String token) {
         return parseClaims(token).get(CLAIM_USER_ID, Long.class);
+    }
+
+    public String getJtiFromToken(String token) {
+        return parseClaims(token).getId();
+    }
+
+    public Date getExpirationFromToken(String token) {
+        return parseClaims(token).getExpiration();
     }
 
     public boolean isAccessToken(String token) {

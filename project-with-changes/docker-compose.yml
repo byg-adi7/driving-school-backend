@@ -15,6 +15,16 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   app:
     build: .
     env_file:
@@ -23,12 +33,16 @@ services:
       # Override the host-oriented .env values for in-network service-to-service access.
       DB_HOST: postgres
       DB_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       STORAGE_PROVIDER: local
       SPRING_PROFILES_ACTIVE: dev
     ports:
       - "${SERVER_PORT:-8080}:8080"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - uploads_data:/app/uploads
