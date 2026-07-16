@@ -15,6 +15,10 @@ config and skips itself rather than failing the build.
    policy). If it asks for a root directory, set it to `project-with-changes`.
 3. Add a **Postgres** plugin to the same project (one click, "New" → "Database" →
    "PostgreSQL"). This creates a second service in the project alongside the app.
+4. Add a **Redis** plugin the same way ("New" → "Database" → "Redis"). Used as the
+   refresh-token revocation store (logout / soft-delete both need to invalidate an
+   already-issued refresh token, and Redis's key TTL support means revocation entries
+   expire themselves in step with the token they revoke - no cleanup job needed).
 
 ### 2. Configure the app service's environment variables
 
@@ -28,6 +32,9 @@ In the app service's "Variables" tab, set:
 | `DB_NAME` | `${{Postgres.PGDATABASE}}` | |
 | `DB_USERNAME` | `${{Postgres.PGUSER}}` | |
 | `DB_PASSWORD` | `${{Postgres.PGPASSWORD}}` | |
+| `REDIS_HOST` | `${{Redis.REDISHOST}}` | Railway variable reference to the Redis service |
+| `REDIS_PORT` | `${{Redis.REDISPORT}}` | |
+| `REDIS_PASSWORD` | `${{Redis.REDISPASSWORD}}` | |
 | `JWT_SECRET` | a random string, 32+ characters | e.g. `openssl rand -base64 48` |
 | `BOOTSTRAP_ADMIN_ENABLED` | `true` for the very first deploy only | Flip back to `false` after you've logged in once and changed the password |
 | `BOOTSTRAP_ADMIN_EMAIL` | your admin email | |

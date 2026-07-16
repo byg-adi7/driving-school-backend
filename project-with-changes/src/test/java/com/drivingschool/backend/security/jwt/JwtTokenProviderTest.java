@@ -77,6 +77,22 @@ class JwtTokenProviderTest {
     }
 
     @Test
+    void generateAccessToken_includesUniqueJti() {
+        String token1 = tokenProvider.generateAccessToken(principal);
+        String token2 = tokenProvider.generateAccessToken(principal);
+
+        assertThat(tokenProvider.getJtiFromToken(token1)).isNotBlank();
+        assertThat(tokenProvider.getJtiFromToken(token1)).isNotEqualTo(tokenProvider.getJtiFromToken(token2));
+    }
+
+    @Test
+    void getExpirationFromToken_returnsFutureDateForFreshToken() {
+        String token = tokenProvider.generateRefreshToken(principal);
+
+        assertThat(tokenProvider.getExpirationFromToken(token)).isAfter(new java.util.Date());
+    }
+
+    @Test
     void validateToken_rejectsExpiredToken() throws InterruptedException {
         JwtProperties shortLivedProperties = new JwtProperties();
         shortLivedProperties.setSecret(SECRET);

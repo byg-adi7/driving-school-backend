@@ -20,6 +20,7 @@ import com.drivingschool.backend.role.repository.RoleRepository;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.repository.SchoolRepository;
 import com.drivingschool.backend.security.CurrentUserService;
+import com.drivingschool.backend.security.RefreshTokenRevocationService;
 import com.drivingschool.backend.security.UserPrincipal;
 import com.drivingschool.backend.security.jwt.JwtTokenProvider;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
@@ -38,6 +39,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
+import java.util.Date;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -69,6 +71,7 @@ class AuthServiceImplTest {
     @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
     @Mock private EmailService emailService;
     @Mock private UserService userService;
+    @Mock private RefreshTokenRevocationService refreshTokenRevocationService;
 
     private AuthServiceImpl authService;
 
@@ -89,7 +92,7 @@ class AuthServiceImplTest {
         authService = new AuthServiceImpl(authenticationManager, userRepository, roleRepository,
                 schoolRepository, studentProfileRepository, instructorProfileRepository,
                 passwordEncoder, jwtTokenProvider, authMapper, currentUserMapper, currentUserService,
-                passwordResetTokenRepository, emailService, userService, 3_600_000L);
+                passwordResetTokenRepository, emailService, userService, refreshTokenRevocationService, 3_600_000L);
     }
 
     // --- login ---
@@ -267,11 +270,28 @@ class AuthServiceImplTest {
         RefreshTokenRequest request = RefreshTokenRequest.builder().refreshToken("refresh-token").build();
         when(jwtTokenProvider.validateToken("refresh-token")).thenReturn(true);
         when(jwtTokenProvider.isRefreshToken("refresh-token")).thenReturn(true);
+        when(jwtTokenProvider.getJtiFromToken("refresh-token")).thenReturn("jti-1");
+        when(refreshTokenRevocationService.isRevoked("jti-1")).thenReturn(false);
         when(jwtTokenProvider.getEmailFromToken("refresh-token")).thenReturn("ghost@example.com");
         when(userRepository.findByEmail("ghost@example.com")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.refreshToken(request))
                 .isInstanceOf(AuthenticationException.class);
+    }
+
+    @Test
+    void refreshToken_withRevokedToken_throwsAuthenticationException() {
+        RefreshTokenRequest request = RefreshTokenRequest.builder().refreshToken("refresh-token").build();
+        when(jwtTokenProvider.validateToken("refresh-token")).thenReturn(true);
+        when(jwtTokenProvider.isRefreshToken("refresh-token")).thenReturn(true);
+        when(jwtTokenProvider.getJtiFromToken("refresh-token")).thenReturn("jti-1");
+        when(refreshTokenRevocationService.isRevoked("jti-1")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.refreshToken(request))
+                .isInstanceOf(AuthenticationException.class)
+                .hasMessageContaining("revoked");
+
+        verify(userRepository, never()).findByEmail(anyString());
     }
 
     @Test
@@ -282,6 +302,8 @@ class AuthServiceImplTest {
 
         when(jwtTokenProvider.validateToken("refresh-token")).thenReturn(true);
         when(jwtTokenProvider.isRefreshToken("refresh-token")).thenReturn(true);
+        when(jwtTokenProvider.getJtiFromToken("refresh-token")).thenReturn("jti-1");
+        when(refreshTokenRevocationService.isRevoked("jti-1")).thenReturn(false);
         when(jwtTokenProvider.getEmailFromToken("refresh-token")).thenReturn("user@example.com");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
         when(jwtTokenProvider.generateAccessToken(any(UserPrincipal.class))).thenReturn("new-access");
@@ -292,6 +314,43 @@ class AuthServiceImplTest {
 
         assertThat(response).isEqualTo(expectedResponse);
         verify(jwtTokenProvider, times(1)).generateAccessToken(any(UserPrincipal.class));
+    }
+
+    // --- logout ---
+
+    @Test
+    void logout_withInvalidToken_throwsAuthenticationException() {
+        when(jwtTokenProvider.validateToken("bad-token")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.logout("bad-token"))
+                .isInstanceOf(AuthenticationException.class);
+
+        verify(refreshTokenRevocationService, never()).revoke(anyString(), anyLong());
+    }
+
+    @Test
+    void logout_withAccessTokenInsteadOfRefreshToken_throwsAuthenticationException() {
+        when(jwtTokenProvider.validateToken("access-token")).thenReturn(true);
+        when(jwtTokenProvider.isRefreshToken("access-token")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.logout("access-token"))
+                .isInstanceOf(AuthenticationException.class);
+
+        verify(refreshTokenRevocationService, never()).revoke(anyString(), anyLong());
+    }
+
+    @Test
+    void logout_withValidRefreshToken_revokesIt() {
+        Date expiry = new Date(System.currentTimeMillis() + 60_000L);
+        when(jwtTokenProvider.validateToken("refresh-token")).thenReturn(true);
+        when(jwtTokenProvider.isRefreshToken("refresh-token")).thenReturn(true);
+        when(jwtTokenProvider.getJtiFromToken("refresh-token")).thenReturn("jti-1");
+        when(jwtTokenProvider.getExpirationFromToken("refresh-token")).thenReturn(expiry);
+        when(jwtTokenProvider.getEmailFromToken("refresh-token")).thenReturn("user@example.com");
+
+        authService.logout("refresh-token");
+
+        verify(refreshTokenRevocationService, times(1)).revoke(eq("jti-1"), anyLong());
     }
 
     // --- forgotPassword ---

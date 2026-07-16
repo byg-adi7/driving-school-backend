@@ -86,6 +86,14 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success("Account deleted successfully", null));
     }
 
+    @PostMapping("/logout")
+    @Operation(summary = "Revoke the presented refresh token")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody RefreshTokenRequest request) {
+        authService.logout(request.getRefreshToken());
+        return ResponseEntity.ok(ApiResponse.success("Logged out successfully", null));
+    }
+
     @PostMapping("/admin/register")
     @Operation(summary = "Admin creates a user with any role including ADMIN")
     @PreAuthorize("hasRole('ADMIN')")
