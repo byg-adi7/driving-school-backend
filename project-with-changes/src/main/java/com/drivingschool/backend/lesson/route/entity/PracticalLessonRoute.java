@@ -1,5 +1,6 @@
 package com.drivingschool.backend.lesson.route.entity;
 
+import com.drivingschool.backend.booking.entity.Booking;
 import com.drivingschool.backend.common.base.BaseEntity;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import jakarta.persistence.*;
@@ -17,7 +18,7 @@ import java.time.LocalDateTime;
         name = "practical_lesson_routes",
         indexes = {
                 @Index(name = "idx_route_instructor", columnList = "instructor_id"),
-                @Index(name = "idx_route_live_session", columnList = "live_session_id"),
+                @Index(name = "idx_route_booking", columnList = "booking_id"),
                 @Index(name = "idx_route_created_at", columnList = "created_at")
         }
 )
@@ -27,8 +28,9 @@ import java.time.LocalDateTime;
 @Builder
 public class PracticalLessonRoute extends BaseEntity {
 
-    @Column(name = "live_session_id", nullable = false)
-    private Long liveSessionId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "booking_id", nullable = false)
+    private Booking booking;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "instructor_id", nullable = false)

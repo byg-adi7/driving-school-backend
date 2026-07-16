@@ -9,13 +9,9 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
 
 @Repository
 public interface LessonNoteRepository extends JpaRepository<LessonNote, Long> {
-
-    @Query("SELECT ln FROM LessonNote ln WHERE ln.liveSessionId = :liveSessionId")
-    Optional<LessonNote> findByLiveSessionId(@Param("liveSessionId") Long liveSessionId);
 
     // LessonNoteService#mapToResponse dereferences instructor, student, and
     // updatedBy (plus their name-bearing associations) for every row -

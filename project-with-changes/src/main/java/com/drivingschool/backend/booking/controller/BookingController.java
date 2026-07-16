@@ -37,9 +37,9 @@ public class BookingController {
     }
 
     @PostMapping
-    @Operation(summary = "Create a new booking")
-    @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR') " +
-            "or (hasRole('STUDENT') and @bookingSecurity.isSelfStudent(#request.studentId))")
+    @Operation(summary = "Create a new booking", description = "Instructor-initiated only: instructors schedule lessons for their own students")
+    @PreAuthorize("hasRole('ADMIN') " +
+            "or (hasRole('INSTRUCTOR') and @bookingSecurity.isSelfInstructor(#request.instructorId))")
     public ResponseEntity<ApiResponse<BookingResponse>> create(@Valid @RequestBody CreateBookingRequest request) {
         BookingResponse response = bookingService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED)

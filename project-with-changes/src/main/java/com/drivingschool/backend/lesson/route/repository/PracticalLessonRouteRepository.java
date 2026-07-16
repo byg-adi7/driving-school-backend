@@ -13,8 +13,8 @@ import java.util.Optional;
 @Repository
 public interface PracticalLessonRouteRepository extends JpaRepository<PracticalLessonRoute, Long> {
 
-    @Query("SELECT plr FROM PracticalLessonRoute plr WHERE plr.liveSessionId = :liveSessionId")
-    Optional<PracticalLessonRoute> findByLiveSessionId(@Param("liveSessionId") Long liveSessionId);
+    @Query("SELECT plr FROM PracticalLessonRoute plr WHERE plr.booking.id = :bookingId")
+    Optional<PracticalLessonRoute> findByBookingId(@Param("bookingId") Long bookingId);
 
     @Query("SELECT plr FROM PracticalLessonRoute plr WHERE plr.instructor.id = :instructorId ORDER BY plr.createdAt DESC")
     Page<PracticalLessonRoute> findByInstructorId(@Param("instructorId") Long instructorId, Pageable pageable);

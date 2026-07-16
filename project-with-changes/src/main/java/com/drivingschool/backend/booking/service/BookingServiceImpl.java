@@ -10,6 +10,9 @@ import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
+import com.drivingschool.backend.notification.dto.SendNotificationRequest;
+import com.drivingschool.backend.notification.enums.NotificationChannel;
+import com.drivingschool.backend.notification.service.NotificationService;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.vehicle.entity.Vehicle;
@@ -19,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.format.DateTimeFormatter;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -28,23 +32,28 @@ public class BookingServiceImpl implements BookingService {
 
     private static final List<BookingStatus> ACTIVE_STATUSES =
             List.of(BookingStatus.PENDING, BookingStatus.CONFIRMED);
+    private static final DateTimeFormatter NOTIFICATION_DATE_FORMAT =
+            DateTimeFormatter.ofPattern("EEEE, MMMM d yyyy 'at' HH:mm");
 
     private final BookingRepository bookingRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final InstructorProfileRepository instructorProfileRepository;
     private final VehicleRepository vehicleRepository;
     private final BookingMapper bookingMapper;
+    private final NotificationService notificationService;
 
     public BookingServiceImpl(BookingRepository bookingRepository,
                               StudentProfileRepository studentProfileRepository,
                               InstructorProfileRepository instructorProfileRepository,
                               VehicleRepository vehicleRepository,
-                              BookingMapper bookingMapper) {
+                              BookingMapper bookingMapper,
+                              NotificationService notificationService) {
         this.bookingRepository = bookingRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.instructorProfileRepository = instructorProfileRepository;
         this.vehicleRepository = vehicleRepository;
         this.bookingMapper = bookingMapper;
+        this.notificationService = notificationService;
     }
 
     @Override
@@ -60,8 +69,12 @@ public class BookingServiceImpl implements BookingService {
             throw new BadRequestException("Instructor is not active");
         }
 
+        if (!instructor.getSchool().getId().equals(student.getSchool().getId())) {
+            throw new BadRequestException("Instructor and student must belong to the same school");
+        }
+
         LocalDateTime endAt = request.getScheduledAt().plusMinutes(request.getDurationMinutes());
-        validateNoConflicts(request.getInstructorId(), request.getVehicleId(),
+        validateNoConflicts(request.getStudentId(), request.getInstructorId(), request.getVehicleId(),
                 request.getScheduledAt(), endAt, null);
 
         Vehicle vehicle = null;
@@ -84,12 +97,30 @@ public class BookingServiceImpl implements BookingService {
                 .status(BookingStatus.PENDING)
                 .bookingType(request.getBookingType())
                 .notes(request.getNotes())
-                .pickupLocation(request.getPickupLocation())
                 .build();
 
         Booking saved = bookingRepository.save(booking);
         log.info("Booking created: id={}, student={}, instructor={}", saved.getId(), student.getId(), instructor.getId());
+
+        notifyStudent(booking, student, instructor);
+
         return bookingMapper.toResponse(saved);
+    }
+
+    private void notifyStudent(Booking booking, StudentProfile student, InstructorProfile instructor) {
+        try {
+            SendNotificationRequest request = SendNotificationRequest.builder()
+                    .userId(student.getUser().getId())
+                    .subject("Upcoming practical lesson scheduled")
+                    .body("Your instructor %s %s has scheduled a %s lesson for you on %s. Please be present at the driving school at the scheduled time."
+                            .formatted(instructor.getFirstName(), instructor.getLastName(),
+                                    booking.getBookingType(), booking.getScheduledAt().format(NOTIFICATION_DATE_FORMAT)))
+                    .channel(NotificationChannel.IN_APP)
+                    .build();
+            notificationService.send(request);
+        } catch (Exception ex) {
+            log.warn("Failed to send booking notification: bookingId={}, studentId={}", booking.getId(), student.getId(), ex);
+        }
     }
 
     @Override
@@ -154,10 +185,13 @@ public class BookingServiceImpl implements BookingService {
                 .orElseThrow(() -> new ResourceNotFoundException("Booking", "id", id));
     }
 
-    private void validateNoConflicts(Long instructorId, Long vehicleId,
+    private void validateNoConflicts(Long studentId, Long instructorId, Long vehicleId,
                                      LocalDateTime startAt, LocalDateTime endAt, Long excludeId) {
         if (bookingRepository.existsInstructorConflict(instructorId, startAt, endAt, ACTIVE_STATUSES, excludeId)) {
             throw new BadRequestException("Instructor has a conflicting booking in this time slot");
+        }
+        if (bookingRepository.existsStudentConflict(studentId, startAt, endAt, ACTIVE_STATUSES, excludeId)) {
+            throw new BadRequestException("Student has a conflicting booking in this time slot");
         }
         if (vehicleId != null && bookingRepository.existsVehicleConflict(vehicleId, startAt, endAt, ACTIVE_STATUSES, excludeId)) {
             throw new BadRequestException("Vehicle has a conflicting booking in this time slot");

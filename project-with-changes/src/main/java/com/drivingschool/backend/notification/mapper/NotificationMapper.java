@@ -12,9 +12,11 @@ public class NotificationMapper {
                 .id(notification.getId())
                 .userId(notification.getUser().getId())
                 .subject(notification.getSubject())
+                .body(notification.getBody())
                 .channel(notification.getChannel())
                 .status(notification.getStatus())
                 .sentAt(notification.getSentAt())
+                .readAt(notification.getReadAt())
                 .build();
     }
 }

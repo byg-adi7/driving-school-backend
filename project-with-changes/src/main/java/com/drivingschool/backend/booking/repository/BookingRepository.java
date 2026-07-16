@@ -42,6 +42,20 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     @Query("""
             SELECT COUNT(b) > 0 FROM Booking b
+            WHERE b.student.id = :studentId
+            AND b.status IN :activeStatuses
+            AND b.scheduledAt < :endAt
+            AND b.endAt > :startAt
+            AND (:excludeId IS NULL OR b.id <> :excludeId)
+            """)
+    boolean existsStudentConflict(@Param("studentId") Long studentId,
+                                  @Param("startAt") LocalDateTime startAt,
+                                  @Param("endAt") LocalDateTime endAt,
+                                  @Param("activeStatuses") List<BookingStatus> activeStatuses,
+                                  @Param("excludeId") Long excludeId);
+
+    @Query("""
+            SELECT COUNT(b) > 0 FROM Booking b
             WHERE b.vehicle.id = :vehicleId
             AND b.status IN :activeStatuses
             AND b.scheduledAt < :endAt

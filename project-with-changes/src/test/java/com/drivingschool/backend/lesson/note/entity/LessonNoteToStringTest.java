@@ -15,7 +15,6 @@ class LessonNoteToStringTest {
     @Test
     void toString_withBidirectionalRelationshipPopulated_doesNotRecurseInfinitely() {
         LessonNote note = LessonNote.builder()
-                .liveSessionId(1L)
                 .lessonSummary("Good progress on parallel parking today")
                 .strengths("Great mirror checks and steering control")
                 .weaknesses("Needs work on reverse parking speed")

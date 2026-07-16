@@ -47,14 +47,14 @@ public class PracticalLessonRouteController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
-    @GetMapping("/live-session/{liveSessionId}")
-    @Operation(summary = "Get route by live session", description = "Get route for a specific live session")
-    public ResponseEntity<ApiResponse<RouteResponse>> getRouteByLiveSession(
-            @PathVariable Long liveSessionId
+    @GetMapping("/booking/{bookingId}")
+    @Operation(summary = "Get route by booking", description = "Get route for a specific booking")
+    public ResponseEntity<ApiResponse<RouteResponse>> getRouteByBooking(
+            @PathVariable Long bookingId
     ) {
         Long userId = SecurityUtils.getCurrentUserId();
         String role = SecurityUtils.getCurrentUserRole();
-        RouteResponse response = routeService.getRouteByLiveSession(liveSessionId, userId, role);
+        RouteResponse response = routeService.getRouteByBooking(bookingId, userId, role);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 

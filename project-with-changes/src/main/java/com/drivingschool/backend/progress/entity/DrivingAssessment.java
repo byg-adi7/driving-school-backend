@@ -1,5 +1,6 @@
 package com.drivingschool.backend.progress.entity;
 
+import com.drivingschool.backend.booking.entity.Booking;
 import com.drivingschool.backend.common.base.BaseEntity;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.progress.enums.AssessmentResult;
@@ -23,7 +24,8 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "driving_assessments", indexes = {
         @Index(name = "idx_driving_assessments_student_id", columnList = "student_id"),
-        @Index(name = "idx_driving_assessments_instructor_id", columnList = "instructor_id")
+        @Index(name = "idx_driving_assessments_instructor_id", columnList = "instructor_id"),
+        @Index(name = "idx_driving_assessments_booking", columnList = "booking_id")
 })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -53,10 +55,16 @@ public class DrivingAssessment extends BaseEntity {
     @Column(name = "duration_minutes")
     private Integer durationMinutes;
 
+    // Optional: which practical lesson this assessment was for.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "booking_id")
+    private Booking booking;
+
     @Builder
     public DrivingAssessment(StudentProfile student, InstructorProfile instructor,
                              LocalDateTime assessmentDate, Integer score,
-                             AssessmentResult result, String feedback, Integer durationMinutes) {
+                             AssessmentResult result, String feedback, Integer durationMinutes,
+                             Booking booking) {
         this.student = student;
         this.instructor = instructor;
         this.assessmentDate = assessmentDate;
@@ -64,5 +72,6 @@ public class DrivingAssessment extends BaseEntity {
         this.result = result;
         this.feedback = feedback;
         this.durationMinutes = durationMinutes;
+        this.booking = booking;
     }
 }

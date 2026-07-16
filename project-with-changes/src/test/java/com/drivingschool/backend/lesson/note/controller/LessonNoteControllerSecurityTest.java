@@ -59,7 +59,6 @@ class LessonNoteControllerSecurityTest {
 
     private CreateLessonNoteRequest validCreateRequest() {
         CreateLessonNoteRequest request = new CreateLessonNoteRequest();
-        request.setLiveSessionId(1L);
         request.setStudentId(1L);
         request.setLessonSummary("A solid first lesson covering basic maneuvers.");
         request.setStrengths("Good mirror checks and steady acceleration.");

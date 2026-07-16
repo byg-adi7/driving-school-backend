@@ -24,5 +24,4 @@ public class BookingResponse {
     private final BookingStatus status;
     private final BookingType bookingType;
     private final String notes;
-    private final String pickupLocation;
 }

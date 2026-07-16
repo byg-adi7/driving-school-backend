@@ -12,9 +12,6 @@ import org.springframework.stereotype.Component;
 public class LessonNoteValidator {
 
     public void validateCreateRequest(CreateLessonNoteRequest request) {
-        if (request.getLiveSessionId() == null || request.getLiveSessionId() <= 0) {
-            throw new BadRequestException("Invalid live session ID");
-        }
         if (request.getStudentId() == null || request.getStudentId() <= 0) {
             throw new BadRequestException("Invalid student ID");
         }

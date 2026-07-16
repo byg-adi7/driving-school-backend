@@ -1,16 +1,24 @@
 package com.drivingschool.backend.lesson.route.service;
 
+import com.drivingschool.backend.booking.entity.Booking;
+import com.drivingschool.backend.booking.enums.BookingStatus;
+import com.drivingschool.backend.booking.enums.BookingType;
+import com.drivingschool.backend.booking.repository.BookingRepository;
 import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
+import com.drivingschool.backend.lesson.route.dto.GenerateRouteRequest;
 import com.drivingschool.backend.lesson.route.entity.PracticalLessonRoute;
 import com.drivingschool.backend.lesson.route.repository.PracticalLessonRouteRepository;
 import com.drivingschool.backend.lesson.route.validator.RouteValidator;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +44,7 @@ class PracticalLessonRouteServiceTest {
     @Mock private PracticalLessonRouteRepository routeRepository;
     @Mock private UserRepository userRepository;
     @Mock private InstructorProfileRepository instructorProfileRepository;
+    @Mock private BookingRepository bookingRepository;
     @Mock private OpenRouteServiceIntegration openRouteService;
     private final RouteValidator validator = new RouteValidator();
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -45,7 +54,7 @@ class PracticalLessonRouteServiceTest {
     @BeforeEach
     void setUp() {
         routeService = new PracticalLessonRouteService(routeRepository, userRepository,
-                instructorProfileRepository, openRouteService, validator, objectMapper);
+                instructorProfileRepository, bookingRepository, openRouteService, validator, objectMapper);
     }
 
     private User userWithId(Long id) {
@@ -58,6 +67,60 @@ class PracticalLessonRouteServiceTest {
         InstructorProfile instructor = InstructorProfile.builder().user(user).active(true).school(School.builder().active(true).build()).build();
         ReflectionTestUtils.setField(instructor, "id", profileId);
         return instructor;
+    }
+
+    private Booking bookingFor(InstructorProfile instructor, Long bookingId) {
+        StudentProfile student = StudentProfile.builder().school(School.builder().active(true).build()).build();
+        ReflectionTestUtils.setField(student, "id", 60L);
+        Booking booking = Booking.builder()
+                .student(student)
+                .instructor(instructor)
+                .school(School.builder().active(true).build())
+                .scheduledAt(LocalDateTime.now().plusDays(1))
+                .endAt(LocalDateTime.now().plusDays(1).plusHours(1))
+                .durationMinutes(60)
+                .status(BookingStatus.CONFIRMED)
+                .bookingType(BookingType.ROAD_LESSON)
+                .build();
+        ReflectionTestUtils.setField(booking, "id", bookingId);
+        return booking;
+    }
+
+    private GenerateRouteRequest generateRequest(Long bookingId) {
+        GenerateRouteRequest request = new GenerateRouteRequest();
+        request.setBookingId(bookingId);
+        request.setStartLocation("123 Main St");
+        request.setDestinationLocation("456 Oak Ave");
+        request.setStartLatitude(51.5);
+        request.setStartLongitude(-0.1);
+        request.setDestinationLatitude(51.6);
+        request.setDestinationLongitude(-0.2);
+        return request;
+    }
+
+    // --- generateRoute ---
+
+    @Test
+    void generateRoute_forUnknownBooking_throwsResourceNotFoundException() {
+        InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
+        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
+        when(bookingRepository.findById(500L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> routeService.generateRoute(generateRequest(500L), 1L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void generateRoute_forBookingBelongingToDifferentInstructor_throwsBadRequestException() {
+        InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
+        InstructorProfile otherInstructor = instructorProfile(51L, userWithId(9L));
+        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
+        when(bookingRepository.findById(500L)).thenReturn(Optional.of(bookingFor(otherInstructor, 500L)));
+
+        assertThatThrownBy(() -> routeService.generateRoute(generateRequest(500L), 1L))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(routeRepository, never()).save(any());
     }
 
     @Test

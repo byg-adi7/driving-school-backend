@@ -15,7 +15,7 @@ import java.util.List;
 public class RouteResponse {
 
     private Long id;
-    private Long liveSessionId;
+    private Long bookingId;
     private Long instructorId;
     private String instructorName;
     private String startLocation;

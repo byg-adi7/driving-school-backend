@@ -70,14 +70,11 @@ public class Booking extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
-    @Column(name = "pickup_location", length = 500)
-    private String pickupLocation;
-
     @Builder
     public Booking(StudentProfile student, InstructorProfile instructor, Vehicle vehicle,
                    School school, LocalDateTime scheduledAt, LocalDateTime endAt,
                    Integer durationMinutes, BookingStatus status, BookingType bookingType,
-                   String notes, String pickupLocation) {
+                   String notes) {
         this.student = student;
         this.instructor = instructor;
         this.vehicle = vehicle;
@@ -88,7 +85,6 @@ public class Booking extends BaseEntity {
         this.status = status;
         this.bookingType = bookingType;
         this.notes = notes;
-        this.pickupLocation = pickupLocation;
     }
 
     public void confirm() {
