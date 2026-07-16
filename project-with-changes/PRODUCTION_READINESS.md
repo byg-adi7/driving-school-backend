@@ -23,7 +23,7 @@ Compiled 2026-07-15 from a full audit of the codebase (security, data layer, tes
 | Status | Item | Notes |
 |---|---|---|
 | ✅ Fixed | Swagger exposed in prod | See blocker #1 above |
-| ⏳ Open | No refresh-token revocation | Stateless JWTs, 7-day refresh default, no logout-time invalidation or denylist. Decide: short-lived refresh + rotation, or a revocation store. |
+| ✅ Fixed | No refresh-token revocation | Decision: Redis-backed denylist keyed by each token's `jti` claim, TTL'd to the token's own remaining lifetime (no cleanup job needed). New `POST /api/v1/auth/logout` revokes the presented refresh token; `/refresh-token` now checks revocation first. Verified against a real Postgres+Redis boot: refresh works, logout revokes it, the same token is then rejected. |
 | ✅ Fixed | No password-reset flow | See blocker #2 above |
 | ⏳ Open | Rate limiting is narrow | `RateLimitingFilter` covers the 5 auth endpoints (login/register/refresh/forgot-password/reset-password) via one shared bucket — not per-IP/per-user. Nothing else in the API is throttled. |
 | ✅ Fixed | Security tests only existed for Booking | 56 new tests across the other 9 controllers prove every `@PreAuthorize` role check is enforced at the HTTP layer, not just correct in isolation. |
@@ -56,7 +56,7 @@ Compiled 2026-07-15 from a full audit of the codebase (security, data layer, tes
 | ✅ Fixed | No migration/boot-validation test | Same as above. |
 | ✅ Fixed | No service/controller layer for vehicles, instructor profiles, or student profiles | See blocker #7 above. Each module has both service-layer unit tests and `@WebMvcTest` security tests covering every `@PreAuthorize` check. |
 | ✅ Fixed | Security testing was inconsistent | See Security table above. |
-| ⏳ Open | `LessonQuestionSubmissionService` has zero unit tests | Its sibling `LessonQuestionStatusHistoryService` is tested; this one still isn't, beyond the indirect HTTP-layer coverage from the new security tests. |
+| ✅ Fixed | `LessonQuestionSubmissionService` has zero unit tests | 19 new tests cover submit/respond/updateStatus/getQuestion access checks and all four listing methods' user-id-to-profile-id resolution. |
 | ⏳ Open | No static analysis or coverage tooling | No Jacoco, Checkstyle, PMD, or SpotBugs configured. |
 
 **For contrast, not a gap:** `QuizServiceImplTest` and `BookingServiceImplTest` remain the bar the untested modules should be held to.
@@ -84,4 +84,4 @@ Compiled 2026-07-15 from a full audit of the codebase (security, data layer, tes
 
 ## What's actually left
 
-Everything above marked ⏳ Open is lower-severity cleanup (rate-limit breadth, refresh-token revocation, N+1 risk, static analysis tooling, one untested service, the not-fully-reverified V9 `ADD COLUMN IF NOT EXISTS` columns) — reasonable to pick up incrementally, none of it blocks going live. Both former blockers (#7 profile-management scope, cascade-delete policy) are resolved.
+Everything above marked ⏳ Open is lower-severity cleanup (rate-limit breadth, N+1 risk, static analysis tooling, the not-fully-reverified V9 `ADD COLUMN IF NOT EXISTS` columns, docker-compose being dev-only, Postgres backup automation) — reasonable to pick up incrementally, none of it blocks going live. Both former blockers (#7 profile-management scope, cascade-delete policy) are resolved.
