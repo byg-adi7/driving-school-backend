@@ -76,4 +76,18 @@ public class InstructorProfile extends BaseEntity {
         this.school = school;
         this.user = user;
     }
+
+    public void updateProfile(String firstName, String lastName, String phone, String specialization,
+                               Integer yearsExperience, String bio) {
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.phone = phone;
+        this.specialization = specialization;
+        this.yearsExperience = yearsExperience;
+        this.bio = bio;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
 }
