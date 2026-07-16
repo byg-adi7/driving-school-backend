@@ -1,30 +1,37 @@
 package com.drivingschool.backend.security;
 
-import io.github.bucket4j.Bucket;
-import io.github.bucket4j.ConsumptionProbe;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.concurrent.TimeUnit;
+import java.time.Duration;
 
 /**
- * Rate limiting filter for authentication endpoints
+ * Rate limits every request by client IP: a tight bucket for the auth
+ * endpoints (login/register/refresh/forgot-password/reset-password, the
+ * classic credential-stuffing/brute-force targets) and a looser one for
+ * everything else, so no endpoint is completely unthrottled. Health-check
+ * paths are exempt - those are hit on a fixed interval by the platform
+ * (Docker/Railway) and must never 429.
  */
 @Slf4j
 @Component
 public class RateLimitingFilter extends OncePerRequestFilter {
 
-    private final Bucket authBucket;
+    private static final Duration WINDOW = Duration.ofMinutes(1);
+    private static final int AUTH_LIMIT = 10;
+    private static final int API_LIMIT = 100;
 
-    public RateLimitingFilter(@Qualifier("authBucket") Bucket authBucket) {
-        this.authBucket = authBucket;
+    private final RateLimiter rateLimiter;
+
+    public RateLimitingFilter(RateLimiter rateLimiter) {
+        this.rateLimiter = rateLimiter;
     }
 
     @Override
@@ -33,27 +40,35 @@ public class RateLimitingFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         String requestURI = request.getRequestURI();
 
-        // Apply rate limiting to auth endpoints
-        if (requestURI.contains("/api/v1/auth/login") ||
-            requestURI.contains("/api/v1/auth/register") ||
-            requestURI.contains("/api/v1/auth/refresh-token") ||
-            requestURI.contains("/api/v1/auth/forgot-password") ||
-            requestURI.contains("/api/v1/auth/reset-password")) {
-            
-            ConsumptionProbe probe = authBucket.tryConsumeAndReturnRemaining(1);
-            
-            if (probe.isConsumed()) {
-                response.addHeader("X-Rate-Limit-Remaining", String.valueOf(probe.getRemainingTokens()));
-                filterChain.doFilter(request, response);
-            } else {
-                long waitForRefill = TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill());
-                log.warn("Rate limit exceeded for {}", request.getRemoteAddr());
-                response.setStatus(429);
-                response.addHeader("X-Rate-Limit-Retry-After-Seconds", String.valueOf(waitForRefill));
-                response.getWriter().write("{\"success\":false,\"message\":\"Too many requests. Please try again later.\"}");
-            }
-        } else {
+        if (HttpMethod.OPTIONS.matches(request.getMethod()) || requestURI.startsWith("/actuator/health")) {
             filterChain.doFilter(request, response);
+            return;
         }
+
+        boolean isAuthEndpoint = isAuthEndpoint(requestURI);
+        String clientIp = request.getRemoteAddr();
+        String key = "ratelimit:" + (isAuthEndpoint ? "auth:" : "api:") + clientIp;
+        int limit = isAuthEndpoint ? AUTH_LIMIT : API_LIMIT;
+
+        RateLimiter.RateLimitResult result = rateLimiter.tryConsume(key, limit, WINDOW);
+
+        if (result.allowed()) {
+            response.addHeader("X-Rate-Limit-Remaining", String.valueOf(result.remaining()));
+            filterChain.doFilter(request, response);
+        } else {
+            log.warn("Rate limit exceeded for {} on {}", clientIp, requestURI);
+            response.setStatus(429);
+            response.addHeader("X-Rate-Limit-Retry-After-Seconds", String.valueOf(result.retryAfterSeconds()));
+            response.setContentType("application/json");
+            response.getWriter().write("{\"success\":false,\"message\":\"Too many requests. Please try again later.\"}");
+        }
+    }
+
+    private boolean isAuthEndpoint(String requestURI) {
+        return requestURI.contains("/api/v1/auth/login") ||
+                requestURI.contains("/api/v1/auth/register") ||
+                requestURI.contains("/api/v1/auth/refresh-token") ||
+                requestURI.contains("/api/v1/auth/forgot-password") ||
+                requestURI.contains("/api/v1/auth/reset-password");
     }
 }
