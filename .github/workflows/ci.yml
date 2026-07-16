@@ -36,6 +36,16 @@ jobs:
           JWT_SECRET: ci_build_only_secret_at_least_32_characters_long
         run: mvn -B clean verify
 
+      - name: Upload coverage report
+        # Visibility only - no threshold enforced, so this step always runs
+        # even though nothing else in the pipeline gates on its content.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-coverage-report
+          path: project-with-changes/target/site/jacoco/
+          retention-days: 30
+
   docker-build:
     name: Docker image builds
     runs-on: ubuntu-latest
