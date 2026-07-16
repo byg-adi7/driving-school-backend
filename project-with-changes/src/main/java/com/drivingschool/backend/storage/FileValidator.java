@@ -52,6 +52,9 @@ public class FileValidator {
     }
 
     public String getFileExtension(String filename) {
+        if (filename == null) {
+            return "";
+        }
         int lastDot = filename.lastIndexOf('.');
         if (lastDot == -1 || lastDot == filename.length() - 1) {
             return "";

@@ -86,4 +86,11 @@ class FileValidatorTest {
 
         org.assertj.core.api.Assertions.assertThat(validator.getFileExtension("report")).isEmpty();
     }
+
+    @Test
+    void getFileExtension_nullFilename_returnsEmptyStringRatherThanThrowing() {
+        FileValidator validator = validatorWith(50, "application/pdf");
+
+        org.assertj.core.api.Assertions.assertThat(validator.getFileExtension(null)).isEmpty();
+    }
 }
