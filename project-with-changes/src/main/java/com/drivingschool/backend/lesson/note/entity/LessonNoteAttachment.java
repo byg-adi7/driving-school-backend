@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 /**
  * LessonNoteAttachment Entity
@@ -43,6 +44,11 @@ public class LessonNoteAttachment extends BaseEntity {
      * Reference to the lesson note this attachment belongs to
      * Cascade delete: if lesson note is deleted, attachment is deleted
      */
+    // @ToString.Exclude: LessonNote's own @Data-generated toString() includes its
+    // attachments collection, so including this back-reference here would recurse
+    // infinitely the moment either side's toString() is called with both directions
+    // loaded - see the matching note on LessonNote.attachments and PRODUCTION_READINESS.md.
+    @ToString.Exclude
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "lesson_note_id", nullable = false)
     private LessonNote lessonNote;

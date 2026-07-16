@@ -74,4 +74,43 @@ class LocalStorageServiceTest {
         assertThatThrownBy(() -> service.store(file, "lesson-notes", "42"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void store_withRelativeBasePathConfigured_writesUnderAnAbsolutePath() throws Exception {
+        // MultipartFile#transferTo(File) resolves a *relative* File against the
+        // servlet container's own temp directory, not the JVM's working directory -
+        // basePath() must always hand back an absolute path so transferTo() lands in
+        // the real configured directory regardless of how app.storage.local.base-path
+        // is written (e.g. the default "./uploads").
+        String relativeConfigValue = "n1-relative-base-test-dir";
+        Path expectedAbsoluteBase = Path.of(relativeConfigValue).toAbsolutePath().normalize();
+        try {
+            StorageProperties properties = new StorageProperties(new MockEnvironment());
+            properties.getLocal().setBasePath(relativeConfigValue);
+            LocalStorageService relativeService = new LocalStorageService(properties, new FileValidator(properties));
+            MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", "content".getBytes());
+
+            StoredFile stored = relativeService.store(file, "lesson-notes", "42");
+
+            assertThat(expectedAbsoluteBase.resolve(stored.getStoragePath())).exists();
+        } finally {
+            deleteRecursively(expectedAbsoluteBase);
+        }
+    }
+
+    private void deleteRecursively(Path path) throws IOException {
+        if (!java.nio.file.Files.exists(path)) {
+            return;
+        }
+        try (var walk = java.nio.file.Files.walk(path)) {
+            walk.sorted(java.util.Comparator.reverseOrder())
+                    .forEach(p -> {
+                        try {
+                            java.nio.file.Files.delete(p);
+                        } catch (IOException e) {
+                            throw new java.io.UncheckedIOException(e);
+                        }
+                    });
+        }
+    }
 }
