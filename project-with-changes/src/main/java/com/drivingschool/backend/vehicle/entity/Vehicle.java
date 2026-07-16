@@ -78,4 +78,12 @@ public class Vehicle extends BaseEntity {
     public void updateStatus(VehicleStatus status) {
         this.status = status;
     }
+
+    public void updateDetails(String make, String model, Integer modelYear, String color, String gpsDeviceId) {
+        this.make = make;
+        this.model = model;
+        this.modelYear = modelYear;
+        this.color = color;
+        this.gpsDeviceId = gpsDeviceId;
+    }
 }
