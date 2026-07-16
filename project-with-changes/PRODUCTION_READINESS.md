@@ -57,7 +57,7 @@ Compiled 2026-07-15 from a full audit of the codebase (security, data layer, tes
 | ✅ Fixed | No service/controller layer for vehicles, instructor profiles, or student profiles | See blocker #7 above. Each module has both service-layer unit tests and `@WebMvcTest` security tests covering every `@PreAuthorize` check. |
 | ✅ Fixed | Security testing was inconsistent | See Security table above. |
 | ✅ Fixed | `LessonQuestionSubmissionService` has zero unit tests | 19 new tests cover submit/respond/updateStatus/getQuestion access checks and all four listing methods' user-id-to-profile-id resolution. |
-| ⏳ Open | No static analysis or coverage tooling | No Jacoco, Checkstyle, PMD, or SpotBugs configured. |
+| ✅ Fixed | No coverage tooling | Jacoco wired into `mvn test` (report only, no enforced threshold - a coverage floor is a policy call, not made here). CI uploads the HTML report as a build artifact on every run. Baseline: 53% instruction coverage. Checkstyle/PMD/SpotBugs (static analysis, not coverage) remain unconfigured - those need a rule-set decision this session didn't make. |
 
 **For contrast, not a gap:** `QuizServiceImplTest` and `BookingServiceImplTest` remain the bar the untested modules should be held to.
 
@@ -84,4 +84,4 @@ Compiled 2026-07-15 from a full audit of the codebase (security, data layer, tes
 
 ## What's actually left
 
-Everything above marked ⏳ Open is lower-severity cleanup (rate-limit breadth, N+1 risk, static analysis tooling, docker-compose being dev-only, Postgres backup automation, varchar/timestamp cosmetics) — reasonable to pick up incrementally, none of it blocks going live. Both former blockers (#7 profile-management scope, cascade-delete policy) are resolved.
+Everything above marked ⏳ Open is lower-severity cleanup (rate-limit breadth, N+1 risk, static analysis linting - Checkstyle/PMD/SpotBugs, docker-compose being dev-only, Postgres backup automation, varchar/timestamp cosmetics) — reasonable to pick up incrementally, none of it blocks going live. Both former blockers (#7 profile-management scope, cascade-delete policy) are resolved.
