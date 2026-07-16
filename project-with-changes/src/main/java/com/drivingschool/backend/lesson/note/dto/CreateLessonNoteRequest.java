@@ -10,8 +10,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class CreateLessonNoteRequest {
 
-    @NotNull(message = "Live session ID is required")
-    private Long liveSessionId;
+    private Long bookingId;
 
     @NotNull(message = "Student ID is required")
     private Long studentId;

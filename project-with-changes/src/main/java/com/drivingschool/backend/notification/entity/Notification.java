@@ -57,10 +57,13 @@ public class Notification extends BaseEntity {
     @Column(name = "failure_reason", length = 500)
     private String failureReason;
 
+    @Column(name = "read_at")
+    private LocalDateTime readAt;
+
     @Builder
     public Notification(User user, String subject, String body, NotificationChannel channel,
                         NotificationStatus status, String recipientAddress,
-                        LocalDateTime sentAt, String failureReason) {
+                        LocalDateTime sentAt, String failureReason, LocalDateTime readAt) {
         this.user = user;
         this.subject = subject;
         this.body = body;
@@ -69,6 +72,7 @@ public class Notification extends BaseEntity {
         this.recipientAddress = recipientAddress;
         this.sentAt = sentAt;
         this.failureReason = failureReason;
+        this.readAt = readAt;
     }
 
     public void markSent() {
@@ -79,5 +83,9 @@ public class Notification extends BaseEntity {
     public void markFailed(String reason) {
         this.status = NotificationStatus.FAILED;
         this.failureReason = reason;
+    }
+
+    public void markRead() {
+        this.readAt = LocalDateTime.now();
     }
 }

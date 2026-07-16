@@ -1,5 +1,8 @@
 package com.drivingschool.backend.lesson.route.service;
 
+import com.drivingschool.backend.booking.entity.Booking;
+import com.drivingschool.backend.booking.repository.BookingRepository;
+import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.lesson.route.dto.GenerateRouteRequest;
@@ -28,6 +31,7 @@ public class PracticalLessonRouteService {
     private final PracticalLessonRouteRepository routeRepository;
     private final UserRepository userRepository;
     private final InstructorProfileRepository instructorProfileRepository;
+    private final BookingRepository bookingRepository;
     private final OpenRouteServiceIntegration openRouteService;
     private final RouteValidator validator;
     private final ObjectMapper objectMapper;
@@ -39,13 +43,19 @@ public class PracticalLessonRouteService {
         var instructor = instructorProfileRepository.findByUserId(instructorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + instructorId));
 
+        Booking booking = bookingRepository.findById(request.getBookingId())
+                .orElseThrow(() -> new ResourceNotFoundException("Booking", "id", request.getBookingId()));
+        if (!booking.getInstructor().getId().equals(instructor.getId())) {
+            throw new BadRequestException("You can only generate a route for your own booking");
+        }
+
         Map<String, Object> routeData = openRouteService.generateRoute(
                 request.getStartLatitude(), request.getStartLongitude(),
                 request.getDestinationLatitude(), request.getDestinationLongitude()
         );
 
         PracticalLessonRoute route = PracticalLessonRoute.builder()
-                .liveSessionId(request.getLiveSessionId())
+                .booking(booking)
                 .instructor(instructor)
                 .startLocation(request.getStartLocation())
                 .destinationLocation(request.getDestinationLocation())
@@ -75,9 +85,9 @@ public class PracticalLessonRouteService {
     }
 
     @Transactional(readOnly = true)
-    public RouteResponse getRouteByLiveSession(Long liveSessionId, Long userId, String role) {
-        PracticalLessonRoute route = routeRepository.findByLiveSessionId(liveSessionId)
-                .orElseThrow(() -> new ResourceNotFoundException("Route not found for live session: " + liveSessionId));
+    public RouteResponse getRouteByBooking(Long bookingId, Long userId, String role) {
+        PracticalLessonRoute route = routeRepository.findByBookingId(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Route not found for booking: " + bookingId));
 
         validator.validateReadAccess(route, userId, role);
 
@@ -129,7 +139,7 @@ public class PracticalLessonRouteService {
     private RouteResponse mapToResponse(PracticalLessonRoute route, List<RouteCoordinateDTO> coordinates) {
         return RouteResponse.builder()
                 .id(route.getId())
-                .liveSessionId(route.getLiveSessionId())
+                .bookingId(route.getBooking().getId())
                                 .instructorId(route.getInstructor().getUser().getId())
                                 .instructorName(route.getInstructor().getUser().getDisplayName())
                 .startLocation(route.getStartLocation())

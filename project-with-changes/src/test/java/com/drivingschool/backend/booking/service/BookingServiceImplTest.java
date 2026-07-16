@@ -11,9 +11,12 @@ import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
+import com.drivingschool.backend.notification.enums.NotificationChannel;
+import com.drivingschool.backend.notification.service.NotificationService;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
+import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.vehicle.entity.Vehicle;
 import com.drivingschool.backend.vehicle.enums.VehicleStatus;
 import com.drivingschool.backend.vehicle.repository.VehicleRepository;
@@ -42,29 +45,60 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class BookingServiceImplTest {
 
+    private static final Long SCHOOL_ID = 100L;
+
     @Mock private BookingRepository bookingRepository;
     @Mock private StudentProfileRepository studentProfileRepository;
     @Mock private InstructorProfileRepository instructorProfileRepository;
     @Mock private VehicleRepository vehicleRepository;
     @Mock private BookingMapper bookingMapper;
+    @Mock private NotificationService notificationService;
 
     private BookingServiceImpl bookingService;
 
     @BeforeEach
     void setUp() {
         bookingService = new BookingServiceImpl(bookingRepository, studentProfileRepository,
-                instructorProfileRepository, vehicleRepository, bookingMapper);
+                instructorProfileRepository, vehicleRepository, bookingMapper, notificationService);
+    }
+
+    private User userWithId(Long id) {
+        User user = User.builder().build();
+        ReflectionTestUtils.setField(user, "id", id);
+        return user;
     }
 
     private StudentProfile studentWithId(Long id) {
+        return studentWithId(id, SCHOOL_ID);
+    }
+
+    private StudentProfile studentWithId(Long id, Long schoolId) {
         School school = School.builder().active(true).build();
-        StudentProfile student = StudentProfile.builder().school(school).build();
+        ReflectionTestUtils.setField(school, "id", schoolId);
+        StudentProfile student = StudentProfile.builder()
+                .school(school)
+                .firstName("Sam")
+                .lastName("Student")
+                .user(userWithId(id + 1000))
+                .build();
         ReflectionTestUtils.setField(student, "id", id);
         return student;
     }
 
     private InstructorProfile instructorWithId(Long id, boolean active) {
-        InstructorProfile instructor = InstructorProfile.builder().active(active).build();
+        return instructorWithId(id, active, SCHOOL_ID);
+    }
+
+    private InstructorProfile instructorWithId(Long id, boolean active, Long schoolId) {
+        School school = School.builder().active(true).build();
+        ReflectionTestUtils.setField(school, "id", schoolId);
+        InstructorProfile instructor = InstructorProfile.builder()
+                .active(active)
+                .school(school)
+                .firstName("Ivy")
+                .lastName("Instructor")
+                .user(userWithId(id + 2000))
+                .build();
         ReflectionTestUtils.setField(instructor, "id", id);
         return instructor;
     }
@@ -174,6 +208,71 @@ class BookingServiceImplTest {
                 .hasMessageContaining("Vehicle has a conflicting booking");
 
         verify(vehicleRepository, never()).findById(any());
+    }
+
+    @Test
+    void create_withInstructorAndStudentInDifferentSchools_throwsBadRequestException() {
+        when(studentProfileRepository.findById(1L)).thenReturn(Optional.of(studentWithId(1L, 100L)));
+        when(instructorProfileRepository.findById(2L)).thenReturn(Optional.of(instructorWithId(2L, true, 200L)));
+
+        assertThatThrownBy(() -> bookingService.create(validRequestBuilder().build()))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("same school");
+
+        verify(bookingRepository, never()).save(any());
+    }
+
+    @Test
+    void create_withConflictingStudentSlot_throwsBadRequestException() {
+        when(studentProfileRepository.findById(1L)).thenReturn(Optional.of(studentWithId(1L)));
+        when(instructorProfileRepository.findById(2L)).thenReturn(Optional.of(instructorWithId(2L, true)));
+        when(bookingRepository.existsInstructorConflict(eq(2L), any(), any(), any(), isNull())).thenReturn(false);
+        when(bookingRepository.existsStudentConflict(eq(1L), any(), any(), any(), isNull())).thenReturn(true);
+
+        assertThatThrownBy(() -> bookingService.create(validRequestBuilder().build()))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Student has a conflicting booking");
+
+        verify(bookingRepository, never()).save(any());
+    }
+
+    @Test
+    void create_onSuccess_sendsInAppNotificationToStudent() {
+        StudentProfile student = studentWithId(1L);
+        InstructorProfile instructor = instructorWithId(2L, true);
+        Booking savedBooking = mock(Booking.class);
+        BookingResponse expectedResponse = BookingResponse.builder().build();
+
+        when(studentProfileRepository.findById(1L)).thenReturn(Optional.of(student));
+        when(instructorProfileRepository.findById(2L)).thenReturn(Optional.of(instructor));
+        when(bookingRepository.existsInstructorConflict(eq(2L), any(), any(), any(), isNull())).thenReturn(false);
+        when(bookingRepository.save(any(Booking.class))).thenReturn(savedBooking);
+        when(bookingMapper.toResponse(savedBooking)).thenReturn(expectedResponse);
+
+        bookingService.create(validRequestBuilder().build());
+
+        verify(notificationService).send(argThat(req ->
+                req.getUserId().equals(student.getUser().getId())
+                        && req.getChannel() == NotificationChannel.IN_APP));
+    }
+
+    @Test
+    void create_whenNotificationSendThrows_bookingStillSucceeds() {
+        StudentProfile student = studentWithId(1L);
+        InstructorProfile instructor = instructorWithId(2L, true);
+        Booking savedBooking = mock(Booking.class);
+        BookingResponse expectedResponse = BookingResponse.builder().build();
+
+        when(studentProfileRepository.findById(1L)).thenReturn(Optional.of(student));
+        when(instructorProfileRepository.findById(2L)).thenReturn(Optional.of(instructor));
+        when(bookingRepository.existsInstructorConflict(eq(2L), any(), any(), any(), isNull())).thenReturn(false);
+        when(bookingRepository.save(any(Booking.class))).thenReturn(savedBooking);
+        when(bookingMapper.toResponse(savedBooking)).thenReturn(expectedResponse);
+        when(notificationService.send(any())).thenThrow(new RuntimeException("notification service down"));
+
+        BookingResponse response = bookingService.create(validRequestBuilder().build());
+
+        assertThat(response).isEqualTo(expectedResponse);
     }
 
     // --- state transitions ---

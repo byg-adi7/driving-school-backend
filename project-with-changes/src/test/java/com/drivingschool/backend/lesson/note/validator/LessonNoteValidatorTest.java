@@ -26,7 +26,7 @@ class LessonNoteValidatorTest {
     private LessonNote noteFor(User instructorUser, User studentUser) {
         InstructorProfile instructor = InstructorProfile.builder().user(instructorUser).active(true).school(School.builder().active(true).build()).build();
         StudentProfile student = StudentProfile.builder().user(studentUser).school(School.builder().active(true).build()).build();
-        return LessonNote.builder().instructor(instructor).student(student).liveSessionId(1L).build();
+        return LessonNote.builder().instructor(instructor).student(student).build();
     }
 
     // --- validateOwnership ---

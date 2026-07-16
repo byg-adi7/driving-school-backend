@@ -1,5 +1,7 @@
 package com.drivingschool.backend.lesson.note.service;
 
+import com.drivingschool.backend.booking.entity.Booking;
+import com.drivingschool.backend.booking.repository.BookingRepository;
 import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
@@ -40,6 +42,7 @@ class LessonNoteServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private InstructorProfileRepository instructorProfileRepository;
     @Mock private StudentProfileRepository studentProfileRepository;
+    @Mock private BookingRepository bookingRepository;
     @Mock private LessonNoteValidator validator;
 
     private LessonNoteService lessonNoteService;
@@ -47,7 +50,7 @@ class LessonNoteServiceTest {
     @BeforeEach
     void setUp() {
         lessonNoteService = new LessonNoteService(lessonNoteRepository, userRepository,
-                instructorProfileRepository, studentProfileRepository, validator);
+                instructorProfileRepository, studentProfileRepository, bookingRepository, validator);
     }
 
     private User userWithId(Long id) {
@@ -73,7 +76,6 @@ class LessonNoteServiceTest {
     @Test
     void createLessonNote_withValidRequest_savesNote() {
         CreateLessonNoteRequest request = new CreateLessonNoteRequest();
-        request.setLiveSessionId(10L);
         request.setStudentId(2L);
         request.setLessonSummary("A solid first lesson on quiet roads.");
         request.setStrengths("Good mirror checks and steady steering control.");
@@ -96,7 +98,6 @@ class LessonNoteServiceTest {
     @Test
     void createLessonNote_whenInstructorProfileMissing_throwsResourceNotFoundException() {
         CreateLessonNoteRequest request = new CreateLessonNoteRequest();
-        request.setLiveSessionId(10L);
         request.setStudentId(2L);
         request.setLessonSummary("A solid first lesson on quiet roads.");
         request.setStrengths("Good mirror checks and steady steering control.");
@@ -109,13 +110,100 @@ class LessonNoteServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
+    @Test
+    void createLessonNote_withoutBookingId_savesNoteWithNoBooking() {
+        CreateLessonNoteRequest request = new CreateLessonNoteRequest();
+        request.setStudentId(2L);
+        request.setLessonSummary("A solid first lesson on quiet roads.");
+        request.setStrengths("Good mirror checks and steady steering control.");
+        request.setWeaknesses("Needs to slow down earlier before junctions.");
+        request.setRecommendations("Practice roundabouts next session.");
+
+        InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
+        StudentProfile student = studentProfile(60L, userWithId(2L));
+
+        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
+        when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student));
+        when(lessonNoteRepository.save(any(LessonNote.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var response = lessonNoteService.createLessonNote(request, 1L);
+
+        assertThat(response.getBookingId()).isNull();
+        verify(bookingRepository, never()).findById(any());
+    }
+
+    @Test
+    void createLessonNote_withBookingBelongingToDifferentInstructor_throwsBadRequestException() {
+        CreateLessonNoteRequest request = new CreateLessonNoteRequest();
+        request.setBookingId(500L);
+        request.setStudentId(2L);
+        request.setLessonSummary("A solid first lesson on quiet roads.");
+        request.setStrengths("Good mirror checks and steady steering control.");
+        request.setWeaknesses("Needs to slow down earlier before junctions.");
+        request.setRecommendations("Practice roundabouts next session.");
+
+        InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
+        InstructorProfile otherInstructor = instructorProfile(51L, userWithId(9L));
+        StudentProfile student = studentProfile(60L, userWithId(2L));
+        Booking booking = Booking.builder().student(student).instructor(otherInstructor)
+                .school(School.builder().active(true).build())
+                .scheduledAt(java.time.LocalDateTime.now().plusDays(1))
+                .endAt(java.time.LocalDateTime.now().plusDays(1).plusHours(1))
+                .durationMinutes(60)
+                .status(com.drivingschool.backend.booking.enums.BookingStatus.CONFIRMED)
+                .bookingType(com.drivingschool.backend.booking.enums.BookingType.ROAD_LESSON)
+                .build();
+        ReflectionTestUtils.setField(booking, "id", 500L);
+
+        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
+        when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student));
+        when(bookingRepository.findById(500L)).thenReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> lessonNoteService.createLessonNote(request, 1L))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(lessonNoteRepository, never()).save(any());
+    }
+
+    @Test
+    void createLessonNote_withBookingBelongingToInstructorAndStudent_savesNoteWithBooking() {
+        CreateLessonNoteRequest request = new CreateLessonNoteRequest();
+        request.setBookingId(500L);
+        request.setStudentId(2L);
+        request.setLessonSummary("A solid first lesson on quiet roads.");
+        request.setStrengths("Good mirror checks and steady steering control.");
+        request.setWeaknesses("Needs to slow down earlier before junctions.");
+        request.setRecommendations("Practice roundabouts next session.");
+
+        InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
+        StudentProfile student = studentProfile(60L, userWithId(2L));
+        Booking booking = Booking.builder().student(student).instructor(instructor)
+                .school(School.builder().active(true).build())
+                .scheduledAt(java.time.LocalDateTime.now().plusDays(1))
+                .endAt(java.time.LocalDateTime.now().plusDays(1).plusHours(1))
+                .durationMinutes(60)
+                .status(com.drivingschool.backend.booking.enums.BookingStatus.CONFIRMED)
+                .bookingType(com.drivingschool.backend.booking.enums.BookingType.ROAD_LESSON)
+                .build();
+        ReflectionTestUtils.setField(booking, "id", 500L);
+
+        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
+        when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student));
+        when(bookingRepository.findById(500L)).thenReturn(Optional.of(booking));
+        when(lessonNoteRepository.save(any(LessonNote.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var response = lessonNoteService.createLessonNote(request, 1L);
+
+        assertThat(response.getBookingId()).isEqualTo(500L);
+    }
+
     // --- getStudentNotes ---
 
     @Test
     void getStudentNotes_asSelf_returnsNotes() {
         User studentUser = userWithId(2L);
         StudentProfile student = studentProfile(60L, studentUser);
-        LessonNote note = LessonNote.builder().instructor(instructorProfile(50L, userWithId(1L))).student(student).liveSessionId(1L).build();
+        LessonNote note = LessonNote.builder().instructor(instructorProfile(50L, userWithId(1L))).student(student).build();
 
         when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student));
         when(lessonNoteRepository.findByStudentId(60L, Pageable.unpaged()))

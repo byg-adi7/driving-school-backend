@@ -1,5 +1,8 @@
 package com.drivingschool.backend.lesson.note.service;
 
+import com.drivingschool.backend.booking.entity.Booking;
+import com.drivingschool.backend.booking.repository.BookingRepository;
+import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.lesson.note.dto.CreateLessonNoteRequest;
@@ -31,6 +34,7 @@ public class LessonNoteService {
     private final UserRepository userRepository;
     private final InstructorProfileRepository instructorProfileRepository;
     private final StudentProfileRepository studentProfileRepository;
+    private final BookingRepository bookingRepository;
     private final LessonNoteValidator validator;
 
     @Transactional
@@ -43,8 +47,18 @@ public class LessonNoteService {
         var student = studentProfileRepository.findByUserId(request.getStudentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for user ID: " + request.getStudentId()));
 
+        Booking booking = null;
+        if (request.getBookingId() != null) {
+            booking = bookingRepository.findById(request.getBookingId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Booking", "id", request.getBookingId()));
+            if (!booking.getInstructor().getId().equals(instructor.getId())
+                    || !booking.getStudent().getId().equals(student.getId())) {
+                throw new BadRequestException("Booking does not belong to this instructor and student");
+            }
+        }
+
         LessonNote note = LessonNote.builder()
-                .liveSessionId(request.getLiveSessionId())
+                .booking(booking)
                 .instructor(instructor)
                 .student(student)
                 .lessonSummary(request.getLessonSummary())
@@ -148,7 +162,7 @@ public class LessonNoteService {
     private LessonNoteResponse mapToResponse(LessonNote note) {
         return LessonNoteResponse.builder()
                 .id(note.getId())
-                .liveSessionId(note.getLiveSessionId())
+                .bookingId(note.getBooking() != null ? note.getBooking().getId() : null)
                 .instructorId(note.getInstructor().getUser().getId())
                 .instructorName(note.getInstructor().getFirstName() + " " + note.getInstructor().getLastName())
                 .studentId(note.getStudent().getUser().getId())

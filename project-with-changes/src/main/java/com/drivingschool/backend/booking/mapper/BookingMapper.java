@@ -22,7 +22,6 @@ public class BookingMapper {
                 .status(booking.getStatus())
                 .bookingType(booking.getBookingType())
                 .notes(booking.getNotes())
-                .pickupLocation(booking.getPickupLocation())
                 .build();
     }
 }

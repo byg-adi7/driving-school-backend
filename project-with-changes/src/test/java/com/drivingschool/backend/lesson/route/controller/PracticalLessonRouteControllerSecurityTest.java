@@ -53,7 +53,7 @@ class PracticalLessonRouteControllerSecurityTest {
 
     private GenerateRouteRequest validRequest() {
         GenerateRouteRequest request = new GenerateRouteRequest();
-        request.setLiveSessionId(1L);
+        request.setBookingId(1L);
         request.setStartLocation("123 Main St");
         request.setDestinationLocation("456 Oak Ave");
         request.setStartLatitude(51.5);

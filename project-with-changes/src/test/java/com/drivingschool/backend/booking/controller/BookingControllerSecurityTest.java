@@ -135,22 +135,61 @@ class BookingControllerSecurityTest {
                 .andExpect(status().isForbidden());
     }
 
-    @Test
-    @WithMockUser(roles = "STUDENT")
-    void create_bookingForAnotherStudent_isForbidden() throws Exception {
-        when(bookingSecurity.isSelfStudent(99L)).thenReturn(false);
-        CreateBookingRequest request = CreateBookingRequest.builder()
-                .studentId(99L)
+    private CreateBookingRequest.CreateBookingRequestBuilder createRequestBuilder() {
+        return CreateBookingRequest.builder()
+                .studentId(1L)
                 .instructorId(2L)
                 .scheduledAt(LocalDateTime.now().plusDays(1))
                 .durationMinutes(60)
-                .bookingType(BookingType.ROAD_LESSON)
-                .build();
+                .bookingType(BookingType.ROAD_LESSON);
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    void create_asStudent_isForbidden() throws Exception {
+        mockMvc.perform(post("/api/v1/bookings")
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(createRequestBuilder().build())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "INSTRUCTOR")
+    void create_asInstructorForAnotherInstructor_isForbidden() throws Exception {
+        when(bookingSecurity.isSelfInstructor(2L)).thenReturn(false);
 
         mockMvc.perform(post("/api/v1/bookings")
                         .with(csrf())
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper.writeValueAsString(createRequestBuilder().build())))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "INSTRUCTOR")
+    void create_asInstructorForSelf_isCreated() throws Exception {
+        when(bookingSecurity.isSelfInstructor(2L)).thenReturn(true);
+        when(bookingService.create(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(BookingResponse.builder().id(1L).build());
+
+        mockMvc.perform(post("/api/v1/bookings")
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(createRequestBuilder().build())))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void create_asAdmin_isCreated() throws Exception {
+        when(bookingService.create(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(BookingResponse.builder().id(1L).build());
+
+        mockMvc.perform(post("/api/v1/bookings")
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(createRequestBuilder().build())))
+                .andExpect(status().isCreated());
     }
 }

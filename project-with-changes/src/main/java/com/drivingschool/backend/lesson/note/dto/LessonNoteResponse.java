@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 public class LessonNoteResponse {
 
     private Long id;
-    private Long liveSessionId;
+    private Long bookingId;
     private Long instructorId;
     private String instructorName;
     private Long studentId;

@@ -14,7 +14,9 @@ public class NotificationResponse {
     private final Long id;
     private final Long userId;
     private final String subject;
+    private final String body;
     private final NotificationChannel channel;
     private final NotificationStatus status;
     private final LocalDateTime sentAt;
+    private final LocalDateTime readAt;
 }

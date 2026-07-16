@@ -10,8 +10,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class GenerateRouteRequest {
 
-    @NotNull(message = "Live session ID is required")
-    private Long liveSessionId;
+    @NotNull(message = "Booking ID is required")
+    private Long bookingId;
 
     @NotBlank(message = "Start location is required")
     @Size(min = 2, max = 500, message = "Start location must be between 2 and 500 characters")

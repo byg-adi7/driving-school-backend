@@ -23,9 +23,16 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -74,5 +81,25 @@ class NotificationControllerSecurityTest {
                         .contentType("application/json")
                         .content(objectMapper.writeValueAsString(validRequest())))
                 .andExpect(status().isCreated());
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    void getMyNotifications_asAuthenticatedStudent_isOk() throws Exception {
+        Page<NotificationResponse> page = new PageImpl<>(java.util.List.of(NotificationResponse.builder().id(1L).build()),
+                PageRequest.of(0, 20), 1);
+        when(notificationService.getMyNotifications(any())).thenReturn(page);
+
+        mockMvc.perform(get("/api/v1/notifications/me"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    void markAsRead_asAuthenticatedStudent_isOk() throws Exception {
+        when(notificationService.markAsRead(anyLong())).thenReturn(NotificationResponse.builder().id(1L).build());
+
+        mockMvc.perform(patch("/api/v1/notifications/1/read").with(csrf()))
+                .andExpect(status().isOk());
     }
 }

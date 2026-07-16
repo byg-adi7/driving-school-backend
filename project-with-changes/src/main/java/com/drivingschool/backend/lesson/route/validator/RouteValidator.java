@@ -15,10 +15,6 @@ public class RouteValidator {
     private static final double MAX_LON = 180.0;
 
     public void validateGenerateRequest(GenerateRouteRequest request) {
-        if (request.getLiveSessionId() == null || request.getLiveSessionId() <= 0) {
-            throw new BadRequestException("Invalid live session ID");
-        }
-
         validateCoordinates(
                 request.getStartLatitude(), request.getStartLongitude(),
                 "Start location"

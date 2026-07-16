@@ -37,7 +37,4 @@ public class CreateBookingRequest {
 
     @Size(max = 1000)
     private final String notes;
-
-    @Size(max = 500)
-    private final String pickupLocation;
 }

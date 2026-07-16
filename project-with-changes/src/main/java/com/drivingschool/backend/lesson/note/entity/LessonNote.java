@@ -1,5 +1,6 @@
 package com.drivingschool.backend.lesson.note.entity;
 
+import com.drivingschool.backend.booking.entity.Booking;
 import com.drivingschool.backend.common.base.BaseEntity;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.student.entity.StudentProfile;
@@ -20,7 +21,7 @@ import java.util.ArrayList;
         indexes = {
                 @Index(name = "idx_lesson_notes_instructor", columnList = "instructor_id"),
                 @Index(name = "idx_lesson_notes_student", columnList = "student_id"),
-                @Index(name = "idx_lesson_notes_live_session", columnList = "live_session_id"),
+                @Index(name = "idx_lesson_notes_booking", columnList = "booking_id"),
                 @Index(name = "idx_lesson_notes_created_at", columnList = "created_at")
         }
 )
@@ -30,8 +31,12 @@ import java.util.ArrayList;
 @Builder
 public class LessonNote extends BaseEntity {
 
-    @Column(name = "live_session_id", nullable = false)
-    private Long liveSessionId;
+    // Optional: which specific booking (practical lesson) this note is about. Notes stay
+    // fully accessible via the instructor/student relationship below regardless of whether
+    // this is set - a note is not tied to a booking's existence or lifecycle.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "booking_id")
+    private Booking booking;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "instructor_id", nullable = false)

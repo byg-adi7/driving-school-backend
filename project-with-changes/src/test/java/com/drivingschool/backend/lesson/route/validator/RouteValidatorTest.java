@@ -26,7 +26,7 @@ class RouteValidatorTest {
     }
 
     private PracticalLessonRoute routeFor(User instructorUser) {
-        return PracticalLessonRoute.builder().instructor(instructorFor(instructorUser)).liveSessionId(1L).build();
+        return PracticalLessonRoute.builder().instructor(instructorFor(instructorUser)).build();
     }
 
     // --- validateReadAccess ---
