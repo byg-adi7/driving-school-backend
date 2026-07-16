@@ -13,9 +13,18 @@ import java.util.List;
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, Long> {
 
-    List<Booking> findByStudentIdOrderByScheduledAtDesc(Long studentId);
+    // BookingMapper#toResponse dereferences student, instructor, vehicle, and school
+    // for every row - fetch-joining them here avoids a per-row N+1 for whichever
+    // side isn't the query's own filter.
+    @Query("SELECT b FROM Booking b JOIN FETCH b.student JOIN FETCH b.instructor "
+            + "LEFT JOIN FETCH b.vehicle JOIN FETCH b.school "
+            + "WHERE b.student.id = :studentId ORDER BY b.scheduledAt DESC")
+    List<Booking> findByStudentIdOrderByScheduledAtDesc(@Param("studentId") Long studentId);
 
-    List<Booking> findByInstructor_IdOrderByScheduledAtAsc(Long instructorId);
+    @Query("SELECT b FROM Booking b JOIN FETCH b.student JOIN FETCH b.instructor "
+            + "LEFT JOIN FETCH b.vehicle JOIN FETCH b.school "
+            + "WHERE b.instructor.id = :instructorId ORDER BY b.scheduledAt ASC")
+    List<Booking> findByInstructor_IdOrderByScheduledAtAsc(@Param("instructorId") Long instructorId);
 
     @Query("""
             SELECT COUNT(b) > 0 FROM Booking b
@@ -45,8 +54,13 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
                                   @Param("activeStatuses") List<BookingStatus> activeStatuses,
                                   @Param("excludeId") Long excludeId);
 
+    @Query("SELECT b FROM Booking b JOIN FETCH b.student JOIN FETCH b.instructor "
+            + "LEFT JOIN FETCH b.vehicle JOIN FETCH b.school "
+            + "WHERE b.instructor.id = :instructorId AND b.scheduledAt BETWEEN :start AND :end "
+            + "AND b.status IN :statuses")
     List<Booking> findByInstructor_IdAndScheduledAtBetweenAndStatusIn(
-            Long instructorId, LocalDateTime start, LocalDateTime end, List<BookingStatus> statuses);
+            @Param("instructorId") Long instructorId, @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end, @Param("statuses") List<BookingStatus> statuses);
 
     boolean existsByStudent_IdAndInstructor_Id(Long studentId, Long instructorId);
 }

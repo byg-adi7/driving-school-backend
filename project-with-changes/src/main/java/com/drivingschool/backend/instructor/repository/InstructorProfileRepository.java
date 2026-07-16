@@ -16,6 +16,6 @@ public interface InstructorProfileRepository extends JpaRepository<InstructorPro
 
     boolean existsByUserId(Long userId);
 
-    @Query("SELECT ip FROM InstructorProfile ip WHERE ip.school.id = :schoolId AND ip.user.deletedAt IS NULL")
+    @Query("SELECT ip FROM InstructorProfile ip JOIN FETCH ip.user u WHERE ip.school.id = :schoolId AND u.deletedAt IS NULL")
     List<InstructorProfile> findBySchoolIdExcludingDeletedUsers(@Param("schoolId") Long schoolId);
 }

@@ -178,9 +178,11 @@ public class LessonQuestionSubmissionService {
         return QuestionResponse.builder()
                 .id(question.getId())
                 .studentId(question.getStudent().getUser().getId())
-                .studentName(question.getStudent().getUser().getDisplayName())
+                .studentName(question.getStudent().getFirstName() + " " + question.getStudent().getLastName())
                 .instructorId(question.getInstructor() != null ? question.getInstructor().getUser().getId() : null)
-                .instructorName(question.getInstructor() != null ? question.getInstructor().getUser().getDisplayName() : null)
+                .instructorName(question.getInstructor() != null
+                        ? question.getInstructor().getFirstName() + " " + question.getInstructor().getLastName()
+                        : null)
                 .subject(question.getSubject())
                 .questionBody(question.getQuestionBody())
                 .response(question.getResponse())

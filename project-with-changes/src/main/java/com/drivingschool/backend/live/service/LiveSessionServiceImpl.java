@@ -26,6 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -118,8 +120,17 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         validator.validateSchoolAccess(schoolId, resolveCallerSchoolId(userId, role), role);
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime weekAhead = now.plusDays(7);
-        return liveSessionRepository.findBySchoolIdAndScheduledAtBetween(schoolId, now, weekAhead).stream()
-                .map(s -> liveSessionMapper.toResponse(s, attendanceRepository.findBySessionId(s.getId()).size()))
+        List<LiveSession> sessions = liveSessionRepository.findBySchoolIdAndScheduledAtBetween(schoolId, now, weekAhead);
+
+        List<Long> sessionIds = sessions.stream().map(LiveSession::getId).toList();
+        Map<Long, Long> countsBySessionId = sessionIds.isEmpty()
+                ? Map.of()
+                : attendanceRepository.countBySessionIdIn(sessionIds).stream()
+                        .collect(Collectors.toMap(AttendanceRepository.SessionAttendanceCount::getSessionId,
+                                AttendanceRepository.SessionAttendanceCount::getAttendeeCount));
+
+        return sessions.stream()
+                .map(s -> liveSessionMapper.toResponse(s, countsBySessionId.getOrDefault(s.getId(), 0L).intValue()))
                 .toList();
     }
 
