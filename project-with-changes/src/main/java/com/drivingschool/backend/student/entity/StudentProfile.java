@@ -81,4 +81,13 @@ public class StudentProfile extends BaseEntity {
     public void updateStatus(StudentStatus status) {
         this.status = status;
     }
+
+    public void updateProfile(String firstName, String lastName, String phone, LocalDate dateOfBirth,
+                               String profileImageUrl) {
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.phone = phone;
+        this.dateOfBirth = dateOfBirth;
+        this.profileImageUrl = profileImageUrl;
+    }
 }
