@@ -47,7 +47,11 @@ public class LocalStorageService implements StorageService {
 
         Path basePath = Paths.get(properties.getLocal().getBasePath());
         Path filePath = basePath.resolve(storagePath);
-        Files.createDirectories(filePath.getParent());
+        Path parentDir = filePath.getParent();
+        if (parentDir == null) {
+            throw new IOException("Could not determine parent directory for: " + filePath);
+        }
+        Files.createDirectories(parentDir);
 
         try {
             file.transferTo(filePath.toFile());
