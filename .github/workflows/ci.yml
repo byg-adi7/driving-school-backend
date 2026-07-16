@@ -46,6 +46,17 @@ jobs:
           path: project-with-changes/target/site/jacoco/
           retention-days: 30
 
+      - name: Upload static analysis report
+        # Same visibility-only deal as coverage above - SpotBugs never fails
+        # the build here, it just needs somewhere to land so it's inspectable
+        # (open in the SpotBugs IDE plugin, or any SARIF/XML viewer).
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotbugs-report
+          path: project-with-changes/target/spotbugsXml.xml
+          retention-days: 30
+
   docker-build:
     name: Docker image builds
     runs-on: ubuntu-latest
