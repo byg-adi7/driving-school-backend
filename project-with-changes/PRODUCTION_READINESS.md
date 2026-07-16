@@ -57,7 +57,8 @@ Compiled 2026-07-15 from a full audit of the codebase (security, data layer, tes
 | ✅ Fixed | No service/controller layer for vehicles, instructor profiles, or student profiles | See blocker #7 above. Each module has both service-layer unit tests and `@WebMvcTest` security tests covering every `@PreAuthorize` check. |
 | ✅ Fixed | Security testing was inconsistent | See Security table above. |
 | ✅ Fixed | `LessonQuestionSubmissionService` has zero unit tests | 19 new tests cover submit/respond/updateStatus/getQuestion access checks and all four listing methods' user-id-to-profile-id resolution. |
-| ✅ Fixed | No coverage tooling | Jacoco wired into `mvn test` (report only, no enforced threshold - a coverage floor is a policy call, not made here). CI uploads the HTML report as a build artifact on every run. Baseline: 53% instruction coverage. Checkstyle/PMD/SpotBugs (static analysis, not coverage) remain unconfigured - those need a rule-set decision this session didn't make. |
+| ✅ Fixed | No coverage tooling | Jacoco wired into `mvn test` (report only, no enforced threshold - a coverage floor is a policy call, not made here). CI uploads the HTML report as a build artifact on every run. Baseline: 53% instruction coverage. |
+| ✅ Fixed | No static analysis tooling | Added SpotBugs (report only, never fails the build) rather than a style linter (Checkstyle/PMD) - it flags real bug patterns instead of formatting preferences, so it didn't need a rule-set decision. CI uploads the XML report as a build artifact. Baseline: 37 `EI_EXPOSE_REP` (Lombok-typical, low real risk), 4 `NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE` (the ones actually worth triaging), 2 `CT_CONSTRUCTOR_THROW`. None investigated/fixed yet - that's its own follow-up, not part of standing up the tooling. |
 
 **For contrast, not a gap:** `QuizServiceImplTest` and `BookingServiceImplTest` remain the bar the untested modules should be held to.
 
@@ -84,4 +85,4 @@ Compiled 2026-07-15 from a full audit of the codebase (security, data layer, tes
 
 ## What's actually left
 
-Everything above marked ⏳ Open is lower-severity cleanup (N+1 risk, static analysis linting - Checkstyle/PMD/SpotBugs, docker-compose being dev-only, varchar/timestamp cosmetics) — reasonable to pick up incrementally, none of it blocks going live. Both former blockers (#7 profile-management scope, cascade-delete policy) are resolved.
+Everything above marked ⏳ Open is lower-severity cleanup (N+1 risk, triaging the 4 SpotBugs `NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE` findings, a style linter like Checkstyle/PMD if wanted - that still needs a rule-set decision, docker-compose being dev-only, varchar/timestamp cosmetics) — reasonable to pick up incrementally, none of it blocks going live. Both former blockers (#7 profile-management scope, cascade-delete policy) are resolved.
