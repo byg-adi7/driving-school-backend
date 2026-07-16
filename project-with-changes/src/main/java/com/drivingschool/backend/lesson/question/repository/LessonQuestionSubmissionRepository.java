@@ -15,16 +15,37 @@ import java.util.Optional;
 @Repository
 public interface LessonQuestionSubmissionRepository extends JpaRepository<LessonQuestionSubmission, Long> {
 
-    @Query("SELECT lqs FROM LessonQuestionSubmission lqs WHERE lqs.student.id = :studentId ORDER BY lqs.createdAt DESC")
+    // Every listing method feeds LessonQuestionSubmissionService#mapToResponse, which
+    // dereferences student, instructor, and respondedBy (plus their name-bearing
+    // associations) for every row - fetch-joining all of them here turns what would
+    // otherwise be a per-row N+1 into a single query, regardless of which listing
+    // method the caller uses.
+    @Query("SELECT lqs FROM LessonQuestionSubmission lqs "
+            + "JOIN FETCH lqs.student st JOIN FETCH st.user "
+            + "LEFT JOIN FETCH lqs.instructor i LEFT JOIN FETCH i.user "
+            + "LEFT JOIN FETCH lqs.respondedBy rb LEFT JOIN FETCH rb.studentProfile LEFT JOIN FETCH rb.instructorProfile "
+            + "WHERE lqs.student.id = :studentId ORDER BY lqs.createdAt DESC")
     Page<LessonQuestionSubmission> findByStudentId(@Param("studentId") Long studentId, Pageable pageable);
 
-    @Query("SELECT lqs FROM LessonQuestionSubmission lqs WHERE lqs.instructor.id = :instructorId ORDER BY lqs.createdAt DESC")
+    @Query("SELECT lqs FROM LessonQuestionSubmission lqs "
+            + "JOIN FETCH lqs.student st JOIN FETCH st.user "
+            + "LEFT JOIN FETCH lqs.instructor i LEFT JOIN FETCH i.user "
+            + "LEFT JOIN FETCH lqs.respondedBy rb LEFT JOIN FETCH rb.studentProfile LEFT JOIN FETCH rb.instructorProfile "
+            + "WHERE lqs.instructor.id = :instructorId ORDER BY lqs.createdAt DESC")
     Page<LessonQuestionSubmission> findByInstructorId(@Param("instructorId") Long instructorId, Pageable pageable);
 
-    @Query("SELECT lqs FROM LessonQuestionSubmission lqs WHERE lqs.status = :status ORDER BY lqs.createdAt DESC")
+    @Query("SELECT lqs FROM LessonQuestionSubmission lqs "
+            + "JOIN FETCH lqs.student st JOIN FETCH st.user "
+            + "LEFT JOIN FETCH lqs.instructor i LEFT JOIN FETCH i.user "
+            + "LEFT JOIN FETCH lqs.respondedBy rb LEFT JOIN FETCH rb.studentProfile LEFT JOIN FETCH rb.instructorProfile "
+            + "WHERE lqs.status = :status ORDER BY lqs.createdAt DESC")
     Page<LessonQuestionSubmission> findByStatus(@Param("status") QuestionStatus status, Pageable pageable);
 
-    @Query("SELECT lqs FROM LessonQuestionSubmission lqs WHERE lqs.instructor.id = :instructorId AND lqs.status = :status ORDER BY lqs.createdAt DESC")
+    @Query("SELECT lqs FROM LessonQuestionSubmission lqs "
+            + "JOIN FETCH lqs.student st JOIN FETCH st.user "
+            + "LEFT JOIN FETCH lqs.instructor i LEFT JOIN FETCH i.user "
+            + "LEFT JOIN FETCH lqs.respondedBy rb LEFT JOIN FETCH rb.studentProfile LEFT JOIN FETCH rb.instructorProfile "
+            + "WHERE lqs.instructor.id = :instructorId AND lqs.status = :status ORDER BY lqs.createdAt DESC")
     Page<LessonQuestionSubmission> findByInstructorAndStatus(
             @Param("instructorId") Long instructorId,
             @Param("status") QuestionStatus status,

@@ -16,6 +16,6 @@ public interface StudentProfileRepository extends JpaRepository<StudentProfile, 
 
     boolean existsByUserId(Long userId);
 
-    @Query("SELECT sp FROM StudentProfile sp WHERE sp.school.id = :schoolId AND sp.user.deletedAt IS NULL")
+    @Query("SELECT sp FROM StudentProfile sp JOIN FETCH sp.user u WHERE sp.school.id = :schoolId AND u.deletedAt IS NULL")
     List<StudentProfile> findBySchoolIdExcludingDeletedUsers(@Param("schoolId") Long schoolId);
 }

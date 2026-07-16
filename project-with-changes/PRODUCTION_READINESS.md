@@ -2,7 +2,7 @@
 
 Compiled 2026-07-15 from a full audit of the codebase (security, data layer, test coverage, ops/deployment). Reflects state after the V8/V9 schema-alignment migrations landed on `main`. Updated 2026-07-15 and 2026-07-16 as items below were resolved — see `DEPLOYMENT.md` for the operational detail behind the deployment/secrets/observability items.
 
-**Overall assessment:** all seven items originally listed as blockers are now resolved. The remaining open items are lower-severity cleanup, not launch blockers.
+**Overall assessment:** all seven items originally listed as blockers are resolved. One new blocker (#8) was discovered on 2026-07-16 during unrelated N+1 verification work: lesson note creation is completely broken. Everything else open is lower-severity cleanup, not a launch blocker.
 
 ---
 
@@ -15,6 +15,7 @@ Compiled 2026-07-15 from a full audit of the codebase (security, data layer, tes
 5. ~~**Local file storage has no production guard rail.**~~ — ✅ **Fixed.** `StorageProperties` fails fast at startup if `app.storage.provider=local` while the `prod` profile is active. Verified both directions against a real boot.
 6. ~~**No test would catch a repeat of the V8/V9 bug.**~~ — ✅ **Fixed.** `SchemaValidationTest` boots the full app against a genuinely fresh Testcontainers Postgres with `ddl-auto=validate`. Verified it actually catches drift (it caught two more gaps — `lesson_note_attachments`/`lesson_question_status_history` missing `updated_at` — while being added).
 7. ~~**Confirm whether vehicle/instructor-profile/student-profile management is actually missing, or just handled elsewhere.**~~ — ✅ **Resolved.** Decision: it was a real gap, not handled elsewhere — built all three. `VehicleController`/`VehicleService` (admin create/update/status-change, authenticated read), `InstructorProfileController`/`InstructorProfileService` (self-service `/me`, admin list-by-school and activate/deactivate), `StudentProfileController`/`StudentProfileService` (self-service `/me`, admin list-by-school and status-update) — all following the existing `SchoolController` pattern. Verified against a real Postgres boot for each.
+8. **`POST /api/v1/lesson-notes` (creating a lesson note) is completely broken** — ⏳ **New, not yet fixed.** Discovered while verifying the N+1 fixes below, unrelated to that work. Every attempt fails with a 409 and `null value in column "created_at" of relation "lesson_notes" violates not-null constraint`. `LessonNote` uses Hibernate's `@CreationTimestamp`/`@UpdateTimestamp` directly (unlike every other entity in the codebase, which inherits auditing fields from `BaseEntity` via Spring Data JPA's `@CreatedDate`) - that mechanism isn't populating the column for reasons not yet root-caused. Instructors cannot create lesson notes at all right now.
 
 ---
 
@@ -40,7 +41,7 @@ Compiled 2026-07-15 from a full audit of the codebase (security, data layer, tes
 | ✅ Verified | V9's `ADD COLUMN IF NOT EXISTS ... NOT NULL` can silently skip tightening | V11 directly tightened the columns originally flagged in this session's audit. The columns V9 itself added with this pattern (`vehicles.color`/`status`, `student_profiles.status`, `notifications.channel`/`status`, `license_workflows.current_stage`/`theory_progress_percent`/`road_training_hours`/`stage_updated_at`) were checked directly against `information_schema.columns` on the dev database (which has run the full V1-V12 migration chain and boots with `ddl-auto=validate`, so nothing could have silently patched them): all 9 are genuinely `NOT NULL`. No drift occurred. |
 | ✅ Fixed | Two entity-declared indexes were never created | `idx_video_lessons_order` and `idx_schools_name`/`idx_schools_active` added in V11. |
 | ✅ Fixed | Nullable-in-DB vs. `nullable=false`-in-entity mismatches | Tightened in V11 for all columns identified in the original audit. |
-| ⏳ Open | Sparse `@EntityGraph`/`JOIN FETCH` usage | Only 2 of many repositories use fetch joins. No confirmed N+1 in a static pass — worth checking with SQL logging on list endpoints if this becomes a real perf concern. |
+| ✅ Fixed | Sparse `@EntityGraph`/`JOIN FETCH` usage | A full audit found 5 real, unmitigated N+1s: live sessions dashboard (also had a per-row attendance-count query, now batched into one grouped query), instructor/student-by-school listings, instructor question inbox, booking lists, and lesson notes. All fixed with `JOIN FETCH`/`LEFT JOIN FETCH` on the repository queries actually used by each endpoint - two of the audit's original method names turned out to be dead code, confirmed by grep before fixing so effort landed on the real call sites. Along the way, found that `LessonQuestionSubmissionService`/`LessonNoteService`'s mappers were routing student/instructor names through `getUser().getDisplayName()`, which triggers a *third* lazy hop (`User.studentProfile`/`User.instructorProfile`) beyond what the fetch join covers - simplified to read the name directly off the already-loaded profile instead. Verified against a real boot: all 5 areas' endpoints return correct data with the new queries. |
 | ⏳ Open | Varchar length mismatches | Cosmetic, DB column is always the wider one — harmless. |
 | ⏳ Open | Timestamp/timezone discipline | Valid UTC pattern in place; worth a spot-check for any `LocalDateTime.now()` call under a non-UTC server default, but no known issue. |
 
@@ -85,4 +86,5 @@ Compiled 2026-07-15 from a full audit of the codebase (security, data layer, tes
 
 ## What's actually left
 
-Everything above marked ⏳ Open is lower-severity cleanup (N+1 risk, a style linter like Checkstyle/PMD if wanted - that still needs a rule-set decision, docker-compose being dev-only, varchar/timestamp cosmetics) — reasonable to pick up incrementally, none of it blocks going live. Both former blockers (#7 profile-management scope, cascade-delete policy) are resolved.
+1. **Fix lesson note creation** (blocker #8) — currently broken for every attempt, needs root-causing.
+2. Everything else marked ⏳ Open is lower-severity cleanup (a style linter like Checkstyle/PMD if wanted - that still needs a rule-set decision, docker-compose being dev-only, varchar/timestamp cosmetics) — reasonable to pick up incrementally, none of it blocks going live otherwise. Both original non-code blockers (#7 profile-management scope, cascade-delete policy) are resolved.
