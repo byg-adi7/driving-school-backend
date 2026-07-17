@@ -66,4 +66,23 @@ public class VideoLesson extends BaseEntity {
     public void setPublished(boolean published) {
         this.published = published;
     }
+
+    public void updateDetails(String title, String description, String videoUrl,
+                               Integer lessonOrder, Integer durationSeconds) {
+        if (title != null) {
+            this.title = title;
+        }
+        if (description != null) {
+            this.description = description;
+        }
+        if (videoUrl != null) {
+            this.videoUrl = videoUrl;
+        }
+        if (lessonOrder != null) {
+            this.lessonOrder = lessonOrder;
+        }
+        if (durationSeconds != null) {
+            this.durationSeconds = durationSeconds;
+        }
+    }
 }
