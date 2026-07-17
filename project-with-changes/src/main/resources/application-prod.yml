@@ -151,7 +151,12 @@ app:
 
   password-reset:
     token-expiration-ms: ${PASSWORD_RESET_TOKEN_EXPIRATION_MS:3600000}
-    reset-url: ${PASSWORD_RESET_URL:https://app.drivingschool.com/reset-password}
+    # Same reasoning as CORS_ALLOWED_ORIGINS above: no fake production-looking
+    # domain by default - falls back to the localhost dev frontend so the
+    # backend-deployed/frontend-still-local bridge workflow keeps working.
+    # Update once the frontend has a real URL (Variables tab, redeploy, no code
+    # change) - this is exactly what the token embedded in each email points at.
+    reset-url: ${PASSWORD_RESET_URL:http://localhost:3000/reset-password}
   bootstrap:
      admin:
         # DISABLED in production for security - must be explicitly enabled
