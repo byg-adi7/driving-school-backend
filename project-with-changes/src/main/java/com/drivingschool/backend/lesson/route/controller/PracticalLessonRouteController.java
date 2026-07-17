@@ -32,8 +32,8 @@ public class PracticalLessonRouteController {
     public ResponseEntity<ApiResponse<RouteResponse>> generateRoute(
             @Valid @RequestBody GenerateRouteRequest request
     ) {
-        Long instructorId = SecurityUtils.getCurrentUserId();
-        RouteResponse response = routeService.generateRoute(request, instructorId);
+        Long callerId = SecurityUtils.getCurrentUserId();
+        RouteResponse response = routeService.generateRoute(request, callerId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success( "Route generated successfully",response));
     }
@@ -83,8 +83,8 @@ public class PracticalLessonRouteController {
     @PreAuthorize("hasRole('INSTRUCTOR')")
     @Operation(summary = "Delete route", description = "Instructors can delete their own routes")
     public ResponseEntity<ApiResponse<Void>> deleteRoute(@PathVariable Long id) {
-        Long instructorId = SecurityUtils.getCurrentUserId();
-        routeService.deleteRoute(id, instructorId);
+        Long callerId = SecurityUtils.getCurrentUserId();
+        routeService.deleteRoute(id, callerId);
         return ResponseEntity.ok(ApiResponse.success( "Route deleted successfully",null));
     }
 }

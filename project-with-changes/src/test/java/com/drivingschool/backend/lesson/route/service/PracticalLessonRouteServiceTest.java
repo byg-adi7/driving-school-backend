@@ -126,19 +126,19 @@ class PracticalLessonRouteServiceTest {
     @Test
     void getInstructorRoutes_asSelf_returnsRoutes() {
         InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
-        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
+        when(instructorProfileRepository.findById(50L)).thenReturn(Optional.of(instructor));
         when(routeRepository.findByInstructorId(50L, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of()));
 
-        assertThatCode(() -> routeService.getInstructorRoutes(1L, Pageable.unpaged(), 1L, "INSTRUCTOR"))
+        assertThatCode(() -> routeService.getInstructorRoutes(50L, Pageable.unpaged(), 1L, "INSTRUCTOR"))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void getInstructorRoutes_asDifferentInstructor_isDenied() {
         InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
-        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
+        when(instructorProfileRepository.findById(50L)).thenReturn(Optional.of(instructor));
 
-        assertThatThrownBy(() -> routeService.getInstructorRoutes(1L, Pageable.unpaged(), 999L, "INSTRUCTOR"))
+        assertThatThrownBy(() -> routeService.getInstructorRoutes(50L, Pageable.unpaged(), 999L, "INSTRUCTOR"))
                 .isInstanceOf(BadRequestException.class);
 
         verify(routeRepository, never()).findByInstructorId(any(), any());
@@ -147,19 +147,18 @@ class PracticalLessonRouteServiceTest {
     @Test
     void getInstructorRoutes_asAdmin_isAllowedRegardlessOfIdentity() {
         InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
-        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
+        when(instructorProfileRepository.findById(50L)).thenReturn(Optional.of(instructor));
         when(routeRepository.findByInstructorId(50L, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of()));
 
-        assertThatCode(() -> routeService.getInstructorRoutes(1L, Pageable.unpaged(), 999L, "ADMIN"))
+        assertThatCode(() -> routeService.getInstructorRoutes(50L, Pageable.unpaged(), 999L, "ADMIN"))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void getInstructorRoutes_unknownInstructor_throwsResourceNotFoundException() {
-        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.empty());
-        when(instructorProfileRepository.findById(1L)).thenReturn(Optional.empty());
+        when(instructorProfileRepository.findById(50L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> routeService.getInstructorRoutes(1L, Pageable.unpaged(), 1L, "ADMIN"))
+        assertThatThrownBy(() -> routeService.getInstructorRoutes(50L, Pageable.unpaged(), 1L, "ADMIN"))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 }

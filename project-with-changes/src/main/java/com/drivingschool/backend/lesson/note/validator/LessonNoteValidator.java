@@ -17,9 +17,9 @@ public class LessonNoteValidator {
         }
     }
 
-    public void validateOwnership(LessonNote note, Long instructorId) {
-        // instructorId is a user id; compare against the instructor profile's user id
-        if (!note.getInstructor().getUser().getId().equals(instructorId)) {
+    public void validateOwnership(LessonNote note, Long callerId) {
+        // callerId is the authenticated caller's User.id; compare against the instructor profile's user id
+        if (!note.getInstructor().getUser().getId().equals(callerId)) {
             throw new BadRequestException("You are not authorized to modify this lesson note");
         }
     }

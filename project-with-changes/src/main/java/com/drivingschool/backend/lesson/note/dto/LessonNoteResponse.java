@@ -15,8 +15,10 @@ public class LessonNoteResponse {
 
     private Long id;
     private Long bookingId;
+    /** InstructorProfile.id */
     private Long instructorId;
     private String instructorName;
+    /** StudentProfile.id */
     private Long studentId;
     private String studentName;
     private String lessonSummary;

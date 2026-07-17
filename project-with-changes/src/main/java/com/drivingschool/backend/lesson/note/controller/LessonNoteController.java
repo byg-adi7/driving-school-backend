@@ -51,8 +51,8 @@ public class LessonNoteController {
     public ResponseEntity<ApiResponse<LessonNoteResponse>> createLessonNote(
             @Valid @RequestBody CreateLessonNoteRequest request
     ) {
-        Long instructorId = SecurityUtils.getCurrentUserId();
-        LessonNoteResponse response = lessonNoteService.createLessonNote(request, instructorId);
+        Long callerId = SecurityUtils.getCurrentUserId();
+        LessonNoteResponse response = lessonNoteService.createLessonNote(request, callerId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success( "Lesson note created successfully",response));
     }
@@ -64,8 +64,8 @@ public class LessonNoteController {
             @PathVariable Long id,
             @Valid @RequestBody UpdateLessonNoteRequest request
     ) {
-        Long instructorId = SecurityUtils.getCurrentUserId();
-        LessonNoteResponse response = lessonNoteService.updateLessonNote(id, request, instructorId);
+        Long callerId = SecurityUtils.getCurrentUserId();
+        LessonNoteResponse response = lessonNoteService.updateLessonNote(id, request, callerId);
         return ResponseEntity.ok(ApiResponse.success( "Lesson note updated successfully",response));
     }
 
@@ -115,8 +115,8 @@ public class LessonNoteController {
     @PreAuthorize("hasRole('INSTRUCTOR')")
     @Operation(summary = "Delete lesson note", description = "Instructors can delete their own lesson notes")
     public ResponseEntity<ApiResponse<Void>> deleteLessonNote(@PathVariable Long id) {
-        Long instructorId = SecurityUtils.getCurrentUserId();
-        lessonNoteService.deleteLessonNote(id, instructorId);
+        Long callerId = SecurityUtils.getCurrentUserId();
+        lessonNoteService.deleteLessonNote(id, callerId);
         return ResponseEntity.ok(ApiResponse.success( "Lesson note deleted successfully",null));
     }
     /**

@@ -15,8 +15,10 @@ import java.time.LocalDateTime;
 public class QuestionResponse {
 
     private Long id;
+    /** StudentProfile.id */
     private Long studentId;
     private String studentName;
+    /** InstructorProfile.id */
     private Long instructorId;
     private String instructorName;
     private String subject;

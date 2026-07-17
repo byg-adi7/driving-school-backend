@@ -35,15 +35,15 @@ public class LessonQuestionSubmissionService {
     private final QuestionValidator validator;
 
     @Transactional
-    public QuestionResponse submitQuestion(SubmitQuestionRequest request, Long studentId) {
+    public QuestionResponse submitQuestion(SubmitQuestionRequest request, Long callerId) {
         validator.validateSubmitRequest(request);
 
-        var studentProfile = studentProfileRepository.findByUserId(studentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for user ID: " + studentId));
+        var studentProfile = studentProfileRepository.findByUserId(callerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for user ID: " + callerId));
 
         var instructorProfile = (request.getAssignedInstructorId() != null)
-                ? instructorProfileRepository.findByUserId(request.getAssignedInstructorId())
-                .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + request.getAssignedInstructorId()))
+                ? instructorProfileRepository.findById(request.getAssignedInstructorId())
+                .orElseThrow(() -> new ResourceNotFoundException("InstructorProfile", "id", request.getAssignedInstructorId()))
                 : null;
 
         LessonQuestionSubmission question = LessonQuestionSubmission.builder()
@@ -69,16 +69,16 @@ public class LessonQuestionSubmissionService {
     }
 
     @Transactional
-    public QuestionResponse respondToQuestion(Long questionId, RespondToQuestionRequest request, Long instructorId) {
+    public QuestionResponse respondToQuestion(Long questionId, RespondToQuestionRequest request, Long callerId) {
         validator.validateRespondRequest(request);
 
         LessonQuestionSubmission question = questionRepository.findById(questionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Question not found with ID: " + questionId));
 
-        validator.validateInstructorAccess(question, instructorId);
+        validator.validateInstructorAccess(question, callerId);
 
-        var instructorProfile = instructorProfileRepository.findByUserId(instructorId)
-                .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + instructorId));
+        var instructorProfile = instructorProfileRepository.findByUserId(callerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + callerId));
 
         question.setResponse(request.getResponse());
         question.setStatus(QuestionStatus.ANSWERED);
@@ -135,20 +135,20 @@ public class LessonQuestionSubmissionService {
     }
 
     @Transactional(readOnly = true)
-    public Page<QuestionResponse> getStudentQuestions(Long studentId, Pageable pageable) {
-        Long profileId = studentProfileRepository.findByUserId(studentId)
-                .map(p -> p.getId())
-                .orElse(studentId);
+    public Page<QuestionResponse> getStudentQuestions(Long callerId, Pageable pageable) {
+        Long profileId = studentProfileRepository.findByUserId(callerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for user ID: " + callerId))
+                .getId();
 
         Page<LessonQuestionSubmission> questions = questionRepository.findByStudentId(profileId, pageable);
         return questions.map(this::mapToResponse);
     }
 
     @Transactional(readOnly = true)
-    public Page<QuestionResponse> getInstructorQuestions(Long instructorId, Pageable pageable) {
-        Long profileId = instructorProfileRepository.findByUserId(instructorId)
-                .map(p -> p.getId())
-                .orElse(instructorId);
+    public Page<QuestionResponse> getInstructorQuestions(Long callerId, Pageable pageable) {
+        Long profileId = instructorProfileRepository.findByUserId(callerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + callerId))
+                .getId();
 
         Page<LessonQuestionSubmission> questions = questionRepository.findByInstructorId(profileId, pageable);
         return questions.map(this::mapToResponse);
@@ -161,10 +161,10 @@ public class LessonQuestionSubmissionService {
     }
 
     @Transactional(readOnly = true)
-    public Page<QuestionResponse> getInstructorPendingQuestions(Long instructorId, Pageable pageable) {
-        Long profileId = instructorProfileRepository.findByUserId(instructorId)
-                .map(p -> p.getId())
-                .orElse(instructorId);
+    public Page<QuestionResponse> getInstructorPendingQuestions(Long callerId, Pageable pageable) {
+        Long profileId = instructorProfileRepository.findByUserId(callerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + callerId))
+                .getId();
 
         Page<LessonQuestionSubmission> questions = questionRepository.findByInstructorAndStatus(
                 profileId,
@@ -177,9 +177,9 @@ public class LessonQuestionSubmissionService {
     private QuestionResponse mapToResponse(LessonQuestionSubmission question) {
         return QuestionResponse.builder()
                 .id(question.getId())
-                .studentId(question.getStudent().getUser().getId())
+                .studentId(question.getStudent().getId())
                 .studentName(question.getStudent().getFirstName() + " " + question.getStudent().getLastName())
-                .instructorId(question.getInstructor() != null ? question.getInstructor().getUser().getId() : null)
+                .instructorId(question.getInstructor() != null ? question.getInstructor().getId() : null)
                 .instructorName(question.getInstructor() != null
                         ? question.getInstructor().getFirstName() + " " + question.getInstructor().getLastName()
                         : null)
