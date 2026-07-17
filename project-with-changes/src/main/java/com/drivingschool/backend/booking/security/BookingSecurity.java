@@ -5,6 +5,7 @@ import com.drivingschool.backend.instructor.repository.InstructorProfileReposito
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Resource-ownership checks for booking endpoints, referenced from
@@ -20,8 +21,18 @@ import org.springframework.stereotype.Component;
  * an unknown ID is left to the service layer, which throws
  * ResourceNotFoundException (404) rather than this method returning a
  * misleading 403 for a resource that was never there.
+ *
+ * Class-level @Transactional is required, not optional: @PreAuthorize is
+ * evaluated before the controller method runs, with open-in-view disabled, so
+ * without a transaction here there is no Hibernate session left by the time
+ * isParticipant()/isAssignedInstructor() walk the lazy Booking -> Student/
+ * Instructor -> User chain - it throws LazyInitializationException on every
+ * real HTTP request (confirmed live; masked in tests only because
+ * AbstractIntegrationTest wraps each test method in its own transaction that
+ * happens to span the @PreAuthorize check too).
  */
 @Component("bookingSecurity")
+@Transactional(readOnly = true)
 public class BookingSecurity {
 
     private final BookingRepository bookingRepository;
