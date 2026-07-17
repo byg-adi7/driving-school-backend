@@ -119,7 +119,15 @@ app:
     access-token-expiration-ms: ${JWT_ACCESS_EXPIRATION_MS:900000}
     refresh-token-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000}
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://app.drivingschool.com}
+    # No real-looking fallback domain on purpose: that would silently "work" (no
+    # startup error, no runtime error either - CORS failures are a browser-side
+    # block with nothing in the server logs) while quietly rejecting every real
+    # frontend origin if this env var is ever forgotten. Defaulting to the
+    # localhost dev origins instead means an unset value fails obviously (every
+    # real deployed frontend gets blocked immediately, not just silently one
+    # nobody notices) and still supports the "backend deployed, frontend still
+    # local" bridge workflow without any config at all.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
     allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
     allowed-headers: Authorization,Content-Type,Accept,X-Requested-With,X-API-Version,X-Request-ID
     allow-credentials: true
