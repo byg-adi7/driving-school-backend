@@ -147,6 +147,7 @@ class AuthServiceImplTest {
 
     @Test
     void register_whenEmailAlreadyRegistered_throwsBadRequestException() {
+        when(currentUserService.hasRole(RoleName.ADMIN)).thenReturn(true);
         when(userRepository.existsByEmail("new@example.com")).thenReturn(true);
 
         assertThatThrownBy(() -> authService.register(validStudentRequest().build()))
@@ -158,6 +159,7 @@ class AuthServiceImplTest {
 
     @Test
     void register_whenSchoolNotFound_throwsResourceNotFoundException() {
+        when(currentUserService.hasRole(RoleName.ADMIN)).thenReturn(true);
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
         when(schoolRepository.findById(1L)).thenReturn(Optional.empty());
 
@@ -168,6 +170,7 @@ class AuthServiceImplTest {
     @Test
     void register_whenSchoolInactive_throwsBadRequestException() {
         School inactiveSchool = School.builder().active(false).build();
+        when(currentUserService.hasRole(RoleName.ADMIN)).thenReturn(true);
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
         when(schoolRepository.findById(1L)).thenReturn(Optional.of(inactiveSchool));
 
@@ -179,6 +182,7 @@ class AuthServiceImplTest {
     @Test
     void register_whenRoleNotFound_throwsResourceNotFoundException() {
         School activeSchool = School.builder().active(true).build();
+        when(currentUserService.hasRole(RoleName.ADMIN)).thenReturn(true);
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
         when(schoolRepository.findById(1L)).thenReturn(Optional.of(activeSchool));
         when(roleRepository.findByName(RoleName.STUDENT)).thenReturn(Optional.empty());
@@ -191,6 +195,7 @@ class AuthServiceImplTest {
     void register_withAdminRole_isRejectedRegardlessOfOtherData() {
         School activeSchool = School.builder().active(true).build();
         Role adminRole = Role.builder().name(RoleName.ADMIN).build();
+        when(currentUserService.hasRole(RoleName.ADMIN)).thenReturn(true);
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
         when(schoolRepository.findById(1L)).thenReturn(Optional.of(activeSchool));
         when(roleRepository.findByName(RoleName.ADMIN)).thenReturn(Optional.of(adminRole));
@@ -207,6 +212,7 @@ class AuthServiceImplTest {
     void register_instructorWithoutLicenseNumber_throwsBadRequestException() {
         School activeSchool = School.builder().active(true).build();
         Role instructorRole = Role.builder().name(RoleName.INSTRUCTOR).build();
+        when(currentUserService.hasRole(RoleName.ADMIN)).thenReturn(true);
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
         when(schoolRepository.findById(1L)).thenReturn(Optional.of(activeSchool));
         when(roleRepository.findByName(RoleName.INSTRUCTOR)).thenReturn(Optional.of(instructorRole));
@@ -226,6 +232,7 @@ class AuthServiceImplTest {
         User savedUser = existingUser(RoleName.STUDENT);
         AuthResponse expectedResponse = AuthResponse.builder().accessToken("access").refreshToken("refresh").build();
 
+        when(currentUserService.hasRole(RoleName.ADMIN)).thenReturn(true);
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
         when(schoolRepository.findById(1L)).thenReturn(Optional.of(activeSchool));
         when(roleRepository.findByName(RoleName.STUDENT)).thenReturn(Optional.of(studentRole));

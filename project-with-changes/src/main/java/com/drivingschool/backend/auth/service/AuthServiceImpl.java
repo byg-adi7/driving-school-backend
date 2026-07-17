@@ -123,6 +123,8 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        validateCallerCanCreate(request);
+
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new BadRequestException("Email is already registered");
         }
@@ -283,6 +285,28 @@ public class AuthServiceImpl implements AuthService {
         refreshTokenRevocationService.revoke(jti, remainingMs);
 
         log.info("Refresh token revoked for user: {}", jwtTokenProvider.getEmailFromToken(refreshToken));
+    }
+
+    // Called from register(), which is only reachable via AuthController#register
+    // (@PreAuthorize hasAnyRole ADMIN/INSTRUCTOR) or indirectly via registerByAdmin
+    // (@PreAuthorize hasRole ADMIN) - so the caller is always one of those two roles.
+    // An instructor may only create student accounts, and only within their own school.
+    private void validateCallerCanCreate(RegisterRequest request) {
+        if (currentUserService.hasRole(RoleName.ADMIN)) {
+            return;
+        }
+
+        if (request.getRole() != RoleName.STUDENT) {
+            throw new BadRequestException("Instructors can only create student accounts");
+        }
+
+        Long callerId = currentUserService.requireUserId();
+        InstructorProfile callerProfile = instructorProfileRepository.findByUserId(callerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + callerId));
+
+        if (!callerProfile.getSchool().getId().equals(request.getSchoolId())) {
+            throw new BadRequestException("You can only create students for your own school");
+        }
     }
 
     private void validateRoleSpecificFields(RegisterRequest request) {

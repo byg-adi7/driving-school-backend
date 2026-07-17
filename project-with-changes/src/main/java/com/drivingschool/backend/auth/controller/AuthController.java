@@ -42,7 +42,11 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    @Operation(summary = "Register a new student or instructor")
+    @Operation(summary = "Create a new student or instructor account",
+            description = "No public self-registration: instructors can only be created by an admin " +
+                    "(see /admin/register); students can be created by an admin or by an instructor " +
+                    "(who may only create students in their own school).")
+    @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
     public ResponseEntity<ApiResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
         AuthResponse response = authService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED)
