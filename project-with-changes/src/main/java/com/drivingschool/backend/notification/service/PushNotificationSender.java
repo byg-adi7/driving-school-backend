@@ -21,17 +21,14 @@ public class PushNotificationSender implements NotificationSender {
         return channel == NotificationChannel.PUSH;
     }
 
+    // No push provider (e.g. FCM/APNs) is integrated yet, so this channel cannot
+    // actually deliver anything. Report FAILED rather than SENT so callers and
+    // notification history don't get told a message went out when it didn't.
     @Override
     public void send(Notification notification) {
-        try {
-            log.info("Sending push notification to user {}: {}", notification.getUser().getId(),
-                    notification.getSubject());
-            notification.markSent();
-            notificationRepository.save(notification);
-        } catch (Exception ex) {
-            log.error("Failed to send push notification {}", notification.getId(), ex);
-            notification.markFailed(ex.getMessage());
-            notificationRepository.save(notification);
-        }
+        log.warn("Push channel is not configured; notification {} to user {} was not delivered",
+                notification.getId(), notification.getUser().getId());
+        notification.markFailed("Push delivery is not configured");
+        notificationRepository.save(notification);
     }
 }
