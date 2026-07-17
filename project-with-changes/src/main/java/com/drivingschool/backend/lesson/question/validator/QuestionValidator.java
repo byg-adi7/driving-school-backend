@@ -25,8 +25,8 @@ public class QuestionValidator {
         }
     }
 
-    public void validateInstructorAccess(LessonQuestionSubmission question, Long instructorId) {
-        if (question.getInstructor() != null && !question.getInstructor().getUser().getId().equals(instructorId)) {
+    public void validateInstructorAccess(LessonQuestionSubmission question, Long callerId) {
+        if (question.getInstructor() != null && !question.getInstructor().getUser().getId().equals(callerId)) {
             throw new BadRequestException("You are not assigned to this question");
         }
     }

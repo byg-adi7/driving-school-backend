@@ -40,8 +40,8 @@ public class LessonQuestionController {
     public ResponseEntity<ApiResponse<QuestionResponse>> submitQuestion(
             @Valid @RequestBody SubmitQuestionRequest request
     ) {
-        Long studentId = SecurityUtils.getCurrentUserId();
-        QuestionResponse response = questionService.submitQuestion(request, studentId);
+        Long callerId = SecurityUtils.getCurrentUserId();
+        QuestionResponse response = questionService.submitQuestion(request, callerId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success( "Question submitted successfully",response));
     }
@@ -53,8 +53,8 @@ public class LessonQuestionController {
             @PathVariable Long id,
             @Valid @RequestBody RespondToQuestionRequest request
     ) {
-        Long instructorId = SecurityUtils.getCurrentUserId();
-        QuestionResponse response = questionService.respondToQuestion(id, request, instructorId);
+        Long callerId = SecurityUtils.getCurrentUserId();
+        QuestionResponse response = questionService.respondToQuestion(id, request, callerId);
         return ResponseEntity.ok(ApiResponse.success( "Response submitted successfully",response));
     }
 
@@ -84,8 +84,8 @@ public class LessonQuestionController {
     @PreAuthorize("hasRole('STUDENT')")
     @Operation(summary = "Get my questions", description = "Get all questions submitted by the current student")
     public ResponseEntity<ApiResponse<Page<QuestionResponse>>> getMyQuestions(Pageable pageable) {
-        Long studentId = SecurityUtils.getCurrentUserId();
-        Page<QuestionResponse> questions = questionService.getStudentQuestions(studentId, pageable);
+        Long callerId = SecurityUtils.getCurrentUserId();
+        Page<QuestionResponse> questions = questionService.getStudentQuestions(callerId, pageable);
         return ResponseEntity.ok(ApiResponse.success(questions));
     }
 
@@ -93,8 +93,8 @@ public class LessonQuestionController {
     @PreAuthorize("hasRole('INSTRUCTOR')")
     @Operation(summary = "Get assigned questions", description = "Get questions assigned to the current instructor")
     public ResponseEntity<ApiResponse<Page<QuestionResponse>>> getAssignedQuestions(Pageable pageable) {
-        Long instructorId = SecurityUtils.getCurrentUserId();
-        Page<QuestionResponse> questions = questionService.getInstructorQuestions(instructorId, pageable);
+        Long callerId = SecurityUtils.getCurrentUserId();
+        Page<QuestionResponse> questions = questionService.getInstructorQuestions(callerId, pageable);
         return ResponseEntity.ok(ApiResponse.success(questions));
     }
 
@@ -113,8 +113,8 @@ public class LessonQuestionController {
     @PreAuthorize("hasRole('INSTRUCTOR')")
     @Operation(summary = "Get pending questions", description = "Get pending questions for the current instructor")
     public ResponseEntity<ApiResponse<Page<QuestionResponse>>> getPendingQuestions(Pageable pageable) {
-        Long instructorId = SecurityUtils.getCurrentUserId();
-        Page<QuestionResponse> questions = questionService.getInstructorPendingQuestions(instructorId, pageable);
+        Long callerId = SecurityUtils.getCurrentUserId();
+        Page<QuestionResponse> questions = questionService.getInstructorPendingQuestions(callerId, pageable);
         return ResponseEntity.ok(ApiResponse.success(questions));
     }
 

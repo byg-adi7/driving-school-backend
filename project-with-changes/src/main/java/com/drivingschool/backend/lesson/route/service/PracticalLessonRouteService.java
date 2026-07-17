@@ -37,11 +37,11 @@ public class PracticalLessonRouteService {
     private final ObjectMapper objectMapper;
 
     @Transactional
-    public RouteResponse generateRoute(GenerateRouteRequest request, Long instructorId) {
+    public RouteResponse generateRoute(GenerateRouteRequest request, Long callerId) {
         validator.validateGenerateRequest(request);
 
-        var instructor = instructorProfileRepository.findByUserId(instructorId)
-                .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + instructorId));
+        var instructor = instructorProfileRepository.findByUserId(callerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + callerId));
 
         Booking booking = bookingRepository.findById(request.getBookingId())
                 .orElseThrow(() -> new ResourceNotFoundException("Booking", "id", request.getBookingId()));
@@ -97,9 +97,8 @@ public class PracticalLessonRouteService {
 
     @Transactional(readOnly = true)
     public Page<RouteResponse> getInstructorRoutes(Long instructorId, Pageable pageable, Long userId, String role) {
-        InstructorProfile instructor = instructorProfileRepository.findByUserId(instructorId)
-                .or(() -> instructorProfileRepository.findById(instructorId))
-                .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found: " + instructorId));
+        InstructorProfile instructor = instructorProfileRepository.findById(instructorId)
+                .orElseThrow(() -> new ResourceNotFoundException("InstructorProfile", "id", instructorId));
         validator.validateInstructorRoutesAccess(instructor, userId, role);
 
         Page<PracticalLessonRoute> routes = routeRepository.findByInstructorId(instructor.getId(), pageable);
@@ -119,11 +118,11 @@ public class PracticalLessonRouteService {
     }
 
     @Transactional
-    public void deleteRoute(Long routeId, Long instructorId) {
+    public void deleteRoute(Long routeId, Long callerId) {
         PracticalLessonRoute route = routeRepository.findById(routeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Route not found with ID: " + routeId));
 
-        validator.validateOwnership(route, instructorId);
+        validator.validateOwnership(route, callerId);
         routeRepository.delete(route);
     }
 
@@ -140,8 +139,8 @@ public class PracticalLessonRouteService {
         return RouteResponse.builder()
                 .id(route.getId())
                 .bookingId(route.getBooking().getId())
-                                .instructorId(route.getInstructor().getUser().getId())
-                                .instructorName(route.getInstructor().getUser().getDisplayName())
+                .instructorId(route.getInstructor().getId())
+                .instructorName(route.getInstructor().getUser().getDisplayName())
                 .startLocation(route.getStartLocation())
                 .destinationLocation(route.getDestinationLocation())
                 .startLatitude(route.getStartLatitude())

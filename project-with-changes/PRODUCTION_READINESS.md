@@ -127,3 +127,28 @@ Built following the same per-module pattern already established by the quiz modu
 51 new tests (service-layer unit tests + `@WebMvcTest` security-slice tests per controller, same split as every other module) cover ownership enforcement, the admin-vs-self instructor resolution on create, and the published/draft visibility filtering.
 
 **Not verified against a real boot this time:** this machine's native-Postgres-vs-Docker port collision (documented above) reproduced again when attempting to boot the app for live verification. Given the thorough unit + security-slice coverage already in place, live verification was skipped rather than re-running the same port-remap workaround - worth doing before this ships if a clean environment is available.
+
+---
+
+## ID-Scheme Standardization (2026-07-17)
+
+An external review flagged an "ID-scheme inconsistency": the same conceptual field (`studentId`/`instructorId`) meant `StudentProfile.id`/`InstructorProfile.id` in some modules (booking, quiz, progress, learning, live) but `User.id` in others (lesson-note, lesson-question, lesson-route). A full audit (grep + read every consuming service, not just the DTO names) confirmed this and found something worse than a naming nit: three services papered over the ambiguity with "try both" resolvers -
+
+```java
+studentProfileRepository.findByUserId(id).or(() -> studentProfileRepository.findById(id))
+```
+
+- which is a real correctness bug, not just confusing naming: for STUDENT/INSTRUCTOR callers a downstream ownership re-check happens to catch a wrong resolution (degrading to a confusing 400 rather than a leak), but for **ADMIN** queries - which skip ownership checks entirely, by design - an ID-space collision could silently return the wrong student's/instructor's notes, questions, or routes with no error at all.
+
+**Fixed**, converging the three outlier modules onto the majority profile-id scheme (matching booking/quiz/progress/learning/live, and the `CurrentUserResponse`/`StudentProfileResponse`/`InstructorProfileResponse` precedent that already cleanly separates `userId` from `studentProfileId`/`instructorProfileId`):
+
+- `lesson-note`: `CreateLessonNoteRequest.studentId`, `LessonNoteResponse.studentId`/`instructorId`, and the `/lesson-notes/student/{id}` / `/lesson-notes/instructor/{id}` path parameters are now `StudentProfile.id`/`InstructorProfile.id` throughout. The two dual-scheme resolver methods are gone - a caller must now pass the correct profile id, and an unresolvable one is a clean 404 instead of a silent misresolution.
+- `lesson-question`: `SubmitQuestionRequest.assignedInstructorId` and `QuestionResponse.studentId`/`instructorId` are now profile ids. The three self-lookup methods (`getStudentQuestions`/`getInstructorQuestions`/`getInstructorPendingQuestions`, all reachable only via "my own questions"-style endpoints) no longer silently fall back to treating an unresolvable caller id as a raw profile id - they now throw `ResourceNotFoundException` if the caller has no matching profile.
+- `lesson-route`: `RouteResponse.instructorId` and the `/lesson-routes/instructor/{id}` path parameter are now `InstructorProfile.id`; the dual-scheme resolver in `getInstructorRoutes` is gone.
+- Purely internal "who is the caller" parameters (already correctly `User.id`, since that's what a JWT identifies) were renamed from `studentId`/`instructorId` to `callerId` in all three modules, so a future reader can't confuse them with the now-profile-id-scheme DTO fields living in the same files.
+
+**Explicitly not a business-logic change:** every authorization rule (who can create/view/edit what) is byte-for-byte identical before and after this fix. Only the *meaning* of an ID value in a handful of request/response fields changed - a client sending the old (`User.id`) value to one of the three affected endpoints now needs to send the profile id instead. Since this app is pre-launch with no live frontend depending on it, this has no real-world impact.
+
+4 new tests added covering the "caller has no matching profile" path for the three fixed self-lookup methods (previously silently masked by the dead fallback), on top of updating existing tests' fixtures to use profile ids where the endpoint semantics changed. Full suite: 450 tests passing.
+
+**Not fixed (deliberately out of scope, per the chosen fix tier):** the internal caller-identity comparison pattern (`SecurityUtils.getCurrentUserId()` compared against `<entity>.getUser().getId()`) remains `User.id`-based everywhere, including in the now-converted modules - this is correct and consistent already (a JWT identifies a `User`, not a profile) and was never part of the inconsistency. Booking, quiz, progress, learning, and live modules were not touched - they were already on the profile-id scheme.

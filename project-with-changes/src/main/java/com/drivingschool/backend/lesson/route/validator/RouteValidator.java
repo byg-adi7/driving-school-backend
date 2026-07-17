@@ -55,8 +55,8 @@ public class RouteValidator {
         throw new BadRequestException("You do not have access to this route");
     }
 
-    public void validateOwnership(PracticalLessonRoute route, Long instructorId) {
-        if (!route.getInstructor().getUser().getId().equals(instructorId)) {
+    public void validateOwnership(PracticalLessonRoute route, Long callerId) {
+        if (!route.getInstructor().getUser().getId().equals(callerId)) {
             throw new BadRequestException("You are not authorized to delete this route");
         }
     }

@@ -17,5 +17,6 @@ public class SubmitQuestionRequest {
     @Size(min = 10, max = 3000, message = "Question must be between 10 and 3000 characters")
     private String questionBody;
 
+    /** InstructorProfile.id */
     private Long assignedInstructorId;
 }

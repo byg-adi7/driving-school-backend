@@ -12,6 +12,7 @@ public class CreateLessonNoteRequest {
 
     private Long bookingId;
 
+    /** StudentProfile.id of the student this note is about. */
     @NotNull(message = "Student ID is required")
     private Long studentId;
 

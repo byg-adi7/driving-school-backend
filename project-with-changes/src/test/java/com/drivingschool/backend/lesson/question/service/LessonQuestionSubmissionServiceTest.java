@@ -122,15 +122,15 @@ class LessonQuestionSubmissionServiceTest {
         SubmitQuestionRequest request = new SubmitQuestionRequest();
         request.setSubject("Subject");
         request.setQuestionBody("Question body text");
-        request.setAssignedInstructorId(2L);
+        request.setAssignedInstructorId(20L);
 
         when(studentProfileRepository.findByUserId(1L)).thenReturn(Optional.of(student));
-        when(instructorProfileRepository.findByUserId(2L)).thenReturn(Optional.of(instructor));
+        when(instructorProfileRepository.findById(20L)).thenReturn(Optional.of(instructor));
         when(questionRepository.save(any(LessonQuestionSubmission.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         QuestionResponse response = service.submitQuestion(request, 1L);
 
-        assertThat(response.getInstructorId()).isEqualTo(2L);
+        assertThat(response.getInstructorId()).isEqualTo(20L);
     }
 
     @Test
@@ -164,7 +164,7 @@ class LessonQuestionSubmissionServiceTest {
         request.setQuestionBody("Question body text");
         request.setAssignedInstructorId(99L);
         when(studentProfileRepository.findByUserId(1L)).thenReturn(Optional.of(student));
-        when(instructorProfileRepository.findByUserId(99L)).thenReturn(Optional.empty());
+        when(instructorProfileRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.submitQuestion(request, 1L))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -314,14 +314,14 @@ class LessonQuestionSubmissionServiceTest {
     }
 
     @Test
-    void getStudentQuestions_whenProfileNotFound_fallsBackToRawId() {
+    void getStudentQuestions_whenCallerHasNoStudentProfile_throwsResourceNotFoundException() {
         Pageable pageable = Pageable.unpaged();
         when(studentProfileRepository.findByUserId(1L)).thenReturn(Optional.empty());
-        when(questionRepository.findByStudentId(eq(1L), any())).thenReturn(new PageImpl<>(java.util.List.of()));
 
-        service.getStudentQuestions(1L, pageable);
+        assertThatThrownBy(() -> service.getStudentQuestions(1L, pageable))
+                .isInstanceOf(ResourceNotFoundException.class);
 
-        verify(questionRepository, times(1)).findByStudentId(eq(1L), any());
+        verify(questionRepository, never()).findByStudentId(any(), any());
     }
 
     @Test
@@ -334,6 +334,17 @@ class LessonQuestionSubmissionServiceTest {
         service.getInstructorQuestions(2L, pageable);
 
         verify(questionRepository, times(1)).findByInstructorId(eq(20L), any());
+    }
+
+    @Test
+    void getInstructorQuestions_whenCallerHasNoInstructorProfile_throwsResourceNotFoundException() {
+        Pageable pageable = Pageable.unpaged();
+        when(instructorProfileRepository.findByUserId(2L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getInstructorQuestions(2L, pageable))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(questionRepository, never()).findByInstructorId(any(), any());
     }
 
     @Test
@@ -357,5 +368,16 @@ class LessonQuestionSubmissionServiceTest {
         service.getInstructorPendingQuestions(2L, pageable);
 
         verify(questionRepository, times(1)).findByInstructorAndStatus(eq(20L), eq(QuestionStatus.PENDING), any());
+    }
+
+    @Test
+    void getInstructorPendingQuestions_whenCallerHasNoInstructorProfile_throwsResourceNotFoundException() {
+        Pageable pageable = Pageable.unpaged();
+        when(instructorProfileRepository.findByUserId(2L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getInstructorPendingQuestions(2L, pageable))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(questionRepository, never()).findByInstructorAndStatus(any(), any(), any());
     }
 }

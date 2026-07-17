@@ -16,6 +16,7 @@ public class RouteResponse {
 
     private Long id;
     private Long bookingId;
+    /** InstructorProfile.id */
     private Long instructorId;
     private String instructorName;
     private String startLocation;

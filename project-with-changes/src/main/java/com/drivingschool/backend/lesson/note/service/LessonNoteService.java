@@ -38,14 +38,14 @@ public class LessonNoteService {
     private final LessonNoteValidator validator;
 
     @Transactional
-    public LessonNoteResponse createLessonNote(CreateLessonNoteRequest request, Long instructorId) {
+    public LessonNoteResponse createLessonNote(CreateLessonNoteRequest request, Long callerId) {
         validator.validateCreateRequest(request);
 
-        var instructor = instructorProfileRepository.findByUserId(instructorId)
-                .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + instructorId));
+        var instructor = instructorProfileRepository.findByUserId(callerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + callerId));
 
-        var student = studentProfileRepository.findByUserId(request.getStudentId())
-                .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for user ID: " + request.getStudentId()));
+        var student = studentProfileRepository.findById(request.getStudentId())
+                .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "id", request.getStudentId()));
 
         Booking booking = null;
         if (request.getBookingId() != null) {
@@ -72,11 +72,11 @@ public class LessonNoteService {
     }
 
     @Transactional
-    public LessonNoteResponse updateLessonNote(Long noteId, UpdateLessonNoteRequest request, Long instructorId) {
+    public LessonNoteResponse updateLessonNote(Long noteId, UpdateLessonNoteRequest request, Long callerId) {
         LessonNote note = lessonNoteRepository.findById(noteId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson note not found with ID: " + noteId));
 
-        validator.validateOwnership(note, instructorId);
+        validator.validateOwnership(note, callerId);
 
         if (request.getLessonSummary() != null) {
             note.setLessonSummary(request.getLessonSummary());
@@ -91,8 +91,8 @@ public class LessonNoteService {
             note.setRecommendations(request.getRecommendations());
         }
 
-        User updatedBy = userRepository.findById(instructorId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + instructorId));
+        User updatedBy = userRepository.findById(callerId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + callerId));
         note.setUpdatedBy(updatedBy);
 
         LessonNote updatedNote = lessonNoteRepository.save(note);
@@ -110,7 +110,8 @@ public class LessonNoteService {
 
     @Transactional(readOnly = true)
     public Page<LessonNoteResponse> getStudentNotes(Long studentId, Pageable pageable, Long currentUserId, String role) {
-        StudentProfile student = resolveStudentProfile(studentId);
+        StudentProfile student = studentProfileRepository.findById(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "id", studentId));
 
         boolean hasTaughtStudent = "INSTRUCTOR".equals(role) && instructorProfileRepository.findByUserId(currentUserId)
                 .map(instructor -> lessonNoteRepository.existsByStudent_IdAndInstructor_Id(student.getId(), instructor.getId()))
@@ -123,25 +124,12 @@ public class LessonNoteService {
 
     @Transactional(readOnly = true)
     public Page<LessonNoteResponse> getInstructorNotes(Long instructorId, Pageable pageable, Long currentUserId, String role) {
-        InstructorProfile instructor = resolveInstructorProfile(instructorId);
+        InstructorProfile instructor = instructorProfileRepository.findById(instructorId)
+                .orElseThrow(() -> new ResourceNotFoundException("InstructorProfile", "id", instructorId));
         validator.validateInstructorNotesAccess(instructor, currentUserId, role);
 
         Page<LessonNote> notes = lessonNoteRepository.findByInstructorId(instructor.getId(), pageable);
         return notes.map(this::mapToResponse);
-    }
-
-    // studentId may be a userId or a student profile id, matching how the endpoint was already documented/used.
-    private StudentProfile resolveStudentProfile(Long studentId) {
-        return studentProfileRepository.findByUserId(studentId)
-                .or(() -> studentProfileRepository.findById(studentId))
-                .orElseThrow(() -> new ResourceNotFoundException("Student profile not found: " + studentId));
-    }
-
-    // instructorId may be a userId or an instructor profile id, matching how the endpoint was already documented/used.
-    private InstructorProfile resolveInstructorProfile(Long instructorId) {
-        return instructorProfileRepository.findByUserId(instructorId)
-                .or(() -> instructorProfileRepository.findById(instructorId))
-                .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found: " + instructorId));
     }
 
     @Transactional(readOnly = true)
@@ -151,11 +139,11 @@ public class LessonNoteService {
     }
 
     @Transactional
-    public void deleteLessonNote(Long noteId, Long instructorId) {
+    public void deleteLessonNote(Long noteId, Long callerId) {
         LessonNote note = lessonNoteRepository.findById(noteId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson note not found with ID: " + noteId));
 
-        validator.validateOwnership(note, instructorId);
+        validator.validateOwnership(note, callerId);
         lessonNoteRepository.delete(note);
     }
 
@@ -163,9 +151,9 @@ public class LessonNoteService {
         return LessonNoteResponse.builder()
                 .id(note.getId())
                 .bookingId(note.getBooking() != null ? note.getBooking().getId() : null)
-                .instructorId(note.getInstructor().getUser().getId())
+                .instructorId(note.getInstructor().getId())
                 .instructorName(note.getInstructor().getFirstName() + " " + note.getInstructor().getLastName())
-                .studentId(note.getStudent().getUser().getId())
+                .studentId(note.getStudent().getId())
                 .studentName(note.getStudent().getFirstName() + " " + note.getStudent().getLastName())
                 .lessonSummary(note.getLessonSummary())
                 .strengths(note.getStrengths())

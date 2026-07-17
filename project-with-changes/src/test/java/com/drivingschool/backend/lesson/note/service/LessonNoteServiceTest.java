@@ -21,7 +21,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -72,11 +71,13 @@ class LessonNoteServiceTest {
     }
 
     // --- createLessonNote ---
+    // callerId (1L) is always the instructor's own User.id (resolved via findByUserId);
+    // request.studentId (60L) is the target StudentProfile.id (resolved via findById).
 
     @Test
     void createLessonNote_withValidRequest_savesNote() {
         CreateLessonNoteRequest request = new CreateLessonNoteRequest();
-        request.setStudentId(2L);
+        request.setStudentId(60L);
         request.setLessonSummary("A solid first lesson on quiet roads.");
         request.setStrengths("Good mirror checks and steady steering control.");
         request.setWeaknesses("Needs to slow down earlier before junctions.");
@@ -86,19 +87,19 @@ class LessonNoteServiceTest {
         StudentProfile student = studentProfile(60L, userWithId(2L));
 
         when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
-        when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student));
+        when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(student));
         when(lessonNoteRepository.save(any(LessonNote.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var response = lessonNoteService.createLessonNote(request, 1L);
 
-        assertThat(response.getStudentId()).isEqualTo(2L);
-        assertThat(response.getInstructorId()).isEqualTo(1L);
+        assertThat(response.getStudentId()).isEqualTo(60L);
+        assertThat(response.getInstructorId()).isEqualTo(50L);
     }
 
     @Test
     void createLessonNote_whenInstructorProfileMissing_throwsResourceNotFoundException() {
         CreateLessonNoteRequest request = new CreateLessonNoteRequest();
-        request.setStudentId(2L);
+        request.setStudentId(60L);
         request.setLessonSummary("A solid first lesson on quiet roads.");
         request.setStrengths("Good mirror checks and steady steering control.");
         request.setWeaknesses("Needs to slow down earlier before junctions.");
@@ -111,9 +112,26 @@ class LessonNoteServiceTest {
     }
 
     @Test
+    void createLessonNote_whenStudentProfileMissing_throwsResourceNotFoundException() {
+        CreateLessonNoteRequest request = new CreateLessonNoteRequest();
+        request.setStudentId(60L);
+        request.setLessonSummary("A solid first lesson on quiet roads.");
+        request.setStrengths("Good mirror checks and steady steering control.");
+        request.setWeaknesses("Needs to slow down earlier before junctions.");
+        request.setRecommendations("Practice roundabouts next session.");
+
+        InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
+        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
+        when(studentProfileRepository.findById(60L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> lessonNoteService.createLessonNote(request, 1L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
     void createLessonNote_withoutBookingId_savesNoteWithNoBooking() {
         CreateLessonNoteRequest request = new CreateLessonNoteRequest();
-        request.setStudentId(2L);
+        request.setStudentId(60L);
         request.setLessonSummary("A solid first lesson on quiet roads.");
         request.setStrengths("Good mirror checks and steady steering control.");
         request.setWeaknesses("Needs to slow down earlier before junctions.");
@@ -123,7 +141,7 @@ class LessonNoteServiceTest {
         StudentProfile student = studentProfile(60L, userWithId(2L));
 
         when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
-        when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student));
+        when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(student));
         when(lessonNoteRepository.save(any(LessonNote.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var response = lessonNoteService.createLessonNote(request, 1L);
@@ -136,7 +154,7 @@ class LessonNoteServiceTest {
     void createLessonNote_withBookingBelongingToDifferentInstructor_throwsBadRequestException() {
         CreateLessonNoteRequest request = new CreateLessonNoteRequest();
         request.setBookingId(500L);
-        request.setStudentId(2L);
+        request.setStudentId(60L);
         request.setLessonSummary("A solid first lesson on quiet roads.");
         request.setStrengths("Good mirror checks and steady steering control.");
         request.setWeaknesses("Needs to slow down earlier before junctions.");
@@ -156,7 +174,7 @@ class LessonNoteServiceTest {
         ReflectionTestUtils.setField(booking, "id", 500L);
 
         when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
-        when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student));
+        when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(student));
         when(bookingRepository.findById(500L)).thenReturn(Optional.of(booking));
 
         assertThatThrownBy(() -> lessonNoteService.createLessonNote(request, 1L))
@@ -169,7 +187,7 @@ class LessonNoteServiceTest {
     void createLessonNote_withBookingBelongingToInstructorAndStudent_savesNoteWithBooking() {
         CreateLessonNoteRequest request = new CreateLessonNoteRequest();
         request.setBookingId(500L);
-        request.setStudentId(2L);
+        request.setStudentId(60L);
         request.setLessonSummary("A solid first lesson on quiet roads.");
         request.setStrengths("Good mirror checks and steady steering control.");
         request.setWeaknesses("Needs to slow down earlier before junctions.");
@@ -188,7 +206,7 @@ class LessonNoteServiceTest {
         ReflectionTestUtils.setField(booking, "id", 500L);
 
         when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
-        when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student));
+        when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(student));
         when(bookingRepository.findById(500L)).thenReturn(Optional.of(booking));
         when(lessonNoteRepository.save(any(LessonNote.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -198,6 +216,7 @@ class LessonNoteServiceTest {
     }
 
     // --- getStudentNotes ---
+    // studentId param (60L) is now the StudentProfile.id directly; currentUserId (2L/5L) is the caller's own User.id.
 
     @Test
     void getStudentNotes_asSelf_returnsNotes() {
@@ -205,11 +224,11 @@ class LessonNoteServiceTest {
         StudentProfile student = studentProfile(60L, studentUser);
         LessonNote note = LessonNote.builder().instructor(instructorProfile(50L, userWithId(1L))).student(student).build();
 
-        when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student));
+        when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(student));
         when(lessonNoteRepository.findByStudentId(60L, Pageable.unpaged()))
                 .thenReturn(new PageImpl<>(List.of(note)));
 
-        var result = lessonNoteService.getStudentNotes(2L, Pageable.unpaged(), 2L, "STUDENT");
+        var result = lessonNoteService.getStudentNotes(60L, Pageable.unpaged(), 2L, "STUDENT");
 
         assertThat(result.getContent()).hasSize(1);
         verify(validator).validateStudentNotesAccess(student, 2L, "STUDENT", false);
@@ -220,11 +239,11 @@ class LessonNoteServiceTest {
         User studentUser = userWithId(2L);
         StudentProfile student = studentProfile(60L, studentUser);
 
-        when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student));
+        when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(student));
         org.mockito.Mockito.doThrow(new BadRequestException("denied"))
                 .when(validator).validateStudentNotesAccess(student, 999L, "STUDENT", false);
 
-        assertThatThrownBy(() -> lessonNoteService.getStudentNotes(2L, Pageable.unpaged(), 999L, "STUDENT"))
+        assertThatThrownBy(() -> lessonNoteService.getStudentNotes(60L, Pageable.unpaged(), 999L, "STUDENT"))
                 .isInstanceOf(BadRequestException.class);
 
         verify(lessonNoteRepository, never()).findByStudentId(any(), any());
@@ -236,36 +255,36 @@ class LessonNoteServiceTest {
         StudentProfile student = studentProfile(60L, studentUser);
         InstructorProfile instructor = instructorProfile(50L, userWithId(5L));
 
-        when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student));
+        when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(student));
         when(instructorProfileRepository.findByUserId(5L)).thenReturn(Optional.of(instructor));
         when(lessonNoteRepository.existsByStudent_IdAndInstructor_Id(60L, 50L)).thenReturn(true);
         when(lessonNoteRepository.findByStudentId(60L, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of()));
 
-        lessonNoteService.getStudentNotes(2L, Pageable.unpaged(), 5L, "INSTRUCTOR");
+        lessonNoteService.getStudentNotes(60L, Pageable.unpaged(), 5L, "INSTRUCTOR");
 
         verify(validator).validateStudentNotesAccess(student, 5L, "INSTRUCTOR", true);
     }
 
     @Test
     void getStudentNotes_unknownStudent_throwsResourceNotFoundException() {
-        when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.empty());
-        when(studentProfileRepository.findById(2L)).thenReturn(Optional.empty());
+        when(studentProfileRepository.findById(60L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> lessonNoteService.getStudentNotes(2L, Pageable.unpaged(), 999L, "ADMIN"))
+        assertThatThrownBy(() -> lessonNoteService.getStudentNotes(60L, Pageable.unpaged(), 999L, "ADMIN"))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
     // --- getInstructorNotes ---
+    // instructorId param (50L) is now the InstructorProfile.id directly; currentUserId (1L) is the caller's own User.id.
 
     @Test
     void getInstructorNotes_asSelf_returnsNotes() {
         User instructorUser = userWithId(1L);
         InstructorProfile instructor = instructorProfile(50L, instructorUser);
 
-        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
+        when(instructorProfileRepository.findById(50L)).thenReturn(Optional.of(instructor));
         when(lessonNoteRepository.findByInstructorId(50L, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of()));
 
-        lessonNoteService.getInstructorNotes(1L, Pageable.unpaged(), 1L, "INSTRUCTOR");
+        lessonNoteService.getInstructorNotes(50L, Pageable.unpaged(), 1L, "INSTRUCTOR");
 
         verify(validator).validateInstructorNotesAccess(instructor, 1L, "INSTRUCTOR");
     }
@@ -274,13 +293,21 @@ class LessonNoteServiceTest {
     void getInstructorNotes_asDifferentInstructor_deniedByValidator() {
         InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
 
-        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
+        when(instructorProfileRepository.findById(50L)).thenReturn(Optional.of(instructor));
         org.mockito.Mockito.doThrow(new BadRequestException("denied"))
                 .when(validator).validateInstructorNotesAccess(instructor, 999L, "INSTRUCTOR");
 
-        assertThatThrownBy(() -> lessonNoteService.getInstructorNotes(1L, Pageable.unpaged(), 999L, "INSTRUCTOR"))
+        assertThatThrownBy(() -> lessonNoteService.getInstructorNotes(50L, Pageable.unpaged(), 999L, "INSTRUCTOR"))
                 .isInstanceOf(BadRequestException.class);
 
         verify(lessonNoteRepository, never()).findByInstructorId(any(), any());
+    }
+
+    @Test
+    void getInstructorNotes_unknownInstructor_throwsResourceNotFoundException() {
+        when(instructorProfileRepository.findById(50L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> lessonNoteService.getInstructorNotes(50L, Pageable.unpaged(), 999L, "ADMIN"))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 }
