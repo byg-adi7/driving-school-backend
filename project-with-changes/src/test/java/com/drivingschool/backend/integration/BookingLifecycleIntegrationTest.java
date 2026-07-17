@@ -1,7 +1,5 @@
 package com.drivingschool.backend.integration;
 
-import com.drivingschool.backend.auth.dto.CurrentUserResponse;
-import com.drivingschool.backend.auth.dto.RegisterRequest;
 import com.drivingschool.backend.booking.dto.BookingResponse;
 import com.drivingschool.backend.booking.enums.BookingType;
 import com.drivingschool.backend.lesson.note.dto.AttachmentResponse;
@@ -37,8 +35,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class BookingLifecycleIntegrationTest extends AbstractIntegrationTest {
 
     private static final byte[] VALID_PDF_CONTENT = "%PDF-1.4\n%%EOF".getBytes();
-
-    private record Person(String email, String token, Long userId, Long profileId) {}
 
     @Test
     void instructorBooksLessonForOwnStudent_studentIsNotified_lessonNoteIsAuthored() throws Exception {
@@ -170,37 +166,6 @@ class BookingLifecycleIntegrationTest extends AbstractIntegrationTest {
                 "durationMinutes", 60,
                 "bookingType", BookingType.ROAD_LESSON.name()
         ));
-    }
-
-    /** Registers a user via the admin token, logs them in, and resolves their own profile id via GET /auth/me. */
-    private Person registerAndIdentify(String adminToken, Long schoolId, RoleName role, String email, String licenseNumber) throws Exception {
-        RegisterRequest.RegisterRequestBuilder builder = RegisterRequest.builder()
-                .email(email)
-                .password("SecurePass123!")
-                .firstName("Test")
-                .lastName(role.name())
-                .schoolId(schoolId)
-                .role(role);
-        if (licenseNumber != null) {
-            builder.licenseNumber(licenseNumber);
-        }
-
-        mockMvc.perform(post("/api/v1/auth/register")
-                        .header("Authorization", bearer(adminToken))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(builder.build())))
-                .andExpect(status().isCreated());
-
-        String token = login(email, "SecurePass123!");
-
-        MvcResult meResult = mockMvc.perform(get("/api/v1/auth/me")
-                        .header("Authorization", bearer(token)))
-                .andExpect(status().isOk())
-                .andReturn();
-        CurrentUserResponse me = parse(meResult, CurrentUserResponse.class);
-
-        Long profileId = role == RoleName.STUDENT ? me.getStudentProfileId() : me.getInstructorProfileId();
-        return new Person(email, token, me.getUserId(), profileId);
     }
 
     @SuppressWarnings("unchecked")

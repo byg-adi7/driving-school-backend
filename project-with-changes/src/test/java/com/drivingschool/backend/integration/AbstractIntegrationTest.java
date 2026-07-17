@@ -1,8 +1,11 @@
 package com.drivingschool.backend.integration;
 
 import com.drivingschool.backend.auth.dto.AuthResponse;
+import com.drivingschool.backend.auth.dto.CurrentUserResponse;
 import com.drivingschool.backend.auth.dto.LoginRequest;
+import com.drivingschool.backend.auth.dto.RegisterRequest;
 import com.drivingschool.backend.common.response.ApiResponse;
+import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.school.dto.CreateSchoolRequest;
 import com.drivingschool.backend.school.dto.SchoolResponse;
 import com.fasterxml.jackson.databind.JavaType;
@@ -21,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -120,5 +124,39 @@ public abstract class AbstractIntegrationTest {
 
     protected String bearer(String token) {
         return "Bearer " + token;
+    }
+
+    /** A registered user's identity: User.id plus their own StudentProfile.id/InstructorProfile.id (whichever applies). */
+    protected record Person(String email, String token, Long userId, Long profileId) {}
+
+    /** Registers a user via the admin token, logs them in, and resolves their own profile id via GET /auth/me. */
+    protected Person registerAndIdentify(String adminToken, Long schoolId, RoleName role, String email, String licenseNumber) throws Exception {
+        RegisterRequest.RegisterRequestBuilder builder = RegisterRequest.builder()
+                .email(email)
+                .password("SecurePass123!")
+                .firstName("Test")
+                .lastName(role.name())
+                .schoolId(schoolId)
+                .role(role);
+        if (licenseNumber != null) {
+            builder.licenseNumber(licenseNumber);
+        }
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(builder.build())))
+                .andExpect(status().isCreated());
+
+        String token = login(email, "SecurePass123!");
+
+        MvcResult meResult = mockMvc.perform(get("/api/v1/auth/me")
+                        .header("Authorization", bearer(token)))
+                .andExpect(status().isOk())
+                .andReturn();
+        CurrentUserResponse me = parse(meResult, CurrentUserResponse.class);
+
+        Long profileId = role == RoleName.STUDENT ? me.getStudentProfileId() : me.getInstructorProfileId();
+        return new Person(email, token, me.getUserId(), profileId);
     }
 }
