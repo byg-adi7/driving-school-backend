@@ -126,11 +126,16 @@ app:
     max-age: 3600
 
   storage:
-    provider: ${STORAGE_PROVIDER:gcs}
+    provider: ${STORAGE_PROVIDER:cloudinary}
     max-file-size-mb: 50
     allowed-mime-types: application/pdf
     gcs:
-      bucket-name: ${GCS_BUCKET_NAME}
+      # No default-less placeholder here on purpose: with STORAGE_PROVIDER now
+      # defaulting to cloudinary, a Cloudinary-only deploy that never sets
+      # GCS_BUCKET_NAME would otherwise crash at startup on an unresolvable
+      # placeholder for a provider it isn't even using. RequiredEnvironmentValidator
+      # is the actual fail-fast check for "gcs selected but bucket name missing".
+      bucket-name: ${GCS_BUCKET_NAME:}
       project-id: ${GCP_PROJECT_ID:}
 
   mail:

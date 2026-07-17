@@ -22,7 +22,7 @@ public class StorageProperties {
         this.environment = environment;
     }
 
-    /** "local" or "gcs". */
+    /** "local", "gcs", or "cloudinary". */
     private String provider = "local";
 
     private long maxFileSizeMb = 50;
@@ -47,7 +47,7 @@ public class StorageProperties {
             throw new BadRequestException(
                     "app.storage.provider=local is not allowed when the 'prod' profile is active - "
                             + "local storage does not persist across redeploys or restarts and isn't shared "
-                            + "across instances. Set STORAGE_PROVIDER=gcs (or another real backend) instead.");
+                            + "across instances. Set STORAGE_PROVIDER=cloudinary (or gcs) instead.");
         }
     }
 
