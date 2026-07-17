@@ -21,16 +21,14 @@ public class SmsNotificationSender implements NotificationSender {
         return channel == NotificationChannel.SMS;
     }
 
+    // No SMS provider (e.g. Twilio) is integrated yet, so this channel cannot
+    // actually deliver anything. Report FAILED rather than SENT so callers and
+    // notification history don't get told a message went out when it didn't.
     @Override
     public void send(Notification notification) {
-        try {
-            log.info("Sending SMS to {}: {}", notification.getRecipientAddress(), notification.getSubject());
-            notification.markSent();
-            notificationRepository.save(notification);
-        } catch (Exception ex) {
-            log.error("Failed to send SMS notification {}", notification.getId(), ex);
-            notification.markFailed(ex.getMessage());
-            notificationRepository.save(notification);
-        }
+        log.warn("SMS channel is not configured; notification {} to {} was not delivered",
+                notification.getId(), notification.getRecipientAddress());
+        notification.markFailed("SMS delivery is not configured");
+        notificationRepository.save(notification);
     }
 }
