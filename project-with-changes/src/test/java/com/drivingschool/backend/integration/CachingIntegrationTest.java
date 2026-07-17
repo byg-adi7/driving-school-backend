@@ -24,6 +24,34 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 class CachingIntegrationTest extends AbstractIntegrationTest {
 
+    /**
+     * Regression test for a real bug found via a live docker-compose smoke test
+     * (not caught by the other tests below, since every other assertion here
+     * has an evicting mutation between calls - the second call is always a
+     * fresh miss-then-repopulate, never a genuine cache hit): the first call
+     * to any @Cacheable list endpoint always succeeds (cache miss, nothing to
+     * deserialize yet), but a naive Jackson default-typing setup
+     * (activateDefaultTyping with either As.PROPERTY or As.WRAPPER_ARRAY)
+     * throws SerializationException on the second call, when Redis actually
+     * has to deserialize a cached List. Roles has no mutation endpoint at all,
+     * making back-to-back calls with nothing in between the cleanest way to
+     * force a genuine hit.
+     */
+    @Test
+    void rolesCache_survivesRepeatedCacheHit() throws Exception {
+        String adminToken = login(BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_PASSWORD);
+
+        MvcResult first = mockMvc.perform(get("/api/v1/roles").header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andReturn();
+        // Cache hit - must not throw, and must return the same data as the miss.
+        MvcResult second = mockMvc.perform(get("/api/v1/roles").header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(second.getResponse().getContentAsString()).isEqualTo(first.getResponse().getContentAsString());
+    }
+
     @Test
     void schoolsCache_reflectsNewSchoolAfterCreate() throws Exception {
         String adminToken = login(BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_PASSWORD);

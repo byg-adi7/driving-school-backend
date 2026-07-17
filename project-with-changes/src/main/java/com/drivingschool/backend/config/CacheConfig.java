@@ -1,8 +1,6 @@
 package com.drivingschool.backend.config;
 
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
 import org.springframework.boot.autoconfigure.cache.RedisCacheManagerBuilderCustomizer;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
@@ -22,9 +20,15 @@ import java.time.Duration;
  * The cache serializer copies the app's own auto-configured ObjectMapper (same
  * JavaTimeModule/ParameterNamesModule registrations already proven to correctly
  * (de)serialize these Lombok @Builder response DTOs elsewhere) rather than
- * building a fresh one from scratch, and only adds default-typing to the copy -
- * the shared app-wide bean is left untouched since default typing is a
- * generic-Object-cache concern, not something request/response JSON needs.
+ * building a fresh one from scratch. Default typing is deliberately NOT
+ * configured by hand here (no activateDefaultTyping call) - passing the plain
+ * copy straight to `new GenericJackson2JsonRedisSerializer(mapper)` lets its
+ * constructor apply Spring Data Redis's own TypeResolverBuilder.forEverything(),
+ * which (unlike calling ObjectMapper.activateDefaultTyping(..., As.PROPERTY) or
+ * As.WRAPPER_ARRAY directly - both tried and both confirmed broken via a live
+ * reproduction) correctly round-trips both single-object AND root-level List
+ * return values (getPublished(), getAllActive(), findAll(), etc. all cache a
+ * List). Hand-rolling default typing here was the original bug.
  */
 @Configuration
 @EnableCaching
@@ -33,10 +37,6 @@ public class CacheConfig {
     @Bean
     public RedisCacheManagerBuilderCustomizer redisCacheManagerBuilderCustomizer(ObjectMapper appObjectMapper) {
         ObjectMapper cacheObjectMapper = appObjectMapper.copy();
-        cacheObjectMapper.activateDefaultTyping(
-                LaissezFaireSubTypeValidator.instance,
-                ObjectMapper.DefaultTyping.NON_FINAL,
-                JsonTypeInfo.As.PROPERTY);
 
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofMinutes(10))
