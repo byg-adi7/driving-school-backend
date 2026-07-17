@@ -14,7 +14,7 @@ COPY src src
 # tests. This RUN step, by contrast, executes inside a `docker build` layer
 # with no daemon access, so it can never run those tests - re-running the
 # suite here would be redundant even where it could run. Package only.
-RUN --mount=type=cache,target=/root/.m2 mvn -q -B clean package -DskipTests
+RUN --mount=type=cache,id=maven-repo,target=/root/.m2 mvn -q -B clean package -DskipTests
 
 # --- Runtime stage ---
 FROM eclipse-temurin:21-jre-jammy
