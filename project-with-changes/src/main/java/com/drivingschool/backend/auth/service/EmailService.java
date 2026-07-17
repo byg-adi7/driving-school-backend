@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -26,8 +27,11 @@ public class EmailService {
      * Sends a password reset email. Failures are logged, not propagated -
      * the caller (forgot-password) always reports success regardless of
      * delivery outcome, to avoid leaking account existence or mail-server
-     * state to the caller.
+     * state to the caller. Runs off the request thread for the same reason:
+     * forgot-password should respond immediately regardless of how slow (or
+     * unreachable) the mail server is.
      */
+    @Async("notificationExecutor")
     public void sendPasswordResetEmail(String toEmail, String token, long validityMinutes) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
