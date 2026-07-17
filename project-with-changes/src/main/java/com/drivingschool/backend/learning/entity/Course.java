@@ -74,4 +74,13 @@ public class Course extends BaseEntity {
     public void archive() {
         this.status = CourseStatus.ARCHIVED;
     }
+
+    public void updateDetails(String title, String description) {
+        if (title != null) {
+            this.title = title;
+        }
+        if (description != null) {
+            this.description = description;
+        }
+    }
 }

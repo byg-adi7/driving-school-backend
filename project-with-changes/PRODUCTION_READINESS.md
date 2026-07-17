@@ -110,3 +110,20 @@ A separate engagement from the audit above: the booking module let **students** 
 **Verified against a real Postgres+Redis boot:** STUDENT gets 403 on create; INSTRUCTOR can't create under another instructor's ID; cross-school booking rejected; INSTRUCTOR creates a lesson for their own student successfully with no `pickupLocation` in the response; the student's `GET /notifications/me` shows the new `IN_APP` notification with correct lesson details and `readAt: null`; marking it read populates `readAt`; a second overlapping booking for the same instructor is rejected as a conflict; `LessonNote` creation with an optional `bookingId` correctly validates the booking belongs to the same instructor+student pair; `PracticalLessonRoute` generation correctly resolves and validates ownership of the referenced booking (verified up to the external OpenRouteService API boundary, which is unreachable in this environment — a pre-existing external dependency, not a regression).
 
 **Environment note, not a code issue:** this machine has a native Windows PostgreSQL service also bound to port 5433, colliding with the docker-compose Postgres container's host port mapping — a native process (not the container) was silently answering connections intended for Docker. Worked around for this verification by remapping the container to a different host port; the underlying collision is a local machine configuration matter, not something this session changed or should change unilaterally.
+
+---
+
+## Learning/Course API (2026-07-17)
+
+The `Course`/`VideoLesson`/`Resource` entities and their repositories already existed (and the schema was already correct - `SchemaValidationTest` was already passing against them), but there was no service, controller, DTO, or validator layer at all - the original external-review punch list's "missing learning API" item was a real gap, not something handled elsewhere.
+
+Built following the same per-module pattern already established by the quiz module (`QuizValidator`/`QuizService`/`QuizController`):
+
+- **`LearningValidator`** - ownership checks (`ADMIN` or the owning instructor may manage a course/lesson) and read-access checks (published courses/lessons are visible to any authenticated role; drafts are owner/ADMIN-only), mirroring `QuizValidator`'s exact policy.
+- **`CourseController`/`CourseService`** - create (instructor creates under their own profile; `ADMIN` must target an explicit `instructorId`, mirroring the quiz submission module's self-vs-admin-supplied-ID pattern), update, publish/unpublish/archive, get-by-ID (read-access gated), list-published (any role), and `GET /mine` (`INSTRUCTOR`-only, all statuses, for managing their own catalog).
+- **`VideoLessonController`/`VideoLessonService`** - create/update/publish/unpublish under a course (ownership-gated), get-by-ID, and list-by-course (returns every lesson to the owner/`ADMIN`, published-only to everyone else).
+- **`ResourceController`/`ResourceService`** - create/delete under a video lesson (ownership-gated), list-by-lesson (gated by the lesson's own read-access rule).
+
+51 new tests (service-layer unit tests + `@WebMvcTest` security-slice tests per controller, same split as every other module) cover ownership enforcement, the admin-vs-self instructor resolution on create, and the published/draft visibility filtering.
+
+**Not verified against a real boot this time:** this machine's native-Postgres-vs-Docker port collision (documented above) reproduced again when attempting to boot the app for live verification. Given the thorough unit + security-slice coverage already in place, live verification was skipped rather than re-running the same port-remap workaround - worth doing before this ships if a clean environment is available.
