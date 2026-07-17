@@ -1,17 +1,15 @@
 spring:
   jpa:
     hibernate:
-     ddl-auto: update
+     # ddl-auto intentionally NOT overridden to "update" here: that setting is
+     # exactly what let V8/V9's schema drift go undetected for so long (each
+     # dev's local database got silently auto-patched instead of failing loudly
+     # like a fresh environment would). Inherits application.yml's ddl-auto:
+     # validate instead, so local dev catches entity/migration mismatches the
+     # same way CI and prod do. flyway.validate-on-migrate: false (also from
+     # application.yml) still allows editing an unreleased migration file
+     # during active development without a checksum failure.
      show-sql: true
-  flyway:
-    enabled: true
-    repair-on-migrate: true
-    validate-on-migrate: false
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: http://localhost:8080
 
 app:
    bootstrap:
