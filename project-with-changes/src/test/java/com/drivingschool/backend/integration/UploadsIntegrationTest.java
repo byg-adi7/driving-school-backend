@@ -102,7 +102,7 @@ class UploadsIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", bearer(instructor.token())))
                 .andExpect(status().isOk())
                 .andReturn();
-        assertThat(parseList(paginatedResult)).hasSize(1);
+        assertThat(parsePageContent(paginatedResult)).hasSize(1);
 
         // the owning student can download it, byte for byte
         MvcResult downloadResult = mockMvc.perform(get("/api/v1/lesson-notes/" + note.getId()
@@ -173,5 +173,13 @@ class UploadsIntegrationTest extends AbstractIntegrationTest {
     private List<Object> parseList(MvcResult result) throws Exception {
         Map<String, Object> body = objectMapper.readValue(result.getResponse().getContentAsString(), Map.class);
         return (List<Object>) body.get("data");
+    }
+
+    /** For endpoints returning a paginated Page<T> - "data" is the page object, not a bare array. */
+    @SuppressWarnings("unchecked")
+    private List<Object> parsePageContent(MvcResult result) throws Exception {
+        Map<String, Object> body = objectMapper.readValue(result.getResponse().getContentAsString(), Map.class);
+        Map<String, Object> page = (Map<String, Object>) body.get("data");
+        return (List<Object>) page.get("content");
     }
 }
