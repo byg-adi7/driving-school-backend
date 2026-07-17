@@ -20,12 +20,72 @@ class FileValidatorTest {
         return new FileValidator(propertiesWith(maxFileSizeMb, allowedMimeTypes));
     }
 
+    private static final byte[] VALID_PDF_CONTENT = "%PDF-1.4\n%%EOF".getBytes();
+
     @Test
     void validate_validPdf_doesNotThrow() {
         FileValidator validator = validatorWith(50, "application/pdf");
-        MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", "content".getBytes());
+        MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", VALID_PDF_CONTENT);
 
         assertThatCode(() -> validator.validate(file)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void validate_contentDoesNotMatchClaimedPdfType_throws() {
+        FileValidator validator = validatorWith(50, "application/pdf");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "report.pdf", "application/pdf", "MZ this is actually an executable".getBytes());
+
+        assertThatThrownBy(() -> validator.validate(file))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match a valid PDF");
+    }
+
+    @Test
+    void validate_pdfMissingEofMarker_throws() {
+        FileValidator validator = validatorWith(50, "application/pdf");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "report.pdf", "application/pdf", "%PDF-1.4\ntruncated".getBytes());
+
+        assertThatThrownBy(() -> validator.validate(file))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("end-of-file marker");
+    }
+
+    @Test
+    void validate_pdfWithEmbeddedJavaScript_throws() {
+        FileValidator validator = validatorWith(50, "application/pdf");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "report.pdf", "application/pdf",
+                "%PDF-1.4\n/JavaScript (app.alert('x'))\n%%EOF".getBytes());
+
+        assertThatThrownBy(() -> validator.validate(file))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("active content");
+    }
+
+    @Test
+    void validate_pdfWithLaunchAction_throws() {
+        FileValidator validator = validatorWith(50, "application/pdf");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "report.pdf", "application/pdf",
+                "%PDF-1.4\n/Launch (cmd.exe)\n%%EOF".getBytes());
+
+        assertThatThrownBy(() -> validator.validate(file))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("active content");
+    }
+
+    @Test
+    void validate_pdfWithEmbeddedFile_throws() {
+        FileValidator validator = validatorWith(50, "application/pdf");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "report.pdf", "application/pdf",
+                "%PDF-1.4\n/EmbeddedFile\n%%EOF".getBytes());
+
+        assertThatThrownBy(() -> validator.validate(file))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("active content");
     }
 
     @Test

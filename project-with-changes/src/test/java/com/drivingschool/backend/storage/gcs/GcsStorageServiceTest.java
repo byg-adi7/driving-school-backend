@@ -41,9 +41,11 @@ class GcsStorageServiceTest {
         service = new GcsStorageService(storage, properties, new FileValidator(properties));
     }
 
+    private static final byte[] VALID_PDF_CONTENT = "%PDF-1.4\n%%EOF".getBytes();
+
     @Test
     void store_uploadsToConfiguredBucketAndReturnsMetadata() throws Exception {
-        byte[] content = "hello world".getBytes();
+        byte[] content = VALID_PDF_CONTENT;
         MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", content);
 
         StoredFile stored = service.store(file, "lesson-notes", "42");

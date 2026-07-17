@@ -30,9 +30,11 @@ class LocalStorageServiceTest {
         service = new LocalStorageService(properties, new FileValidator(properties));
     }
 
+    private static final byte[] VALID_PDF_CONTENT = "%PDF-1.4\n%%EOF".getBytes();
+
     @Test
     void store_thenLoad_roundTripsContent() throws Exception {
-        byte[] content = "hello world".getBytes();
+        byte[] content = VALID_PDF_CONTENT;
         MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", content);
 
         StoredFile stored = service.store(file, "lesson-notes", "42");
@@ -47,7 +49,7 @@ class LocalStorageServiceTest {
 
     @Test
     void store_thenDelete_removesFile() throws Exception {
-        MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", "content".getBytes());
+        MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", VALID_PDF_CONTENT);
         StoredFile stored = service.store(file, "lesson-notes", "42");
 
         service.delete(stored.getStoragePath());
@@ -88,7 +90,7 @@ class LocalStorageServiceTest {
             StorageProperties properties = new StorageProperties(new MockEnvironment());
             properties.getLocal().setBasePath(relativeConfigValue);
             LocalStorageService relativeService = new LocalStorageService(properties, new FileValidator(properties));
-            MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", "content".getBytes());
+            MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", VALID_PDF_CONTENT);
 
             StoredFile stored = relativeService.store(file, "lesson-notes", "42");
 
