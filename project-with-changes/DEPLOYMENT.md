@@ -46,6 +46,7 @@ In the app service's "Variables" tab, set:
 | `CLOUDINARY_URL` | `cloudinary://<api_key>:<api_secret>@<cloud_name>` | Required when `STORAGE_PROVIDER=cloudinary`. Copy this directly from the Cloudinary dashboard ("API Environment variable") - it's the one variable Cloudinary's SDK needs, no separate cloud_name/key/secret fields. |
 | `SENTRY_DSN` | your Sentry project's DSN | Optional - error tracking stays off (no-op) if unset. Get a DSN from [sentry.io](https://sentry.io) (or self-hosted Sentry). |
 | `SENTRY_TRACES_SAMPLE_RATE` | a number 0.0-1.0, default `0.1` | Fraction of requests to trace for performance monitoring; only matters if `SENTRY_DSN` is set. |
+| `OPENROUTE_API_KEY` | your [OpenRouteService](https://openrouteservice.org/dev/#/signup) API key | Powers practical-lesson route generation (`POST /api/v1/lesson-routes/generate`). No fallback default - if unset, route generation fails at request time with a clear error (logged, not fatal to the app) rather than silently calling the real API with a fake key. Free tier is generous enough for this app's scale; the directions endpoint URL and request timeout are fixed app config, not something you need to set. |
 
 `PORT` is injected by Railway automatically and is already wired up (`application-prod.yml`
 reads `${PORT:8080}`) - don't set it yourself.

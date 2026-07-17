@@ -166,9 +166,12 @@ logging:
   file:
     name: logs/driving-school-backend.log
 
-# OpenRouteService Configuration
+# OpenRouteService Configuration - directionsUrl/timeout are the same real API
+# endpoint and a sane request timeout for every deployment, not per-account
+# config, so they're fine as fixed defaults. apiKey is a real credential and has
+# no fallback - read exclusively from OPENROUTE_API_KEY, same as the mail config.
 openroute:
-  apiKey: ${OPENROUTE_API_KEY:demo-key-for-testing}
+  apiKey: ${OPENROUTE_API_KEY:}
   directionsUrl: https://api.openrouteservice.org/v2/directions/driving-car
   timeout: 5000
 
