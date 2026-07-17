@@ -69,4 +69,27 @@ class RequiredEnvironmentValidatorTest {
 
         assertThatCode(() -> fire(environment)).doesNotThrowAnyException();
     }
+
+    @Test
+    void cloudinaryProviderWithoutUrl_throws() {
+        MockEnvironment environment = new MockEnvironment();
+        environment.setProperty("DB_PASSWORD", "x");
+        environment.setProperty("JWT_SECRET", "x");
+        environment.setProperty("STORAGE_PROVIDER", "cloudinary");
+
+        assertThatThrownBy(() -> fire(environment))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("CLOUDINARY_URL");
+    }
+
+    @Test
+    void cloudinaryProviderWithUrl_doesNotThrow() {
+        MockEnvironment environment = new MockEnvironment();
+        environment.setProperty("DB_PASSWORD", "x");
+        environment.setProperty("JWT_SECRET", "x");
+        environment.setProperty("STORAGE_PROVIDER", "cloudinary");
+        environment.setProperty("CLOUDINARY_URL", "cloudinary://key:secret@cloud-name");
+
+        assertThatCode(() -> fire(environment)).doesNotThrowAnyException();
+    }
 }

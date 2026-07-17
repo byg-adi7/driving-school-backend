@@ -42,18 +42,31 @@ In the app service's "Variables" tab, set:
 | `CORS_ALLOWED_ORIGINS` | your real frontend origin(s) | Comma-separated, no trailing slash |
 | `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM` | your SMTP relay's details | Needed for password-reset emails to actually send |
 | `PASSWORD_RESET_URL` | your frontend's reset-password page URL | e.g. `https://yourapp.com/reset-password` |
-| `STORAGE_PROVIDER` | `local` (default) or `gcs` | **See the storage caveat below before going live.** |
+| `STORAGE_PROVIDER` | `cloudinary` (default in prod), `gcs`, or `local` | **See the storage section below before going live.** |
+| `CLOUDINARY_URL` | `cloudinary://<api_key>:<api_secret>@<cloud_name>` | Required when `STORAGE_PROVIDER=cloudinary`. Copy this directly from the Cloudinary dashboard ("API Environment variable") - it's the one variable Cloudinary's SDK needs, no separate cloud_name/key/secret fields. |
 | `SENTRY_DSN` | your Sentry project's DSN | Optional - error tracking stays off (no-op) if unset. Get a DSN from [sentry.io](https://sentry.io) (or self-hosted Sentry). |
 | `SENTRY_TRACES_SAMPLE_RATE` | a number 0.0-1.0, default `0.1` | Fraction of requests to trace for performance monitoring; only matters if `SENTRY_DSN` is set. |
 
 `PORT` is injected by Railway automatically and is already wired up (`application-prod.yml`
 reads `${PORT:8080}`) - don't set it yourself.
 
-**Storage caveat:** `STORAGE_PROVIDER=local` writes to `./uploads` inside the container,
-which does **not** persist across redeploys or restarts unless you attach a Railway
-[volume](https://docs.railway.com/guides/volumes) to that path. `gcs` requires a real GCP
-project/bucket/credentials, which isn't set up yet. Pick one before real users start
-uploading files - this is tracked as its own open item, not solved by this deploy setup.
+**Storage:** the app supports three providers via `STORAGE_PROVIDER`:
+
+- **`cloudinary`** (the default in prod) - uploaded files (lesson-note attachments,
+  currently PDF only) are stored on Cloudinary as `resource_type=raw` under the
+  `authenticated` delivery type, meaning the raw asset URL alone can never fetch a file -
+  only a signed URL this app generates (with its own API secret) can. This app's own
+  permission checks (who's allowed to download a given attachment) still happen first, in
+  the application layer, before a signed URL is ever generated - Cloudinary's
+  authenticated delivery type is defense in depth on top of that, not a replacement for
+  it. Needs just `CLOUDINARY_URL` (see the table above).
+- **`gcs`** - Google Cloud Storage. Needs a real GCP project/bucket/credentials
+  (`GCS_BUCKET_NAME`, optionally `GCP_PROJECT_ID`) - not set up by default.
+- **`local`** - writes to `./uploads` inside the container, which does **not** persist
+  across redeploys or restarts unless you attach a Railway
+  [volume](https://docs.railway.com/guides/volumes) to that path. Blocked outright when
+  the `prod` profile is active (`StorageProperties` fails fast at startup) - it's a
+  dev/test-only option, never a real choice for a live deployment.
 
 ### 3. Get a Railway Project Token
 

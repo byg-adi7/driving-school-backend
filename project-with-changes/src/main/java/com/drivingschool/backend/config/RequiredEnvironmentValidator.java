@@ -35,12 +35,22 @@ public class RequiredEnvironmentValidator implements ApplicationListener<Applica
         // Checked against the raw STORAGE_PROVIDER env var, not app.storage.provider:
         // this listener runs at HIGHEST_PRECEDENCE, before application*.yml is loaded,
         // so YAML-derived properties (including the application-prod.yml default of
-        // "gcs") are not yet resolved here - only raw environment variables are.
+        // "cloudinary") are not yet resolved here - only raw environment variables are.
         // GCP_PROJECT_ID is deliberately not required, since Application Default
         // Credentials can auto-detect the project on GCP-hosted environments.
         if ("gcs".equals(environment.getProperty("STORAGE_PROVIDER"))
                 && !StringUtils.hasText(environment.getProperty("GCS_BUCKET_NAME"))) {
             missing.add("GCS_BUCKET_NAME");
+        }
+
+        // CLOUDINARY_URL isn't in REQUIRED_VARIABLES unconditionally because it's only
+        // needed when Cloudinary is actually the active storage provider - Cloudinary's
+        // own SDK reads this env var directly (see CloudinaryStorageConfig), so an unset
+        // value here would otherwise surface later as a confusing authentication failure
+        // on the first upload attempt instead of at startup.
+        if ("cloudinary".equals(environment.getProperty("STORAGE_PROVIDER"))
+                && !StringUtils.hasText(environment.getProperty("CLOUDINARY_URL"))) {
+            missing.add("CLOUDINARY_URL");
         }
 
         if (!missing.isEmpty()) {
