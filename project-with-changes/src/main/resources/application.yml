@@ -112,7 +112,12 @@ app:
        email: ${BOOTSTRAP_ADMIN_EMAIL:admin@drivingschool.local}
       # Bootstrap admin password - MUST change after first login!
        # For production, use environment variable: BOOTSTRAP_ADMIN_PASSWORD
-       password: ${BOOTSTRAP_ADMIN_PASSWORD}
+       # Empty default on purpose (not omitted): BootstrapAdminInitializer reads
+       # this via Environment.getProperty(), which throws IllegalArgumentException
+       # on an unresolvable placeholder rather than returning null - crashing the
+       # whole app at startup instead of the graceful "skip creation, log an
+       # error" behavior the initializer's own blank-check clearly intends.
+       password: ${BOOTSTRAP_ADMIN_PASSWORD:}
 
   mail:
     from: ${MAIL_FROM:}

@@ -160,7 +160,10 @@ app:
         email: ${BOOTSTRAP_ADMIN_EMAIL:admin@company.com}
         # Production admin password - MUST be set via environment variable
         # NEVER include actual passwords in configuration files
-        password: ${BOOTSTRAP_ADMIN_PASSWORD}
+        # Empty default on purpose (not omitted) - see application.yml's comment
+        # on this same key for why: an unresolvable placeholder here crashes the
+        # whole app at startup instead of gracefully skipping admin creation.
+        password: ${BOOTSTRAP_ADMIN_PASSWORD:}
 
 springdoc:
   api-docs:
