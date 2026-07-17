@@ -12,6 +12,8 @@ import com.drivingschool.backend.learning.enums.CourseStatus;
 import com.drivingschool.backend.learning.mapper.LearningMapper;
 import com.drivingschool.backend.learning.repository.CourseRepository;
 import com.drivingschool.backend.learning.validator.LearningValidator;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,8 +37,12 @@ public class CourseServiceImpl implements CourseService {
         this.validator = validator;
     }
 
+    // Only getPublished() is cached (see its own comment below) - create() can't
+    // affect that list since new courses are always DRAFT, but it's evicted
+    // anyway for defensiveness at near-zero cost since course creation is rare.
     @Override
     @Transactional
+    @CacheEvict(value = "courses", key = "'published'")
     public CourseResponse create(CreateCourseRequest request, Long userId, String role) {
         InstructorProfile instructor = resolveInstructor(request.getInstructorId(), userId, role);
 
@@ -53,6 +59,7 @@ public class CourseServiceImpl implements CourseService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "courses", key = "'published'")
     public CourseResponse update(Long courseId, UpdateCourseRequest request, Long userId, String role) {
         Course course = findCourse(courseId);
         validator.validateCourseOwnership(course, userId, role);
@@ -63,6 +70,7 @@ public class CourseServiceImpl implements CourseService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "courses", key = "'published'")
     public CourseResponse publish(Long courseId, Long userId, String role) {
         Course course = findCourse(courseId);
         validator.validateCourseOwnership(course, userId, role);
@@ -73,6 +81,7 @@ public class CourseServiceImpl implements CourseService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "courses", key = "'published'")
     public CourseResponse unpublish(Long courseId, Long userId, String role) {
         Course course = findCourse(courseId);
         validator.validateCourseOwnership(course, userId, role);
@@ -83,6 +92,7 @@ public class CourseServiceImpl implements CourseService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "courses", key = "'published'")
     public CourseResponse archive(Long courseId, Long userId, String role) {
         Course course = findCourse(courseId);
         validator.validateCourseOwnership(course, userId, role);
@@ -99,7 +109,13 @@ public class CourseServiceImpl implements CourseService {
         return mapper.toResponse(course);
     }
 
+    // Safe to cache uniformly across every caller - always filters to PUBLISHED
+    // only, with no role/ownership-based variation in what's returned (unlike
+    // getById, which is intentionally left uncached since drafts are
+    // owner/admin-only and caching by courseId alone would risk serving a
+    // cached draft response to a caller who shouldn't see it).
     @Override
+    @Cacheable(value = "courses", key = "'published'")
     @Transactional(readOnly = true)
     public List<CourseResponse> getPublished() {
         return courseRepository.findByStatus(CourseStatus.PUBLISHED).stream()

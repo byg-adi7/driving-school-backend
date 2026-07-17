@@ -25,6 +25,8 @@ import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -68,8 +70,12 @@ public class QuizServiceImpl implements QuizService {
         this.validator = validator;
     }
 
+    // A brand-new quiz is always unpublished, so it can't actually appear in
+    // getPublishedByCourse yet - evicted anyway for defensiveness, same
+    // reasoning as CourseServiceImpl.create().
     @Override
     @Transactional
+    @CacheEvict(value = "quizzes-by-course", key = "#request.courseId")
     public QuizResponse create(CreateQuizRequest request, Long userId, String role) {
         Course course = courseRepository.findById(request.getCourseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Course", "id", request.getCourseId()));
@@ -89,8 +95,13 @@ public class QuizServiceImpl implements QuizService {
         return quizMapper.toResponse(saved, List.of(), false);
     }
 
+    // Adding a question to an already-published quiz is rejected below, so in
+    // practice this never touches a quiz visible in getPublishedByCourse - kept
+    // as a defensive evict (keyed on #result, which Spring resolves after the
+    // method returns) in case that invariant ever changes.
     @Override
     @Transactional
+    @CacheEvict(value = "quizzes-by-course", key = "#result.courseId")
     public QuizResponse addQuestion(Long quizId, CreateQuizQuestionRequest request, Long userId, String role) {
         Quiz quiz = findQuiz(quizId);
         validator.validateQuizOwnership(quiz, userId, role);
@@ -115,6 +126,7 @@ public class QuizServiceImpl implements QuizService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "quizzes-by-course", key = "#result.courseId")
     public QuizResponse publish(Long quizId, Long userId, String role) {
         Quiz quiz = findQuiz(quizId);
         validator.validateQuizOwnership(quiz, userId, role);
@@ -136,7 +148,14 @@ public class QuizServiceImpl implements QuizService {
         return quizMapper.toResponse(quiz, questions, !forStudent);
     }
 
+    // Safe to cache uniformly - always published-only with includeAnswers fixed
+    // to false, identical response for every caller. getById is intentionally
+    // left uncached: its forStudent flag toggles whether the correct answers
+    // are included, and caching by quizId alone would risk serving a
+    // student a response that was actually built (and cached) for an
+    // instructor's forStudent=false call, leaking answers.
     @Override
+    @Cacheable(value = "quizzes-by-course", key = "#courseId")
     @Transactional(readOnly = true)
     public List<QuizResponse> getPublishedByCourse(Long courseId) {
         return quizRepository.findByCourseIdAndPublishedTrue(courseId).stream()

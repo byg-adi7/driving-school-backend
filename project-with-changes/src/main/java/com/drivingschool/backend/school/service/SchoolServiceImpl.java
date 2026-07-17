@@ -7,6 +7,8 @@ import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.mapper.SchoolMapper;
 import com.drivingschool.backend.school.repository.SchoolRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,8 +26,12 @@ public class SchoolServiceImpl implements SchoolService {
         this.schoolMapper = schoolMapper;
     }
 
+    // Schools have no update/deactivate endpoint today, so create() is the only
+    // mutation - evicting everything on it is simplest and cheap given how rare
+    // school creation is, rather than tracking individual by-id keys.
     @Override
     @Transactional
+    @CacheEvict(value = "schools", allEntries = true)
     public SchoolResponse create(CreateSchoolRequest request) {
         School school = School.builder()
                 .name(request.getName())
@@ -41,6 +47,7 @@ public class SchoolServiceImpl implements SchoolService {
     }
 
     @Override
+    @Cacheable(value = "schools", key = "#id")
     @Transactional(readOnly = true)
     public SchoolResponse getById(Long id) {
         School school = schoolRepository.findById(id)
@@ -49,6 +56,7 @@ public class SchoolServiceImpl implements SchoolService {
     }
 
     @Override
+    @Cacheable(value = "schools", key = "'active'")
     @Transactional(readOnly = true)
     public List<SchoolResponse> getAllActive() {
         return schoolRepository.findAll().stream()
