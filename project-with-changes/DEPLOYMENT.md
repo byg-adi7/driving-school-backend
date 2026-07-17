@@ -40,7 +40,7 @@ In the app service's "Variables" tab, set:
 | `BOOTSTRAP_ADMIN_EMAIL` | your admin email | |
 | `BOOTSTRAP_ADMIN_PASSWORD` | a strong password | Change it after first login regardless |
 | `CORS_ALLOWED_ORIGINS` | your real frontend origin(s) | Comma-separated, no trailing slash |
-| `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM` | your SMTP relay's details | Needed for password-reset emails to actually send |
+| `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM` | your SMTP relay's details | Needed for password-reset emails and the `EMAIL` notification channel to actually send. No fallback default for any of these five - if unset, mail sending fails at send time (logged, not fatal) rather than silently using a placeholder host or sender address. For Gmail: `MAIL_HOST=smtp.gmail.com`, `MAIL_PORT=587`, `MAIL_USERNAME`/`MAIL_FROM` = your Gmail address, `MAIL_PASSWORD` = a 16-character [App Password](https://myaccount.google.com/apppasswords) (requires 2-Step Verification enabled) - not your regular Gmail password. Gmail also enforces that `MAIL_FROM` matches the authenticated `MAIL_USERNAME`. |
 | `PASSWORD_RESET_URL` | your frontend's reset-password page URL | e.g. `https://yourapp.com/reset-password` |
 | `STORAGE_PROVIDER` | `cloudinary` (default in prod), `gcs`, or `local` | **See the storage section below before going live.** |
 | `CLOUDINARY_URL` | `cloudinary://<api_key>:<api_secret>@<cloud_name>` | Required when `STORAGE_PROVIDER=cloudinary`. Copy this directly from the Cloudinary dashboard ("API Environment variable") - it's the one variable Cloudinary's SDK needs, no separate cloud_name/key/secret fields. |

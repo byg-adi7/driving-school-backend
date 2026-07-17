@@ -42,7 +42,7 @@ spring:
 
   mail:
     host: ${MAIL_HOST:}
-    port: ${MAIL_PORT:587}
+    port: ${MAIL_PORT:}
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
     properties:
@@ -115,7 +115,7 @@ app:
        password: ${BOOTSTRAP_ADMIN_PASSWORD}
 
   mail:
-    from: ${MAIL_FROM:no-reply@drivingschool.local}
+    from: ${MAIL_FROM:}
 
   password-reset:
     # How long a requested reset link stays valid.
