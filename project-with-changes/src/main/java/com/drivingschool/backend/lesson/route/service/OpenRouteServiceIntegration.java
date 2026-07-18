@@ -52,6 +52,15 @@ public class OpenRouteServiceIntegration {
         );
     }
 
+    /**
+     * The live API responds with a GeoJSON FeatureCollection (verified against
+     * a real deploy - "routes"/"summary" at the top level, the shape this
+     * method previously assumed, does not appear in practice):
+     * {"type":"FeatureCollection","features":[{"properties":{"summary":
+     * {"distance":...,"duration":...}, ...},"geometry":{"type":"LineString",
+     * "coordinates":[[lon,lat],...]}}], ...}. There is no per-route id in this
+     * shape, unlike the older format this code was originally written for.
+     */
     private Map<String, Object> parseRouteResponse(
             String responseString,
             Double startLat, Double startLon,
@@ -59,16 +68,16 @@ public class OpenRouteServiceIntegration {
     ) {
         try {
             JsonNode root = objectMapper.readTree(responseString);
-            JsonNode routes = root.path("routes");
+            JsonNode features = root.path("features");
 
-            if (!routes.isArray() || routes.size() == 0) {
+            if (!features.isArray() || features.isEmpty()) {
                 // OpenRouteService can return HTTP 200 with an embedded error
                 // object (invalid/missing API key, over quota, genuinely no
                 // routable path, etc.) instead of a non-2xx status - logging
                 // the raw body here is the only way to tell those apart,
                 // since RestTemplate's getForObject() only throws for actual
                 // non-2xx responses.
-                log.error("OpenRouteService returned no routes for this request. Raw response: {}", responseString);
+                log.error("OpenRouteService returned no features for this request. Raw response: {}", responseString);
                 String detail = root.path("error").path("message").asText(null);
                 if (detail == null) {
                     detail = root.path("error").asText(null);
@@ -78,17 +87,23 @@ public class OpenRouteServiceIntegration {
                         : "No route found for the given coordinates");
             }
 
-            JsonNode route = routes.get(0);
-            long distance = route.path("summary").path("distance").asLong();
-            long duration = route.path("summary").path("duration").asLong();
-            String geometry = route.path("geometry").asText();
+            JsonNode feature = features.get(0);
+            JsonNode summary = feature.path("properties").path("summary");
+            long distance = summary.path("distance").asLong();
+            long duration = summary.path("duration").asLong();
+            List<RouteCoordinateDTO> coordinates = parseCoordinates(feature.path("geometry").path("coordinates"));
 
             Map<String, Object> result = new HashMap<>();
             result.put("distance", distance);
             result.put("duration", duration);
-            result.put("geometry", geometry);
-            result.put("coordinates", parseCoordinates(geometry));
-            result.put("externalRouteId", root.path("routes").get(0).path("id").asText(""));
+            // Stored as our own serialized coordinate list, not the raw
+            // external geometry - PracticalLessonRouteService persists this
+            // value verbatim as routeGeometry and later deserializes it
+            // straight into List<RouteCoordinateDTO> on every subsequent
+            // read, so it must already be in that shape.
+            result.put("geometry", objectMapper.writeValueAsString(coordinates));
+            result.put("coordinates", coordinates);
+            result.put("externalRouteId", "");
 
             return result;
         } catch (IOException e) {
@@ -97,22 +112,16 @@ public class OpenRouteServiceIntegration {
         }
     }
 
-    private List<RouteCoordinateDTO> parseCoordinates(String geometry) {
+    private List<RouteCoordinateDTO> parseCoordinates(JsonNode coordinatesNode) {
         List<RouteCoordinateDTO> coordinates = new ArrayList<>();
-        try {
-            JsonNode geomNode = objectMapper.readTree(geometry);
-
-            if (geomNode.isArray()) {
-                for (JsonNode coord : geomNode) {
-                    if (coord.isArray() && coord.size() >= 2) {
-                        Double lon = coord.get(0).asDouble();
-                        Double lat = coord.get(1).asDouble();
-                        coordinates.add(new RouteCoordinateDTO(lat, lon));
-                    }
+        if (coordinatesNode.isArray()) {
+            for (JsonNode coord : coordinatesNode) {
+                if (coord.isArray() && coord.size() >= 2) {
+                    Double lon = coord.get(0).asDouble();
+                    Double lat = coord.get(1).asDouble();
+                    coordinates.add(new RouteCoordinateDTO(lat, lon));
                 }
             }
-        } catch (IOException e) {
-            log.warn("Failed to parse route coordinates", e);
         }
         return coordinates;
     }
