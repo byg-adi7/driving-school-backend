@@ -40,18 +40,6 @@ spring:
     encoding: UTF-8
     schemas: public
 
-  mail:
-    host: ${MAIL_HOST:}
-    port: ${MAIL_PORT:}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -150,12 +138,6 @@ management:
   endpoint:
     health:
       show-details: always
-  health:
-    # EmailService already catches and logs send failures without
-    # propagating them - mail being unreachable (e.g. unconfigured SMTP
-    # in dev) shouldn't fail liveness/readiness for the same reason.
-    mail:
-      enabled: false
 
 
 
@@ -174,9 +156,17 @@ logging:
 # OpenRouteService Configuration - directionsUrl/timeout are the same real API
 # endpoint and a sane request timeout for every deployment, not per-account
 # config, so they're fine as fixed defaults. apiKey is a real credential and has
-# no fallback - read exclusively from OPENROUTE_API_KEY, same as the mail config.
+# no fallback - read exclusively from OPENROUTE_API_KEY, same as the Resend config.
 openroute:
   apiKey: ${OPENROUTE_API_KEY:}
   directionsUrl: https://api.openrouteservice.org/v2/directions/driving-car
   timeout: 5000
+
+# Resend (https://resend.com) - transactional email over plain HTTPS, not raw
+# SMTP. Railway blocks outbound SMTP entirely on non-Pro plans (and recommends
+# an HTTPS-API provider regardless of plan), which is what made the previous
+# JavaMailSender/SMTP setup unusable in production. No fallback default - a
+# real credential, read exclusively from RESEND_API_KEY.
+resend:
+  apiKey: ${RESEND_API_KEY:}
 
