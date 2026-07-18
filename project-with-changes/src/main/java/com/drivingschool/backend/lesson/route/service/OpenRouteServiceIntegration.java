@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -36,6 +37,18 @@ public class OpenRouteServiceIntegration {
             String response = restTemplate.getForObject(url, String.class);
 
             return parseRouteResponse(response, startLat, startLon, destLat, destLon);
+        } catch (HttpClientErrorException e) {
+            String apiMessage = null;
+            try {
+                JsonNode body = objectMapper.readTree(e.getResponseBodyAsString());
+                apiMessage = body.path("error").path("message").asText(null);
+            } catch (IOException parseEx) {
+                log.debug("Could not parse OpenRouteService error response body", parseEx);
+            }
+            String userMessage = apiMessage != null ? apiMessage
+                    : "Could not generate route. Please check your coordinates and try again.";
+            log.warn("OpenRouteService returned client error {}: {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new BadRequestException(userMessage);
         } catch (RestClientException e) {
             log.error("Failed to generate route from OpenRouteService", e);
             throw new BadRequestException("Failed to generate route. Please try again or check your coordinates.");
