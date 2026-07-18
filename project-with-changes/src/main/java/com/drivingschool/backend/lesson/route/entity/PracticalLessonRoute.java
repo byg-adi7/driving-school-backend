@@ -8,10 +8,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
-
-import java.time.LocalDateTime;
 
 @Entity
 @Table(
@@ -67,13 +63,11 @@ public class PracticalLessonRoute extends BaseEntity {
     @Column(name = "external_route_id", length = 255)
     private String externalRouteId;
 
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    @UpdateTimestamp
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
+    // createdAt and updatedAt are inherited from BaseEntity to centralize auditing.
+    // (Previously redeclared here with Hibernate's @CreationTimestamp/@UpdateTimestamp,
+    // which shadowed BaseEntity's Spring Data JPA auditing fields of the same name and
+    // meant created_at never actually got populated - see PRODUCTION_READINESS.md,
+    // the identical bug already found and fixed in LessonNote/LessonNoteAttachment.)
 
     public Double getDistance() {
         return distanceMeters / 1000.0;
