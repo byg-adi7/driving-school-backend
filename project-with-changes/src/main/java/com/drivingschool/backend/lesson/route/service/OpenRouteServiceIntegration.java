@@ -62,7 +62,20 @@ public class OpenRouteServiceIntegration {
             JsonNode routes = root.path("routes");
 
             if (!routes.isArray() || routes.size() == 0) {
-                throw new BadRequestException("No route found for the given coordinates");
+                // OpenRouteService can return HTTP 200 with an embedded error
+                // object (invalid/missing API key, over quota, genuinely no
+                // routable path, etc.) instead of a non-2xx status - logging
+                // the raw body here is the only way to tell those apart,
+                // since RestTemplate's getForObject() only throws for actual
+                // non-2xx responses.
+                log.error("OpenRouteService returned no routes for this request. Raw response: {}", responseString);
+                String detail = root.path("error").path("message").asText(null);
+                if (detail == null) {
+                    detail = root.path("error").asText(null);
+                }
+                throw new BadRequestException(detail != null
+                        ? "Failed to generate route: " + detail
+                        : "No route found for the given coordinates");
             }
 
             JsonNode route = routes.get(0);
