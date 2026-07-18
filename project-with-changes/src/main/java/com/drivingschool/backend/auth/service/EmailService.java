@@ -47,7 +47,12 @@ public class EmailService {
             mailSender.send(message);
             log.info("Password reset email sent to {}", toEmail);
         } catch (Exception e) {
-            log.error("Failed to send password reset email to {}: {}", toEmail, e.getMessage());
+            // Pass the exception itself, not just its message: SLF4J attaches
+            // a Throwable to the log event only when it's the last argument,
+            // which is what carries the full stack trace to log aggregators
+            // and Sentry's logging integration (which builds an exception
+            // event from that attached Throwable, not from the message text).
+            log.error("Failed to send password reset email to {}", toEmail, e);
         }
     }
 }
