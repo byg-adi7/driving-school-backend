@@ -13,6 +13,8 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Slf4j
 @Service
 public class SchoolAdminCascadeDeletionServiceImpl implements SchoolAdminCascadeDeletionService {
@@ -70,8 +72,16 @@ public class SchoolAdminCascadeDeletionServiceImpl implements SchoolAdminCascade
         // school row, and from there through any remaining profiles/bookings/
         // gamification rows via the V15 cascade fixes. No other repository
         // needs to be touched explicitly for this part.
+        //
+        // Uses the same bulk-delete-by-id as the students/instructors above
+        // (bypassing entity-level cascade/dirty-check processing) rather than
+        // userRepository.delete(owningAdmin) - deleting a *managed* entity that
+        // another still-resident entity (school) holds a required, uncascaded
+        // reference to trips Hibernate's flush-time consistency checks even
+        // though the DB-level FK cascade handles it correctly once the SQL
+        // actually runs.
         Long adminUserId = owningAdmin.getId();
-        userRepository.delete(owningAdmin);
+        userRepository.deleteAllByIdInBatch(List.of(adminUserId));
         log.info("Cascade-deleted school id={} and its owning admin (userId={})", schoolId, adminUserId);
     }
 }

@@ -68,7 +68,7 @@ class SchoolAdminCascadeDeletionServiceImplTest {
 
         verify(userRepository).deleteAllByIdInBatch(List.of(2L));
         verify(userRepository).deleteAllByIdInBatch(List.of(3L));
-        verify(userRepository).delete(admin);
+        verify(userRepository).deleteAllByIdInBatch(List.of(1L));
     }
 
     @Test
@@ -85,8 +85,9 @@ class SchoolAdminCascadeDeletionServiceImplTest {
 
         service.execute(10L);
 
-        verify(userRepository, never()).deleteAllByIdInBatch(any());
-        verify(userRepository).delete(admin);
+        verify(userRepository, never()).deleteAllByIdInBatch(List.of(2L));
+        verify(userRepository, never()).deleteAllByIdInBatch(List.of(3L));
+        verify(userRepository).deleteAllByIdInBatch(List.of(1L));
     }
 
     @Test
@@ -100,7 +101,7 @@ class SchoolAdminCascadeDeletionServiceImplTest {
 
         assertThatThrownBy(() -> service.execute(10L)).isInstanceOf(BadRequestException.class);
 
-        verify(userRepository, never()).delete(any());
+        verify(userRepository, never()).deleteAllByIdInBatch(any());
     }
 
     @Test
