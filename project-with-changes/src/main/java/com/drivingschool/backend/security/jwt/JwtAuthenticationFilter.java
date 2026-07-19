@@ -10,6 +10,7 @@ import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -41,12 +42,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (token != null && jwtTokenProvider.validateToken(token) && jwtTokenProvider.isAccessToken(token)) {
             String email = jwtTokenProvider.getEmailFromToken(token);
-            UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+            try {
+                UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-            authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-            SecurityContextHolder.getContext().setAuthentication(authentication);
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            } catch (UsernameNotFoundException ex) {
+                // The token is well-formed/signed and not expired, but the account it
+                // names no longer exists - e.g. a bootstrap-approved school/admin
+                // cascade-delete removed the row entirely (a hard delete, unlike the
+                // soft-delete every other account-removal path uses). This must not
+                // propagate: ExceptionTranslationFilter (later in the chain) can only
+                // catch exceptions from filters invoked after it, not from this one,
+                // so an uncaught exception here would crash the whole chain instead of
+                // correctly falling through to "unauthenticated" - AuthorizationFilter
+                // then rejects the request with a normal 401 via the custom entry point.
+                log.warn("JWT referenced a user that no longer exists: {}", email);
+            }
         }
 
         filterChain.doFilter(request, response);
