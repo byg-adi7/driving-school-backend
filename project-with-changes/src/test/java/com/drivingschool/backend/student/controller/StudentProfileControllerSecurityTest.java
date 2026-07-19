@@ -115,6 +115,15 @@ class StudentProfileControllerSecurityTest {
     }
 
     @Test
+    @WithMockUser(roles = "INSTRUCTOR")
+    void getBySchool_asInstructor_isOk() throws Exception {
+        when(studentProfileService.getBySchool(1L)).thenReturn(java.util.List.of());
+
+        mockMvc.perform(get("/api/v1/students/school/1"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @WithMockUser(roles = "STUDENT")
     void updateStatus_asStudent_isForbidden() throws Exception {
         UpdateStudentStatusRequest request = UpdateStudentStatusRequest.builder().status(StudentStatus.SUSPENDED).build();

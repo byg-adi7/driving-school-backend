@@ -50,8 +50,9 @@ public class StudentProfileController {
     }
 
     @GetMapping("/school/{schoolId}")
-    @Operation(summary = "Admin: list students belonging to a school")
-    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "List students belonging to a school",
+            description = "Admin can list any school; an instructor may only list their own school.")
+    @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
     public ResponseEntity<ApiResponse<List<StudentProfileResponse>>> getBySchool(@PathVariable Long schoolId) {
         return ResponseEntity.ok(ApiResponse.success(studentProfileService.getBySchool(schoolId)));
     }

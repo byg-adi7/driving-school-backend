@@ -220,7 +220,12 @@ ENDPOINT("POST", "/schools", "Create a new school.", access="ADMIN only",
     ],
     example_req='{\n  "name": "Downtown Driving Academy",\n  "address": "42 Main Street, Springfield",\n  "phone": "555-0142",\n  "email": "info@downtowndriving.example"\n}')
 
-ENDPOINT("GET", "/schools/{id}", "Get a school by ID.", access="Any authenticated user")
+ENDPOINT("GET", "/schools/{id}", "Get a school by ID.", access="ADMIN only",
+    notes=["Despite having no role check in the controller itself, every path under "
+           "/schools/** other than the exact GET /schools list endpoint below is "
+           "restricted to ADMIN at the security-filter level — a non-admin caller gets "
+           "403. Don't build a school-detail view for instructors/students against this "
+           "endpoint; GET /auth/me already returns the caller's own schoolId/schoolName."])
 
 ENDPOINT("GET", "/schools", "List all active schools.", access="Any authenticated user",
     notes=["Use this to populate a school picker on a registration form."])
@@ -287,7 +292,13 @@ ENDPOINT("PUT", "/students/me", "Update the current student's own profile.", acc
         ["profileImageUrl", "string", "no", "max 500 chars"],
     ])
 
-ENDPOINT("GET", "/students/school/{schoolId}", "Admin: list students in a school.", access="ADMIN only")
+ENDPOINT("GET", "/students/school/{schoolId}", "List students in a school.",
+    access="ADMIN (any school), or an INSTRUCTOR listing their OWN school only",
+    notes=["An INSTRUCTOR passing a DIFFERENT school's ID than their own (from GET /auth/me's "
+           "schoolId) gets 400, not the data.",
+           "This is the endpoint for a student picker on the instructor's \"book a lesson\" "
+           "and \"add lesson note\" forms — use it instead of asking the instructor to type a "
+           "raw numeric student ID."])
 
 ENDPOINT("PATCH", "/students/{id}/status", "Admin: change a student's status.", access="ADMIN only",
     request=[["status", "enum", "yes", "ACTIVE, INACTIVE, SUSPENDED, GRADUATED"]])
@@ -888,10 +899,11 @@ d.BULLETS([
 
 d.H(2, "5. Multi-step flows the frontend orchestrates")
 d.BULLETS([
-    "\"Instructor books a lesson\": needs the student's StudentProfile.id (from an earlier "
-    "student-list call) and the instructor's own InstructorProfile.id (from /auth/me), plus "
-    "optionally a vehicle ID from a vehicle-list call. There's no single \"book by student "
-    "email\" convenience endpoint.",
+    "\"Instructor books a lesson\": needs the student's StudentProfile.id (populate the "
+    "picker from GET /students/school/{schoolId} using the instructor's own schoolId — no "
+    "need to make the instructor type a raw student ID) and the instructor's own "
+    "InstructorProfile.id (from /auth/me), plus optionally a vehicle ID from a vehicle-list "
+    "call. There's no single \"book by student email\" convenience endpoint.",
     "\"Student checks license progress\": GET /progress/license/students/{studentId} using "
     "their own cached studentProfileId.",
     "\"Instructor plans a route for today's lesson\": needs an existing bookingId first "
