@@ -24,6 +24,7 @@ import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.role.repository.RoleRepository;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.repository.SchoolRepository;
+import com.drivingschool.backend.school.service.SchoolDeletionRequestService;
 import com.drivingschool.backend.security.UserPrincipal;
 import com.drivingschool.backend.security.jwt.JwtTokenProvider;
 import com.drivingschool.backend.student.entity.StudentProfile;
@@ -64,6 +65,7 @@ public class AuthServiceImpl implements AuthService {
     private final EmailService emailService;
     private final UserService userService;
     private final RefreshTokenRevocationService refreshTokenRevocationService;
+    private final SchoolDeletionRequestService schoolDeletionRequestService;
     private final long passwordResetTokenExpirationMs;
 
     public AuthServiceImpl(AuthenticationManager authenticationManager,
@@ -81,6 +83,7 @@ public class AuthServiceImpl implements AuthService {
                            EmailService emailService,
                            UserService userService,
                            RefreshTokenRevocationService refreshTokenRevocationService,
+                           SchoolDeletionRequestService schoolDeletionRequestService,
                            @Value("${app.password-reset.token-expiration-ms}") long passwordResetTokenExpirationMs) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
@@ -97,6 +100,7 @@ public class AuthServiceImpl implements AuthService {
         this.emailService = emailService;
         this.userService = userService;
         this.refreshTokenRevocationService = refreshTokenRevocationService;
+        this.schoolDeletionRequestService = schoolDeletionRequestService;
         this.passwordResetTokenExpirationMs = passwordResetTokenExpirationMs;
     }
 
@@ -168,6 +172,12 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponse registerByAdmin(AdminRegisterRequest request) {
+        if (request.getRole() == RoleName.ADMIN) {
+            throw new BadRequestException(
+                    "Admin accounts can no longer be created via this endpoint - use POST /api/v1/schools, " +
+                            "which creates a school and its owning admin together");
+        }
+
         RegisterRequest registerRequest = RegisterRequest.builder()
                 .email(request.getEmail())
                 .password(request.getPassword())
@@ -181,10 +191,6 @@ public class AuthServiceImpl implements AuthService {
                 .licenseNumber(request.getLicenseNumber())
                 .yearsExperience(request.getYearsExperience())
                 .build();
-
-        if (request.getRole() == RoleName.ADMIN) {
-            return registerAdminUser(request);
-        }
 
         return register(registerRequest);
     }
@@ -271,7 +277,16 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void deleteCurrentAccount() {
-        userService.softDelete(currentUserService.requireUserId());
+        Long userId = currentUserService.requireUserId();
+
+        if (currentUserService.isBootstrapAdmin()) {
+            throw new BadRequestException("The bootstrap admin account cannot be deleted");
+        }
+        if (currentUserService.hasRole(RoleName.ADMIN)) {
+            schoolDeletionRequestService.requestOwnSchoolDeletion(userId);
+            return;
+        }
+        userService.softDelete(userId);
     }
 
     @Override
@@ -349,27 +364,4 @@ public class AuthServiceImpl implements AuthService {
         instructorProfileRepository.save(profile);
     }
 
-    private AuthResponse registerAdminUser(AdminRegisterRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new BadRequestException("Email is already registered");
-        }
-
-        Role role = roleRepository.findByName(RoleName.ADMIN)
-                .orElseThrow(() -> new ResourceNotFoundException("Role", "name", RoleName.ADMIN));
-
-        User user = User.builder()
-                .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .enabled(true)
-                .emailVerified(true)
-                .build();
-        user.addRole(role);
-
-        User savedUser = userRepository.save(user);
-        UserPrincipal principal = new UserPrincipal(savedUser);
-
-        return authMapper.toAuthResponse(savedUser,
-                jwtTokenProvider.generateAccessToken(principal),
-                jwtTokenProvider.generateRefreshToken(principal));
-    }
 }

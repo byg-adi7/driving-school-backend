@@ -3,6 +3,7 @@ package com.drivingschool.backend.user.entity;
 import com.drivingschool.backend.common.base.BaseEntity;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.role.entity.Role;
+import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -52,6 +53,14 @@ public class User extends BaseEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    // Exactly one permanent super-admin row - unrestricted visibility, owns no
+    // school, the only account that can create/delete schools or other admins
+    // directly (everyone else can only request, subject to this account's
+    // approval). Enforced as "exactly one" at the DB level too (see V15's
+    // partial unique index).
+    @Column(name = "bootstrap_admin", nullable = false)
+    private boolean bootstrapAdmin;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "user_roles",
@@ -65,6 +74,11 @@ public class User extends BaseEntity {
 
     @OneToOne(mappedBy = "user", fetch = FetchType.LAZY)
     private InstructorProfile instructorProfile;
+
+    // Only ever set for a non-bootstrap ADMIN-role user - every such admin owns
+    // exactly one school (see School.owningAdmin, the FK-owning side).
+    @OneToOne(mappedBy = "owningAdmin", fetch = FetchType.LAZY)
+    private School ownedSchool;
 
     @Builder
     public User(String email, String password, boolean enabled, boolean emailVerified) {
@@ -96,6 +110,10 @@ public class User extends BaseEntity {
 
     public boolean isDeleted() {
         return deletedAt != null;
+    }
+
+    public void markAsBootstrapAdmin() {
+        this.bootstrapAdmin = true;
     }
 
     /**

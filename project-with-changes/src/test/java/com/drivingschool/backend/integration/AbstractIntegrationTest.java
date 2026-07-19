@@ -6,8 +6,9 @@ import com.drivingschool.backend.auth.dto.LoginRequest;
 import com.drivingschool.backend.auth.dto.RegisterRequest;
 import com.drivingschool.backend.common.response.ApiResponse;
 import com.drivingschool.backend.role.enums.RoleName;
-import com.drivingschool.backend.school.dto.CreateSchoolRequest;
+import com.drivingschool.backend.school.dto.CreateSchoolWithAdminRequest;
 import com.drivingschool.backend.school.dto.SchoolResponse;
+import com.drivingschool.backend.school.dto.SchoolWithAdminResponse;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -106,10 +107,18 @@ public abstract class AbstractIntegrationTest {
         return parse(result, AuthResponse.class);
     }
 
+    /**
+     * Creates a school and its owning admin together (schools can't exist without
+     * one) via the bootstrap admin's token, and returns just the school - callers
+     * needing the owning admin's own credentials should call the underlying
+     * endpoint directly instead.
+     */
     protected SchoolResponse createSchool(String adminToken, String name) throws Exception {
-        CreateSchoolRequest request = CreateSchoolRequest.builder()
-                .name(name)
-                .address("1 Test Street")
+        CreateSchoolWithAdminRequest request = CreateSchoolWithAdminRequest.builder()
+                .schoolName(name)
+                .schoolAddress("1 Test Street")
+                .adminEmail("owner-" + java.util.UUID.randomUUID() + "@example.com")
+                .adminPassword("SecurePass123!")
                 .build();
 
         MvcResult result = mockMvc.perform(post("/api/v1/schools")
@@ -119,7 +128,7 @@ public abstract class AbstractIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn();
 
-        return parse(result, SchoolResponse.class);
+        return parse(result, SchoolWithAdminResponse.class).getSchool();
     }
 
     protected String bearer(String token) {

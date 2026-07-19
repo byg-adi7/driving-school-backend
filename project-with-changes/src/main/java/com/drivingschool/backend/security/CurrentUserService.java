@@ -32,6 +32,10 @@ public class CurrentUserService {
                 .anyMatch(authority::equals);
     }
 
+    public boolean isBootstrapAdmin() {
+        return requirePrincipal().isBootstrapAdmin();
+    }
+
     public Set<String> getRoles() {
         return requirePrincipal().getAuthorities().stream()
                 .map(a -> a.getAuthority().replace("ROLE_", ""))

@@ -1,9 +1,13 @@
 package com.drivingschool.backend.school.entity;
 
 import com.drivingschool.backend.common.base.BaseEntity;
+import com.drivingschool.backend.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -34,13 +38,23 @@ public class School extends BaseEntity {
     @Column(nullable = false)
     private boolean active;
 
+    // Every school has exactly one owning admin, mandatory and unique in both
+    // directions - a school can't exist without its admin and an admin can't
+    // own more than one school. The bootstrap admin never appears here (it
+    // owns no school). Deleting this User row cascades straight through to
+    // deleting the school - see SchoolAdminCascadeDeletionService.
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "owning_admin_id", nullable = false, unique = true)
+    private User owningAdmin;
+
     @Builder
-    public School(String name, String address, String phone, String email, boolean active) {
+    public School(String name, String address, String phone, String email, boolean active, User owningAdmin) {
         this.name = name;
         this.address = address;
         this.phone = phone;
         this.email = email;
         this.active = active;
+        this.owningAdmin = owningAdmin;
     }
 
     public void update(String name, String address, String phone, String email, Boolean active) {

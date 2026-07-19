@@ -1,6 +1,7 @@
 package com.drivingschool.backend.user.controller;
 
 import com.drivingschool.backend.common.response.ApiResponse;
+import com.drivingschool.backend.common.util.SecurityUtils;
 import com.drivingschool.backend.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -25,10 +26,14 @@ public class UserController {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Admin: soft-delete a user account")
+    @Operation(summary = "Admin: delete a user account",
+            description = "Soft-deletes STUDENT/INSTRUCTOR targets. For a non-bootstrap ADMIN target, only the " +
+                    "bootstrap admin may call this, and it cascade-deletes the target's school along with it. " +
+                    "The bootstrap admin itself can never be targeted.")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<Void>> softDelete(@PathVariable Long id) {
-        userService.softDelete(id);
+    public ResponseEntity<ApiResponse<Void>> deleteAccount(@PathVariable Long id) {
+        Long callerId = SecurityUtils.getCurrentUserId();
+        userService.deleteUserAccount(id, callerId);
         return ResponseEntity.ok(ApiResponse.success("Account deleted successfully", null));
     }
 }

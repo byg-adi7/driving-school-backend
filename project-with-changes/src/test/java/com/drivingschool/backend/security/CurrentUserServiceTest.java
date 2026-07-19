@@ -25,8 +25,15 @@ class CurrentUserServiceTest {
     }
 
     private void authenticateAs(RoleName role, Long userId) {
+        authenticateAs(role, userId, false);
+    }
+
+    private void authenticateAs(RoleName role, Long userId, boolean bootstrapAdmin) {
         User user = User.builder().email("u@example.com").password("x").enabled(true).emailVerified(true).build();
         ReflectionTestUtils.setField(user, "id", userId);
+        if (bootstrapAdmin) {
+            user.markAsBootstrapAdmin();
+        }
         user.addRole(Role.builder().name(role).build());
         UserPrincipal principal = new UserPrincipal(user);
         SecurityContextHolder.getContext().setAuthentication(
@@ -64,5 +71,19 @@ class CurrentUserServiceTest {
         authenticateAs(RoleName.ADMIN, 1L);
 
         assertThat(currentUserService.getRoles()).isEqualTo(Set.of("ADMIN"));
+    }
+
+    @Test
+    void isBootstrapAdmin_whenTrue_returnsTrue() {
+        authenticateAs(RoleName.ADMIN, 1L, true);
+
+        assertThat(currentUserService.isBootstrapAdmin()).isTrue();
+    }
+
+    @Test
+    void isBootstrapAdmin_whenFalse_returnsFalse() {
+        authenticateAs(RoleName.ADMIN, 1L, false);
+
+        assertThat(currentUserService.isBootstrapAdmin()).isFalse();
     }
 }

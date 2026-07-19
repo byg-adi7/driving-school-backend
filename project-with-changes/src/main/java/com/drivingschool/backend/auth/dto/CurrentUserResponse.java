@@ -17,4 +17,5 @@ public class CurrentUserResponse {
     private final Long schoolId;
     private final boolean enabled;
     private final boolean emailVerified;
+    private final boolean bootstrapAdmin;
 }

@@ -13,6 +13,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+
 /**
  * Bootstrap Administrator Initializer
  *
@@ -110,13 +112,22 @@ public class BootstrapAdminInitializer implements CommandLineRunner {
             }
 
             // Check if any ADMIN user already exists
-            boolean adminExists = userRepository.findByEmail(
+            Optional<User> existing = userRepository.findByEmail(
                     environment.getProperty("app.bootstrap.admin.email")
-            ).isPresent();
+            );
 
-            if (adminExists) {
-                String adminEmail = environment.getProperty("app.bootstrap.admin.email");
-                log.info("Bootstrap admin already exists ({}), skipping creation", adminEmail);
+            if (existing.isPresent()) {
+                User admin = existing.get();
+                // Self-heal the flag onto the pre-existing row: no SQL migration can know
+                // the env-configured bootstrap email, so this is the only place that can
+                // backfill it for an environment that already had a bootstrap admin before
+                // this flag was introduced.
+                if (!admin.isBootstrapAdmin()) {
+                    admin.markAsBootstrapAdmin();
+                    userRepository.save(admin);
+                    log.info("Marked pre-existing bootstrap admin row as bootstrap admin: {}", admin.getEmail());
+                }
+                log.info("Bootstrap admin already exists ({}), skipping creation", admin.getEmail());
                 return;
             }
 
@@ -146,6 +157,7 @@ public class BootstrapAdminInitializer implements CommandLineRunner {
                     .build();
 
             adminUser.addRole(adminRole);
+            adminUser.markAsBootstrapAdmin();
 
             User savedAdminUser = userRepository.save(adminUser);
 

@@ -17,6 +17,7 @@ public class UserPrincipal implements UserDetails {
     private final String email;
     private final String password;
     private final boolean enabled;
+    private final boolean bootstrapAdmin;
     private final Collection<? extends GrantedAuthority> authorities;
 
     public UserPrincipal(User user) {
@@ -24,6 +25,7 @@ public class UserPrincipal implements UserDetails {
         this.email = user.getEmail();
         this.password = user.getPassword();
         this.enabled = user.isEnabled();
+        this.bootstrapAdmin = user.isBootstrapAdmin();
         this.authorities = Set.copyOf(user.getRoles().stream()
                 .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getName().name()))
                 .collect(Collectors.toSet()));

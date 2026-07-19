@@ -1,5 +1,6 @@
 package com.drivingschool.backend.auth.service;
 
+import com.drivingschool.backend.auth.dto.AdminRegisterRequest;
 import com.drivingschool.backend.auth.dto.AuthResponse;
 import com.drivingschool.backend.auth.dto.ForgotPasswordRequest;
 import com.drivingschool.backend.auth.dto.LoginRequest;
@@ -19,6 +20,7 @@ import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.role.repository.RoleRepository;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.repository.SchoolRepository;
+import com.drivingschool.backend.school.service.SchoolDeletionRequestService;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.security.RefreshTokenRevocationService;
 import com.drivingschool.backend.security.UserPrincipal;
@@ -72,6 +74,7 @@ class AuthServiceImplTest {
     @Mock private EmailService emailService;
     @Mock private UserService userService;
     @Mock private RefreshTokenRevocationService refreshTokenRevocationService;
+    @Mock private SchoolDeletionRequestService schoolDeletionRequestService;
 
     private AuthServiceImpl authService;
 
@@ -92,7 +95,8 @@ class AuthServiceImplTest {
         authService = new AuthServiceImpl(authenticationManager, userRepository, roleRepository,
                 schoolRepository, studentProfileRepository, instructorProfileRepository,
                 passwordEncoder, jwtTokenProvider, authMapper, currentUserMapper, currentUserService,
-                passwordResetTokenRepository, emailService, userService, refreshTokenRevocationService, 3_600_000L);
+                passwordResetTokenRepository, emailService, userService, refreshTokenRevocationService,
+                schoolDeletionRequestService, 3_600_000L);
     }
 
     // --- login ---
@@ -464,14 +468,56 @@ class AuthServiceImplTest {
         verify(userRepository, never()).save(any(User.class));
     }
 
+    // --- registerByAdmin ---
+
+    @Test
+    void registerByAdmin_withAdminRole_throwsBadRequestException() {
+        AdminRegisterRequest request = AdminRegisterRequest.builder()
+                .email("new-admin@example.com").password("password123")
+                .firstName("Jane").lastName("Doe").schoolId(1L).role(RoleName.ADMIN).build();
+
+        assertThatThrownBy(() -> authService.registerByAdmin(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("POST /api/v1/schools");
+
+        verify(userRepository, never()).save(any());
+    }
+
     // --- deleteCurrentAccount ---
 
     @Test
-    void deleteCurrentAccount_delegatesToUserServiceWithCurrentUserId() {
+    void deleteCurrentAccount_asStudentOrInstructor_delegatesToUserServiceSoftDelete() {
         when(currentUserService.requireUserId()).thenReturn(1L);
+        when(currentUserService.isBootstrapAdmin()).thenReturn(false);
+        when(currentUserService.hasRole(RoleName.ADMIN)).thenReturn(false);
 
         authService.deleteCurrentAccount();
 
         verify(userService, times(1)).softDelete(1L);
+        verify(schoolDeletionRequestService, never()).requestOwnSchoolDeletion(any());
+    }
+
+    @Test
+    void deleteCurrentAccount_asNonBootstrapAdmin_delegatesToSchoolDeletionRequestFlow() {
+        when(currentUserService.requireUserId()).thenReturn(1L);
+        when(currentUserService.isBootstrapAdmin()).thenReturn(false);
+        when(currentUserService.hasRole(RoleName.ADMIN)).thenReturn(true);
+
+        authService.deleteCurrentAccount();
+
+        verify(schoolDeletionRequestService, times(1)).requestOwnSchoolDeletion(1L);
+        verify(userService, never()).softDelete(any());
+    }
+
+    @Test
+    void deleteCurrentAccount_asBootstrapAdmin_throwsBadRequestException() {
+        when(currentUserService.requireUserId()).thenReturn(1L);
+        when(currentUserService.isBootstrapAdmin()).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.deleteCurrentAccount())
+                .isInstanceOf(BadRequestException.class);
+
+        verify(userService, never()).softDelete(any());
+        verify(schoolDeletionRequestService, never()).requestOwnSchoolDeletion(any());
     }
 }

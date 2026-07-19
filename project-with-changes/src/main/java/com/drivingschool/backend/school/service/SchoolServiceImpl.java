@@ -1,14 +1,26 @@
 package com.drivingschool.backend.school.service;
 
+import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
-import com.drivingschool.backend.school.dto.CreateSchoolRequest;
+import com.drivingschool.backend.role.entity.Role;
+import com.drivingschool.backend.role.enums.RoleName;
+import com.drivingschool.backend.role.repository.RoleRepository;
+import com.drivingschool.backend.school.dto.CreateSchoolWithAdminRequest;
 import com.drivingschool.backend.school.dto.SchoolResponse;
+import com.drivingschool.backend.school.dto.SchoolWithAdminResponse;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.enums.SchoolDeletionRequestStatus;
 import com.drivingschool.backend.school.mapper.SchoolMapper;
+import com.drivingschool.backend.school.repository.SchoolDeletionRequestRepository;
 import com.drivingschool.backend.school.repository.SchoolRepository;
+import com.drivingschool.backend.school.validator.SchoolAccessValidator;
+import com.drivingschool.backend.security.CurrentUserService;
+import com.drivingschool.backend.user.entity.User;
+import com.drivingschool.backend.user.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,48 +32,124 @@ public class SchoolServiceImpl implements SchoolService {
 
     private final SchoolRepository schoolRepository;
     private final SchoolMapper schoolMapper;
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final CurrentUserService currentUserService;
+    private final SchoolDeletionRequestRepository schoolDeletionRequestRepository;
+    private final SchoolAdminCascadeDeletionService cascadeDeletionService;
+    private final SchoolAccessValidator accessValidator;
 
-    public SchoolServiceImpl(SchoolRepository schoolRepository, SchoolMapper schoolMapper) {
+    public SchoolServiceImpl(SchoolRepository schoolRepository,
+                             SchoolMapper schoolMapper,
+                             UserRepository userRepository,
+                             RoleRepository roleRepository,
+                             PasswordEncoder passwordEncoder,
+                             CurrentUserService currentUserService,
+                             SchoolDeletionRequestRepository schoolDeletionRequestRepository,
+                             SchoolAdminCascadeDeletionService cascadeDeletionService,
+                             SchoolAccessValidator accessValidator) {
         this.schoolRepository = schoolRepository;
         this.schoolMapper = schoolMapper;
+        this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.currentUserService = currentUserService;
+        this.schoolDeletionRequestRepository = schoolDeletionRequestRepository;
+        this.cascadeDeletionService = cascadeDeletionService;
+        this.accessValidator = accessValidator;
     }
 
-    // Schools have no update/deactivate endpoint today, so create() is the only
-    // mutation - evicting everything on it is simplest and cheap given how rare
-    // school creation is, rather than tracking individual by-id keys.
     @Override
     @Transactional
     @CacheEvict(value = "schools", allEntries = true)
-    public SchoolResponse create(CreateSchoolRequest request) {
-        School school = School.builder()
-                .name(request.getName())
-                .address(request.getAddress())
-                .phone(request.getPhone())
-                .email(request.getEmail())
-                .active(true)
-                .build();
+    public SchoolWithAdminResponse createWithAdmin(CreateSchoolWithAdminRequest request) {
+        if (!currentUserService.isBootstrapAdmin()) {
+            throw new BadRequestException("Only the bootstrap admin can create a school");
+        }
+        if (userRepository.existsByEmail(request.getAdminEmail())) {
+            throw new BadRequestException("Email is already registered");
+        }
 
-        School saved = schoolRepository.save(school);
-        log.info("Created school: {}", saved.getName());
-        return schoolMapper.toResponse(saved);
+        Role adminRole = roleRepository.findByName(RoleName.ADMIN)
+                .orElseThrow(() -> new ResourceNotFoundException("Role", "name", RoleName.ADMIN));
+
+        User admin = User.builder()
+                .email(request.getAdminEmail())
+                .password(passwordEncoder.encode(request.getAdminPassword()))
+                .enabled(true)
+                .emailVerified(true)
+                .build();
+        admin.addRole(adminRole);
+        User savedAdmin = userRepository.save(admin);
+
+        School school = School.builder()
+                .name(request.getSchoolName())
+                .address(request.getSchoolAddress())
+                .phone(request.getSchoolPhone())
+                .email(request.getSchoolEmail())
+                .active(true)
+                .owningAdmin(savedAdmin)
+                .build();
+        School savedSchool = schoolRepository.save(school);
+
+        log.info("Bootstrap admin created school '{}' with owning admin {}", savedSchool.getName(), savedAdmin.getEmail());
+        return SchoolWithAdminResponse.builder()
+                .school(schoolMapper.toResponse(savedSchool))
+                .adminUserId(savedAdmin.getId())
+                .adminEmail(savedAdmin.getEmail())
+                .build();
     }
 
     @Override
-    @Cacheable(value = "schools", key = "#id")
+    @Cacheable(value = "schools", key = "#id + ':' + #callerId")
     @Transactional(readOnly = true)
-    public SchoolResponse getById(Long id) {
+    public SchoolResponse getById(Long id, Long callerId, String callerRole) {
         School school = schoolRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("School", "id", id));
+        if ("ADMIN".equals(callerRole)) {
+            User caller = userRepository.findById(callerId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User", "id", callerId));
+            accessValidator.validateViewAccess(school, caller);
+        }
         return schoolMapper.toResponse(school);
     }
 
     @Override
-    @Cacheable(value = "schools", key = "'active'")
+    @Cacheable(value = "schools", key = "'active:' + #callerId")
     @Transactional(readOnly = true)
-    public List<SchoolResponse> getAllActive() {
+    public List<SchoolResponse> getAllActive(Long callerId, String callerRole) {
+        if ("ADMIN".equals(callerRole)) {
+            User caller = userRepository.findById(callerId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User", "id", callerId));
+            if (!caller.isBootstrapAdmin()) {
+                School owned = caller.getOwnedSchool();
+                return owned == null ? List.of() : List.of(schoolMapper.toResponse(owned));
+            }
+        }
         return schoolRepository.findAll().stream()
                 .filter(School::isActive)
                 .map(schoolMapper::toResponse)
                 .toList();
+    }
+
+    @Override
+    @Transactional
+    public void deleteDirectly(Long schoolId) {
+        if (!currentUserService.isBootstrapAdmin()) {
+            throw new BadRequestException("Only the bootstrap admin can delete a school");
+        }
+        if (!schoolRepository.existsById(schoolId)) {
+            throw new ResourceNotFoundException("School", "id", schoolId);
+        }
+
+        schoolDeletionRequestRepository.findBySchoolIdAndStatus(schoolId, SchoolDeletionRequestStatus.PENDING)
+                .ifPresent(pending -> {
+                    pending.approve(userRepository.getReferenceById(currentUserService.requireUserId()),
+                            "Auto-resolved: bootstrap admin deleted the school directly");
+                    schoolDeletionRequestRepository.save(pending);
+                });
+
+        cascadeDeletionService.execute(schoolId);
     }
 }

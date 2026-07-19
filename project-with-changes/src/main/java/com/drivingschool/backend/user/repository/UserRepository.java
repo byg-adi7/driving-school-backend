@@ -17,4 +17,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @EntityGraph(attributePaths = {"roles"})
     Optional<User> findById(Long id);
+
+    Optional<User> findByBootstrapAdminTrue();
 }

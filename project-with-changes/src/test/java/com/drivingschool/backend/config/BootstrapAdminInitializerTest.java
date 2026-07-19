@@ -15,6 +15,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -76,15 +77,36 @@ class BootstrapAdminInitializerTest {
     }
 
     @Test
-    void run_adminAlreadyExists_skipsCreation() {
+    void run_adminAlreadyExistsAndAlreadyFlagged_skipsCreationAndSelfHeal() {
         environment.setProperty("app.bootstrap.admin.enabled", "true");
         environment.setProperty("app.bootstrap.admin.email", "admin@example.com");
+        User existingAdmin = User.builder().build();
+        existingAdmin.markAsBootstrapAdmin();
         when(roleRepository.findByName(RoleName.ADMIN)).thenReturn(Optional.of(adminRole()));
-        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(User.builder().build()));
+        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(existingAdmin));
 
         initializer.run();
 
         verify(userRepository, never()).save(any());
+    }
+
+    /**
+     * Backfills the bootstrap_admin flag onto a pre-existing admin row from before
+     * this flag existed - no SQL migration can know the env-configured bootstrap
+     * email, so this self-heal is the only place that can set it correctly.
+     */
+    @Test
+    void run_adminAlreadyExistsButNotYetFlagged_selfHealsFlag() {
+        environment.setProperty("app.bootstrap.admin.enabled", "true");
+        environment.setProperty("app.bootstrap.admin.email", "admin@example.com");
+        User legacyAdmin = User.builder().build();
+        when(roleRepository.findByName(RoleName.ADMIN)).thenReturn(Optional.of(adminRole()));
+        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(legacyAdmin));
+
+        initializer.run();
+
+        assertThat(legacyAdmin.isBootstrapAdmin()).isTrue();
+        verify(userRepository).save(legacyAdmin);
     }
 
     @Test
@@ -134,6 +156,7 @@ class BootstrapAdminInitializerTest {
                 "admin@example.com".equals(user.getEmail())
                         && "encoded-hash".equals(user.getPassword())
                         && user.isEnabled()
+                        && user.isBootstrapAdmin()
                         && user.getRoles().contains(adminRole)));
     }
 }

@@ -35,4 +35,13 @@ class UserPrincipalTest {
         assertThatThrownBy(() -> principal.getAuthorities().clear())
                 .isInstanceOf(UnsupportedOperationException.class);
     }
+
+    @Test
+    void isBootstrapAdmin_reflectsUserFlag() {
+        User bootstrap = userWithRole(RoleName.ADMIN);
+        bootstrap.markAsBootstrapAdmin();
+
+        assertThat(new UserPrincipal(bootstrap).isBootstrapAdmin()).isTrue();
+        assertThat(new UserPrincipal(userWithRole(RoleName.ADMIN)).isBootstrapAdmin()).isFalse();
+    }
 }

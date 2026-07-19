@@ -17,6 +17,8 @@ public class CurrentUserMapper {
             schoolId = student.getSchool().getId();
         } else if (instructor != null) {
             schoolId = instructor.getSchool().getId();
+        } else if (user.getOwnedSchool() != null) {
+            schoolId = user.getOwnedSchool().getId();
         }
 
         return CurrentUserResponse.builder()
@@ -30,6 +32,7 @@ public class CurrentUserMapper {
                 .schoolId(schoolId)
                 .enabled(user.isEnabled())
                 .emailVerified(user.isEmailVerified())
+                .bootstrapAdmin(user.isBootstrapAdmin())
                 .build();
     }
 }

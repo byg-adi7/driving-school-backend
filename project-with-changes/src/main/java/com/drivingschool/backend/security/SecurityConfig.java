@@ -158,6 +158,10 @@ public class SecurityConfig {
                         // Schools: Now restricted to authenticated users only (was public)
                         .requestMatchers(HttpMethod.GET, "/api/v1/schools").authenticated()
                         .requestMatchers("/api/v1/schools/**").hasRole("ADMIN")
+
+                        // School deletion requests: bootstrap-admin review queue (fine-grained
+                        // bootstrap-only check happens in the service, same as school create/delete)
+                        .requestMatchers("/api/v1/school-deletion-requests/**").hasRole("ADMIN")
                         
                         // API Documentation: public in dev/test for convenience, but
                         // never in production - also disabled outright via
