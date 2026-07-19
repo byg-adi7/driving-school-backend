@@ -148,7 +148,24 @@ public class BookingServiceImpl implements BookingService {
             throw new BadRequestException("Booking cannot be cancelled");
         }
         booking.cancel();
-        return bookingMapper.toResponse(bookingRepository.save(booking));
+        Booking saved = bookingRepository.save(booking);
+        notifyStudentCancelled(saved);
+        return bookingMapper.toResponse(saved);
+    }
+
+    private void notifyStudentCancelled(Booking booking) {
+        try {
+            SendNotificationRequest request = SendNotificationRequest.builder()
+                    .userId(booking.getStudent().getUser().getId())
+                    .subject("Practical lesson cancelled")
+                    .body("Your %s lesson scheduled for %s has been cancelled."
+                            .formatted(booking.getBookingType(), booking.getScheduledAt().format(NOTIFICATION_DATE_FORMAT)))
+                    .channel(NotificationChannel.IN_APP)
+                    .build();
+            notificationService.send(request);
+        } catch (Exception ex) {
+            log.warn("Failed to send cancellation notification: bookingId={}", booking.getId(), ex);
+        }
     }
 
     @Override

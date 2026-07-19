@@ -4,6 +4,9 @@ import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.learning.entity.Course;
 import com.drivingschool.backend.learning.repository.CourseRepository;
+import com.drivingschool.backend.notification.dto.SendNotificationRequest;
+import com.drivingschool.backend.notification.enums.NotificationChannel;
+import com.drivingschool.backend.notification.service.NotificationService;
 import com.drivingschool.backend.progress.repository.LicenseWorkflowRepository;
 import com.drivingschool.backend.progress.service.LicenseWorkflowService;
 import com.drivingschool.backend.quiz.dto.CreateQuizQuestionRequest;
@@ -47,6 +50,7 @@ public class QuizServiceImpl implements QuizService {
     private final LicenseWorkflowRepository licenseWorkflowRepository;
     private final ObjectMapper objectMapper;
     private final QuizValidator validator;
+    private final NotificationService notificationService;
 
     public QuizServiceImpl(QuizRepository quizRepository,
                            QuizQuestionRepository quizQuestionRepository,
@@ -57,7 +61,8 @@ public class QuizServiceImpl implements QuizService {
                            LicenseWorkflowService licenseWorkflowService,
                            LicenseWorkflowRepository licenseWorkflowRepository,
                            ObjectMapper objectMapper,
-                           QuizValidator validator) {
+                           QuizValidator validator,
+                           NotificationService notificationService) {
         this.quizRepository = quizRepository;
         this.quizQuestionRepository = quizQuestionRepository;
         this.quizSubmissionRepository = quizSubmissionRepository;
@@ -68,6 +73,7 @@ public class QuizServiceImpl implements QuizService {
         this.licenseWorkflowRepository = licenseWorkflowRepository;
         this.objectMapper = objectMapper;
         this.validator = validator;
+        this.notificationService = notificationService;
     }
 
     // A brand-new quiz is always unpublished, so it can't actually appear in
@@ -210,8 +216,30 @@ public class QuizServiceImpl implements QuizService {
             licenseWorkflowService.markQuizPassed(student.getId());
         }
 
+        notifyStudentOfResult(quiz, student, saved);
+
         log.info("Quiz submitted: quizId={}, studentId={}, score={}, passed={}", quizId, student.getId(), score, passed);
         return quizMapper.toSubmissionResponse(saved);
+    }
+
+    private void notifyStudentOfResult(Quiz quiz, StudentProfile student, QuizSubmission submission) {
+        try {
+            String body = submission.isPassed()
+                    ? "You passed \"%s\" with a score of %d. Great work!".formatted(quiz.getTitle(), submission.getScore())
+                    : "You did not pass \"%s\" (score %d, %d required). You can try again."
+                            .formatted(quiz.getTitle(), submission.getScore(), quiz.getPassingScore());
+
+            SendNotificationRequest request = SendNotificationRequest.builder()
+                    .userId(student.getUser().getId())
+                    .subject(submission.isPassed() ? "Quiz passed" : "Quiz result")
+                    .body(body)
+                    .channel(NotificationChannel.IN_APP)
+                    .build();
+            notificationService.send(request);
+        } catch (Exception ex) {
+            log.warn("Failed to send quiz result notification: quizId={}, studentId={}",
+                    quiz.getId(), student.getId(), ex);
+        }
     }
 
     private Quiz findQuiz(Long quizId) {

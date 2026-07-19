@@ -11,12 +11,16 @@ import com.drivingschool.backend.lesson.note.dto.UpdateLessonNoteRequest;
 import com.drivingschool.backend.lesson.note.entity.LessonNote;
 import com.drivingschool.backend.lesson.note.repository.LessonNoteRepository;
 import com.drivingschool.backend.lesson.note.validator.LessonNoteValidator;
+import com.drivingschool.backend.notification.dto.SendNotificationRequest;
+import com.drivingschool.backend.notification.enums.NotificationChannel;
+import com.drivingschool.backend.notification.service.NotificationService;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -26,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class LessonNoteService {
@@ -36,6 +41,7 @@ public class LessonNoteService {
     private final StudentProfileRepository studentProfileRepository;
     private final BookingRepository bookingRepository;
     private final LessonNoteValidator validator;
+    private final NotificationService notificationService;
 
     @Transactional
     public LessonNoteResponse createLessonNote(CreateLessonNoteRequest request, Long callerId) {
@@ -68,7 +74,24 @@ public class LessonNoteService {
                 .build();
 
         LessonNote savedNote = lessonNoteRepository.save(note);
+        notifyStudentOfNote(savedNote);
         return mapToResponse(savedNote);
+    }
+
+    private void notifyStudentOfNote(LessonNote note) {
+        try {
+            SendNotificationRequest request = SendNotificationRequest.builder()
+                    .userId(note.getStudent().getUser().getId())
+                    .subject("New lesson note from your instructor")
+                    .body("%s %s added a note about your lesson: %s"
+                            .formatted(note.getInstructor().getFirstName(), note.getInstructor().getLastName(),
+                                    note.getLessonSummary()))
+                    .channel(NotificationChannel.IN_APP)
+                    .build();
+            notificationService.send(request);
+        } catch (Exception ex) {
+            log.warn("Failed to send lesson note notification: noteId={}", note.getId(), ex);
+        }
     }
 
     @Transactional

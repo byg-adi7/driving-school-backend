@@ -10,6 +10,7 @@ import com.drivingschool.backend.lesson.note.dto.CreateLessonNoteRequest;
 import com.drivingschool.backend.lesson.note.entity.LessonNote;
 import com.drivingschool.backend.lesson.note.repository.LessonNoteRepository;
 import com.drivingschool.backend.lesson.note.validator.LessonNoteValidator;
+import com.drivingschool.backend.notification.service.NotificationService;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
@@ -43,13 +44,15 @@ class LessonNoteServiceTest {
     @Mock private StudentProfileRepository studentProfileRepository;
     @Mock private BookingRepository bookingRepository;
     @Mock private LessonNoteValidator validator;
+    @Mock private NotificationService notificationService;
 
     private LessonNoteService lessonNoteService;
 
     @BeforeEach
     void setUp() {
         lessonNoteService = new LessonNoteService(lessonNoteRepository, userRepository,
-                instructorProfileRepository, studentProfileRepository, bookingRepository, validator);
+                instructorProfileRepository, studentProfileRepository, bookingRepository, validator,
+                notificationService);
     }
 
     private User userWithId(Long id) {

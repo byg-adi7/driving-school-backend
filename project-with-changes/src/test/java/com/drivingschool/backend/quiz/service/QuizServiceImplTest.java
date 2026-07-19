@@ -5,6 +5,7 @@ import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.learning.entity.Course;
 import com.drivingschool.backend.learning.repository.CourseRepository;
+import com.drivingschool.backend.notification.service.NotificationService;
 import com.drivingschool.backend.progress.repository.LicenseWorkflowRepository;
 import com.drivingschool.backend.progress.service.LicenseWorkflowService;
 import com.drivingschool.backend.quiz.dto.CreateQuizQuestionRequest;
@@ -52,6 +53,7 @@ class QuizServiceImplTest {
     @Mock private StudentProfileRepository studentProfileRepository;
     @Mock private LicenseWorkflowService licenseWorkflowService;
     @Mock private LicenseWorkflowRepository licenseWorkflowRepository;
+    @Mock private NotificationService notificationService;
     private final QuizMapper quizMapper = new QuizMapper();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final QuizValidator validator = new QuizValidator();
@@ -62,7 +64,7 @@ class QuizServiceImplTest {
     void setUp() {
         quizService = new QuizServiceImpl(quizRepository, quizQuestionRepository, quizSubmissionRepository,
                 courseRepository, studentProfileRepository, quizMapper, licenseWorkflowService,
-                licenseWorkflowRepository, objectMapper, validator);
+                licenseWorkflowRepository, objectMapper, validator, notificationService);
     }
 
     private User userWithId(Long id) {
