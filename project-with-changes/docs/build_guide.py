@@ -92,6 +92,17 @@ d.P("Three roles exist: ADMIN, INSTRUCTOR, STUDENT. Most endpoints layer an owne
     "and OWN courses, but not another instructor's. Where that matters, it's called out "
     "per-endpoint below as \"Access\".")
 
+d.H(2, "Two kinds of ADMIN: bootstrap vs. school-owning")
+d.P("Not all ADMIN accounts are equal. There is exactly one permanent \"bootstrap "
+    "admin\" (created from server-side config on first deploy, not via the API) with "
+    "unrestricted visibility over every school and every other admin — it owns no "
+    "school of its own and can never be deleted, by anyone, through any endpoint. "
+    "Every OTHER admin owns exactly one school, always: an admin account and its "
+    "school are created together in one call and can only ever be deleted together. "
+    "GET /auth/me's bootstrapAdmin field tells you which kind of admin you're "
+    "building UI for — the two need meaningfully different admin dashboards (see the "
+    "Schools section below).")
+
 # =====================================================================
 # AUTHENTICATION
 # =====================================================================
@@ -102,13 +113,18 @@ d.H(2, "There is no public self-registration")
 d.P("POST /auth/register requires the caller to ALREADY be authenticated as ADMIN or "
     "INSTRUCTOR. An instructor can only create STUDENT accounts, and only within their "
     "own school. An admin can create either role, in any school. There is a separate "
-    "POST /auth/admin/register (ADMIN only) that can create a user with ANY role, "
-    "including another ADMIN.")
+    "POST /auth/admin/register that can create a STUDENT or INSTRUCTOR anywhere — but "
+    "NOT an admin account anymore (see below).")
 d.P("Practically: a brand-new deployment only has the one bootstrap admin account "
     "(created from server-side config, not via the API). Every other account — "
     "instructors and students — gets created by an admin or instructor logged into "
     "the app, e.g. from an admin \"add instructor\" screen or an instructor \"enroll "
     "student\" screen. There is no public sign-up form to build.")
+d.P("A regular (school-owning) admin account can ONLY be created together with its "
+    "school, via POST /schools (bootstrap-admin-only, see the Schools section) — "
+    "there's no way to create a standalone admin account anymore. "
+    "POST /auth/admin/register now rejects role=ADMIN outright with a 400 pointing "
+    "you at POST /schools instead.")
 
 ENDPOINT("POST", "/auth/login", "Authenticate and receive tokens.",
     access="Public (no token needed)",
@@ -134,14 +150,20 @@ ENDPOINT("GET", "/auth/me", "Get the current user's identity and profile IDs.",
         ["email / roles", "", ""],
         ["studentProfileId", "number or null", "set only if the user has a STUDENT role"],
         ["instructorProfileId", "number or null", "set only if the user has an INSTRUCTOR role"],
-        ["schoolId", "number", "the user's school"],
+        ["schoolId", "number or null", "the user's school — for an ADMIN this is the school they OWN "
+         "(null for the bootstrap admin, who owns none)"],
+        ["bootstrapAdmin", "boolean", "true only for the one permanent super-admin — decides which "
+         "admin dashboard to render, see the Roles section above"],
         ["enabled / emailVerified", "boolean", ""],
     ],
-    example_resp='{\n  "success": true,\n  "message": "Operation successful",\n  "data": {\n    "userId": 12,\n    "email": "instructor.smith@example.com",\n    "roles": ["INSTRUCTOR"],\n    "studentProfileId": null,\n    "instructorProfileId": 4,\n    "schoolId": 2,\n    "enabled": true,\n    "emailVerified": false\n  }\n}',
+    example_resp='{\n  "success": true,\n  "message": "Operation successful",\n  "data": {\n    "userId": 12,\n    "email": "instructor.smith@example.com",\n    "roles": ["INSTRUCTOR"],\n    "studentProfileId": null,\n    "instructorProfileId": 4,\n    "schoolId": 2,\n    "bootstrapAdmin": false,\n    "enabled": true,\n    "emailVerified": false\n  }\n}',
     notes=["This is critical: booking, lesson-note, lesson-route, and license-workflow "
            "endpoints all take a StudentProfile.id or InstructorProfile.id in their path or "
            "body — NOT the raw user ID. Cache instructorProfileId / studentProfileId from "
-           "this call right after login."])
+           "this call right after login.",
+           "For an ADMIN caller, schoolId is their OWNED school (from POST /schools), not a "
+           "profile-based school like students/instructors have — use it the same way either "
+           "way (e.g. as the schoolId for GET /students/school/{schoolId})."])
 
 ENDPOINT("POST", "/auth/register", "Create a STUDENT or INSTRUCTOR account.",
     access="ADMIN or INSTRUCTOR bearer token",
@@ -162,12 +184,13 @@ ENDPOINT("POST", "/auth/register", "Create a STUDENT or INSTRUCTOR account.",
     notes=["An INSTRUCTOR caller creating a STUDENT in a DIFFERENT school than their own is rejected.",
            "licenseNumber is required when role=INSTRUCTOR (a common mistake — don't forget it on an \"add instructor\" form)."])
 
-ENDPOINT("POST", "/auth/admin/register", "Admin creates a user with any role, including another ADMIN.",
+ENDPOINT("POST", "/auth/admin/register", "Admin creates a STUDENT or INSTRUCTOR in any school.",
     access="ADMIN only",
-    request=[["Same fields as /auth/register, plus role can be ADMIN", "", "", ""]],
-    notes=["Use this specifically for an admin-facing \"add another admin\" or cross-school "
-           "user-creation screen — for normal instructor/student onboarding within one school, "
-           "/auth/register is simpler."])
+    request=[["Same fields as /auth/register", "", "", "role must be STUDENT or INSTRUCTOR"]],
+    notes=["role=ADMIN is rejected with 400 — admin accounts can only be created via "
+           "POST /schools now (they can't exist without a school to own). Use this endpoint "
+           "for a cross-school \"admin creates a student/instructor anywhere\" screen — for "
+           "normal instructor/student onboarding within one school, /auth/register is simpler."])
 
 ENDPOINT("POST", "/auth/refresh-token", "Exchange a refresh token for a new access token.",
     access="Public (the refresh token itself is the credential)",
@@ -198,10 +221,22 @@ ENDPOINT("POST", "/auth/reset-password", "Complete a password reset using the em
         ["newPassword", "string", "yes", "8-100 chars"],
     ])
 
-ENDPOINT("DELETE", "/auth/me", "Soft-delete the current user's own account.",
+ENDPOINT("DELETE", "/auth/me", "Delete (or request deletion of) the current user's own account.",
     access="Any authenticated user",
-    notes=["Self-service account deletion. There is a separate ADMIN-only endpoint "
-           "(DELETE /users/{id}) to delete any user's account."])
+    notes=["Behavior depends on the caller's role — the response status tells you which "
+           "happened, don't assume it's always an immediate delete:",
+           "STUDENT / INSTRUCTOR: 200, immediate self soft-delete, unchanged from before.",
+           "Regular (school-owning) ADMIN: 202 Accepted — this does NOT delete anything "
+           "immediately. It creates a deletion request for their own school, which also "
+           "requires the bootstrap admin's approval before the school and this account are "
+           "actually removed together. Same response shape as DELETE /schools/me below — in "
+           "fact it just triggers that same flow. Show the admin a \"pending approval\" state, "
+           "not a normal \"account deleted\" confirmation.",
+           "Bootstrap admin: 400, always — this account can never be deleted, by anyone, "
+           "through any endpoint. Don't show a delete-account option in the bootstrap "
+           "admin's own settings UI at all.",
+           "There is a separate ADMIN-only endpoint (DELETE /users/{id}) to delete a "
+           "DIFFERENT user's account."])
 
 # =====================================================================
 # SCHOOLS
@@ -210,25 +245,110 @@ d.H(1, "Schools")
 d.P("A school is the top-level tenant — every user, course, vehicle, and booking "
     "belongs to exactly one school. Cross-school actions (an instructor booking a "
     "student from a different school, for example) are rejected.")
+d.P("A school cannot exist without its own admin, and that admin cannot exist without "
+    "the school — the two are created together in one call, and can only ever be "
+    "deleted together. Only the bootstrap admin can create a school (and its admin) or "
+    "delete one directly; a regular admin can only request deletion of their OWN "
+    "school, gated on the bootstrap admin's approval. See \"Two kinds of ADMIN\" in the "
+    "Roles section above before building any of this.")
 
-ENDPOINT("POST", "/schools", "Create a new school.", access="ADMIN only",
+ENDPOINT("POST", "/schools", "Create a new school and its owning admin account together.",
+    access="Bootstrap admin only",
     request=[
-        ["name", "string", "yes", "max 200 chars"],
-        ["address", "string", "yes", "max 500 chars"],
-        ["phone", "string", "no", "max 20 chars"],
-        ["email", "string", "no", "valid email, max 255 chars"],
+        ["schoolName", "string", "yes", "max 200 chars"],
+        ["schoolAddress", "string", "yes", "max 500 chars"],
+        ["schoolPhone", "string", "no", "max 20 chars"],
+        ["schoolEmail", "string", "no", "valid email, max 255 chars"],
+        ["adminEmail", "string", "yes", "valid email — becomes the new admin's login"],
+        ["adminPassword", "string", "yes", "8-100 chars"],
     ],
-    example_req='{\n  "name": "Downtown Driving Academy",\n  "address": "42 Main Street, Springfield",\n  "phone": "555-0142",\n  "email": "info@downtowndriving.example"\n}')
+    example_req='{\n  "schoolName": "Downtown Driving Academy",\n  "schoolAddress": "42 Main Street, Springfield",\n  "schoolPhone": "555-0142",\n  "schoolEmail": "info@downtowndriving.example",\n  "adminEmail": "owner@downtowndriving.example",\n  "adminPassword": "SecurePass123!"\n}',
+    response=[
+        ["school", "object", "same shape as the GET /schools/{id} response below"],
+        ["adminUserId", "number", "the new admin's raw User.id"],
+        ["adminEmail", "string", "echoes the email you just set — log this admin in separately with adminPassword"],
+    ],
+    notes=["A non-bootstrap admin calling this gets 400 — there is no self-service "
+           "\"create your own school\" flow.",
+           "There is no adminFirstName/adminLastName — an admin account has no profile "
+           "record of its own (unlike students/instructors), just an email/password login. "
+           "Don't build name fields into this form.",
+           "The response's school field is the ONLY school the newly created admin will "
+           "ever see or manage — hand the adminEmail/adminPassword to whoever should log in "
+           "as that school's admin, they aren't emailed automatically."])
 
-ENDPOINT("GET", "/schools/{id}", "Get a school by ID.", access="ADMIN only",
-    notes=["Despite having no role check in the controller itself, every path under "
-           "/schools/** other than the exact GET /schools list endpoint below is "
-           "restricted to ADMIN at the security-filter level — a non-admin caller gets "
-           "403. Don't build a school-detail view for instructors/students against this "
-           "endpoint; GET /auth/me already returns the caller's own schoolId/schoolName."])
+ENDPOINT("GET", "/schools/{id}", "Get a school by ID.",
+    access="Bootstrap admin (any school), or a regular admin viewing their OWN school",
+    notes=["A regular admin requesting a DIFFERENT school's ID gets 400, not the data — "
+           "always use the caller's own schoolId (from GET /auth/me) unless you know "
+           "you're bootstrap.",
+           "Every path under /schools/** other than the exact GET /schools list endpoint "
+           "below is restricted to ADMIN at the security-filter level — instructors/"
+           "students get 403. GET /auth/me already returns their own schoolId/schoolName, "
+           "there's no need to call this for them."])
 
-ENDPOINT("GET", "/schools", "List all active schools.", access="Any authenticated user",
-    notes=["Use this to populate a school picker on a registration form."])
+ENDPOINT("GET", "/schools", "List schools.",
+    access="Any authenticated user",
+    notes=["Bootstrap admin: every active school. Regular admin: a single-item list "
+           "containing only their own school (or empty, which shouldn't normally "
+           "happen). Instructor/student: the full active-schools list, unchanged — this "
+           "is the registration-picker use case, unaffected by the admin-ownership model."])
+
+ENDPOINT("DELETE", "/schools/{id}", "Permanently delete a school and its owning admin.",
+    access="Bootstrap admin only",
+    notes=["Immediate, no confirmation step — deletes the school AND its admin's account "
+           "together, plus every student, instructor, booking, course, quiz, and everything "
+           "else tied to that school. There is no undo. Build a real \"are you sure\" "
+           "confirmation dialog client-side; the API itself doesn't have a two-step version "
+           "of this call (that's what the request/approve flow below is for non-bootstrap "
+           "admins).",
+           "If there happened to be a pending deletion request for this school (see below), "
+           "it's automatically marked approved — you don't need to resolve that separately."])
+
+ENDPOINT("DELETE", "/schools/me", "Admin: request deletion of your own school.",
+    access="Regular (non-bootstrap) admin only",
+    notes=["Returns 202 Accepted, not 200 — nothing is deleted yet. This only creates a "
+           "pending request; the bootstrap admin must approve it before the school and "
+           "your own account are actually removed (together, per the create-together/"
+           "delete-together rule above).",
+           "400 if you already have a request pending — check the response status before "
+           "letting the admin submit a second one.",
+           "The bootstrap admin is notified automatically (email + in-app) — there's "
+           "nothing else for the frontend to trigger here.",
+           "Response shape is the same SchoolDeletionRequestResponse used by the bootstrap "
+           "review-queue endpoints below (status, schoolName, requestedByEmail, etc.) — "
+           "show the admin a \"request submitted, awaiting approval\" screen using it."])
+
+# =====================================================================
+# SCHOOL DELETION REQUESTS (bootstrap admin review queue)
+# =====================================================================
+d.H(1, "School Deletion Requests")
+d.P("The bootstrap admin's review queue for the DELETE /schools/me requests above. "
+    "Build this as a dedicated admin screen only the bootstrap admin ever sees — a "
+    "regular admin has no use for it and gets 403 on all three endpoints.")
+
+ENDPOINT("GET", "/school-deletion-requests", "List pending deletion requests.",
+    access="Bootstrap admin only",
+    params=[["page / size / sort", "standard pagination", "no", "see the Pagination convention above"]],
+    response=[["Paginated — each row:", "", ""],
+              ["id / schoolName / requestedByEmail / status / createdAt", "", "status is always PENDING in this list"]],
+    notes=["This is the badge-count / inbox screen for the bootstrap admin — poll it or "
+           "refresh after handling the in-app notification that a new request arrived."])
+
+ENDPOINT("POST", "/school-deletion-requests/{id}/approve", "Approve a request — permanently deletes the school and admin.",
+    access="Bootstrap admin only",
+    request=[["reviewNotes", "string", "no", "max 1000 chars, optional audit note"]],
+    notes=["This is the point of no return for that school — same irreversible cascade as "
+           "DELETE /schools/{id} direct-delete, just gated behind this approval step "
+           "instead. Build a real confirmation dialog here too.",
+           "400 if the request was already approved/rejected by someone else in the "
+           "meantime — refresh the list on that error rather than retrying blindly."])
+
+ENDPOINT("POST", "/school-deletion-requests/{id}/reject", "Reject a request — school and admin are untouched.",
+    access="Bootstrap admin only",
+    request=[["reviewNotes", "string", "no", "max 1000 chars — worth making this required in your UI even though the API allows omitting it, so the admin knows why"]],
+    notes=["Nothing is deleted. The requesting admin keeps their school and account "
+           "exactly as before; they can submit a new request later if they still want to."])
 
 # =====================================================================
 # ROLES
@@ -242,7 +362,19 @@ ENDPOINT("GET", "/roles", "List the three system roles.", access="ADMIN or INSTR
 # USERS
 # =====================================================================
 d.H(1, "Users (admin account management)")
-ENDPOINT("DELETE", "/users/{id}", "Admin soft-deletes any user's account.", access="ADMIN only")
+ENDPOINT("DELETE", "/users/{id}", "Delete a user account.", access="ADMIN only",
+    notes=["Behavior depends on what the target account is — check the response status, "
+           "don't assume it's always the same kind of delete:",
+           "Target is a STUDENT or INSTRUCTOR: immediate soft-delete, unchanged from before "
+           "— any admin can do this.",
+           "Target is a regular (school-owning) admin: only the BOOTSTRAP admin may call "
+           "this (403 for any other admin, even against their own peers); it immediately "
+           "cascade-deletes that admin's account AND their whole school together — same "
+           "irreversible scope as DELETE /schools/{id}. This is an alternate entry point "
+           "into the exact same deletion, not a lighter-weight one — build the same "
+           "confirmation-dialog treatment for it.",
+           "Target is the bootstrap admin: always 400, regardless of caller — that account "
+           "can never be deleted through this endpoint (or any other)."])
 
 # =====================================================================
 # INSTRUCTOR PROFILES
@@ -884,6 +1016,11 @@ d.BULLETS([
     "Three distinct app experiences: ADMIN (school/user/vehicle management, cross-cutting "
     "visibility), INSTRUCTOR (their own students/courses/bookings/lesson notes), STUDENT "
     "(their own courses/quizzes/bookings/progress).",
+    "ADMIN is itself two different dashboards, not one — check GET /auth/me's "
+    "bootstrapAdmin flag. The bootstrap admin manages ALL schools/admins (school "
+    "create/delete, the deletion-request review queue); a regular admin only ever sees "
+    "their own school and has no delete button at all, only a \"request deletion\" one. "
+    "Don't build a single generic \"admin\" screen that tries to cover both.",
     "Remember bookings are instructor-initiated — don't build a student-facing \"book a "
     "lesson\" button; build an instructor-facing \"schedule a lesson for my student\" flow "
     "instead.",
