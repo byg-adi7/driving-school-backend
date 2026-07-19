@@ -135,7 +135,7 @@ class SchoolDeletionRequestServiceImplTest {
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(bootstrap));
         when(requestRepository.findById(5L)).thenReturn(Optional.of(request));
-        when(requestRepository.save(any(SchoolDeletionRequest.class))).thenReturn(request);
+        when(requestRepository.saveAndFlush(any(SchoolDeletionRequest.class))).thenReturn(request);
 
         SchoolDeletionRequestResponse response = service.approve(5L, 1L, null);
 

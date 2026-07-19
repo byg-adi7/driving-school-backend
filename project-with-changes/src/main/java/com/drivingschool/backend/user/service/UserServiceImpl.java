@@ -76,10 +76,15 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new IllegalStateException(
                         "Admin " + target.getEmail() + " has no owned school - data integrity violation"));
 
+        // saveAndFlush, not save: the cascade below deletes the school/admin via a bulk
+        // delete that executes immediately, including the DB's ON DELETE SET NULL on
+        // this row's school_id - a pending (unflushed) UPDATE here would only flush
+        // later and try to re-write the stale pre-cascade school_id, failing the FK
+        // constraint against a school that by then no longer exists.
         schoolDeletionRequestRepository.findBySchoolIdAndStatus(owned.getId(), SchoolDeletionRequestStatus.PENDING)
                 .ifPresent(pending -> {
                     pending.approve(caller, "Auto-resolved: bootstrap admin deleted the admin account directly");
-                    schoolDeletionRequestRepository.save(pending);
+                    schoolDeletionRequestRepository.saveAndFlush(pending);
                 });
 
         cascadeDeletionService.execute(owned.getId());

@@ -102,7 +102,15 @@ public class SchoolDeletionRequestServiceImpl implements SchoolDeletionRequestSe
         Long schoolId = school.getId();
 
         request.approve(caller, body != null ? body.getReviewNotes() : null);
-        requestRepository.save(request);
+        // saveAndFlush, not save: the cascade below deletes the school/admin via a
+        // bulk delete that executes immediately (bypassing Hibernate's deferred-write
+        // persistence context entirely), including the DB's ON DELETE SET NULL on this
+        // very row's school_id. If this UPDATE were left pending instead, it would only
+        // flush later (at the transaction's natural end) and try to re-write the STALE
+        // pre-cascade school_id value, failing the FK constraint against a school that
+        // by then no longer exists. Flushing first ensures this row's own write lands
+        // while the school still exists, before the cascade's SET NULL takes over.
+        requestRepository.saveAndFlush(request);
         // Snapshot the response BEFORE the cascade runs: the cascade deletes the
         // admin's User row, which - via ON DELETE SET NULL - nulls this very
         // request's school/requestedBy columns at the DB level without

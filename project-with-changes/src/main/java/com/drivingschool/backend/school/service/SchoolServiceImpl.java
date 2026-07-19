@@ -146,11 +146,16 @@ public class SchoolServiceImpl implements SchoolService {
             throw new ResourceNotFoundException("School", "id", schoolId);
         }
 
+        // saveAndFlush, not save: the cascade below deletes the school/admin via a bulk
+        // delete that executes immediately, including the DB's ON DELETE SET NULL on
+        // this row's school_id - a pending (unflushed) UPDATE here would only flush
+        // later and try to re-write the stale pre-cascade school_id, failing the FK
+        // constraint against a school that by then no longer exists.
         schoolDeletionRequestRepository.findBySchoolIdAndStatus(schoolId, SchoolDeletionRequestStatus.PENDING)
                 .ifPresent(pending -> {
                     pending.approve(userRepository.getReferenceById(currentUserService.requireUserId()),
                             "Auto-resolved: bootstrap admin deleted the school directly");
-                    schoolDeletionRequestRepository.save(pending);
+                    schoolDeletionRequestRepository.saveAndFlush(pending);
                 });
 
         cascadeDeletionService.execute(schoolId);
