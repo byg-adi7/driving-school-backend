@@ -53,19 +53,25 @@ public class SecurityConfig {
     private final ApiVersioningFilter apiVersioningFilter;
     private final PasswordEncoder passwordEncoder;
     private final Environment environment;
+    private final CustomAuthenticationEntryPoint authenticationEntryPoint;
+    private final CustomAccessDeniedHandler accessDeniedHandler;
 
     public SecurityConfig(CustomUserDetailsService userDetailsService,
                           JwtAuthenticationFilter jwtAuthenticationFilter,
                           RateLimitingFilter rateLimitingFilter,
                           ApiVersioningFilter apiVersioningFilter,
                           PasswordEncoder passwordEncoder,
-                          Environment environment) {
+                          Environment environment,
+                          CustomAuthenticationEntryPoint authenticationEntryPoint,
+                          CustomAccessDeniedHandler accessDeniedHandler) {
         this.userDetailsService = userDetailsService;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.rateLimitingFilter = rateLimitingFilter;
         this.apiVersioningFilter = apiVersioningFilter;
         this.passwordEncoder = passwordEncoder;
         this.environment = environment;
+        this.authenticationEntryPoint = authenticationEntryPoint;
+        this.accessDeniedHandler = accessDeniedHandler;
     }
 
     @Bean
@@ -83,7 +89,18 @@ public class SecurityConfig {
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                         .sessionFixation(sessionFixation -> sessionFixation.migrateSession()))
-                
+
+                // Exception Handling: without this, Spring Security's default
+                // AuthenticationEntryPoint (Http403ForbiddenEntryPoint, since no
+                // formLogin/httpBasic is configured) returns 403 for EVERY auth
+                // failure - missing, expired, or invalid JWT alike - instead of 401.
+                // Clients whose token-refresh logic watches for 401 never get the
+                // signal to refresh. This restores the correct 401 vs 403 split:
+                // 401 = not authenticated at all, 403 = authenticated but not permitted.
+                .exceptionHandling(exceptionHandling -> exceptionHandling
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler))
+
                 // Security Headers: Comprehensive protection against common attacks
                 .headers(headers -> headers
                         // CSP: Restrict script execution to origin only
