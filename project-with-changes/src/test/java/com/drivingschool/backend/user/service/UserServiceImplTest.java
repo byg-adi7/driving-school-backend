@@ -7,6 +7,7 @@ import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.enums.SchoolDeletionRequestStatus;
 import com.drivingschool.backend.school.repository.SchoolDeletionRequestRepository;
+import com.drivingschool.backend.school.repository.SchoolRepository;
 import com.drivingschool.backend.school.service.SchoolAdminCascadeDeletionService;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
@@ -31,6 +32,7 @@ import static org.mockito.Mockito.when;
 class UserServiceImplTest {
 
     @Mock private UserRepository userRepository;
+    @Mock private SchoolRepository schoolRepository;
     @Mock private SchoolDeletionRequestRepository schoolDeletionRequestRepository;
     @Mock private SchoolAdminCascadeDeletionService cascadeDeletionService;
 
@@ -38,7 +40,7 @@ class UserServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        userService = new UserServiceImpl(userRepository, schoolDeletionRequestRepository, cascadeDeletionService);
+        userService = new UserServiceImpl(userRepository, schoolRepository, schoolDeletionRequestRepository, cascadeDeletionService);
     }
 
     private User existingUser(Long id) {
@@ -135,13 +137,13 @@ class UserServiceImplTest {
         User target = adminUser(3L);
         School owned = School.builder().name("X").address("Y").active(true).owningAdmin(target).build();
         ReflectionTestUtils.setField(owned, "id", 7L);
-        ReflectionTestUtils.setField(target, "ownedSchool", owned);
 
         User bootstrap = adminUser(1L);
         ReflectionTestUtils.setField(bootstrap, "bootstrapAdmin", true);
 
         when(userRepository.findById(3L)).thenReturn(Optional.of(target));
         when(userRepository.findById(1L)).thenReturn(Optional.of(bootstrap));
+        when(schoolRepository.findByOwningAdminId(3L)).thenReturn(Optional.of(owned));
         when(schoolDeletionRequestRepository.findBySchoolIdAndStatus(7L, SchoolDeletionRequestStatus.PENDING))
                 .thenReturn(Optional.empty());
 

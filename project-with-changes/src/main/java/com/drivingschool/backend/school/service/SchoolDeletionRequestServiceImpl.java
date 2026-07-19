@@ -12,6 +12,7 @@ import com.drivingschool.backend.school.entity.SchoolDeletionRequest;
 import com.drivingschool.backend.school.enums.SchoolDeletionRequestStatus;
 import com.drivingschool.backend.school.mapper.SchoolDeletionRequestMapper;
 import com.drivingschool.backend.school.repository.SchoolDeletionRequestRepository;
+import com.drivingschool.backend.school.repository.SchoolRepository;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -26,17 +27,20 @@ public class SchoolDeletionRequestServiceImpl implements SchoolDeletionRequestSe
 
     private final SchoolDeletionRequestRepository requestRepository;
     private final UserRepository userRepository;
+    private final SchoolRepository schoolRepository;
     private final SchoolAdminCascadeDeletionService cascadeDeletionService;
     private final SchoolDeletionRequestMapper mapper;
     private final NotificationService notificationService;
 
     public SchoolDeletionRequestServiceImpl(SchoolDeletionRequestRepository requestRepository,
                                             UserRepository userRepository,
+                                            SchoolRepository schoolRepository,
                                             SchoolAdminCascadeDeletionService cascadeDeletionService,
                                             SchoolDeletionRequestMapper mapper,
                                             NotificationService notificationService) {
         this.requestRepository = requestRepository;
         this.userRepository = userRepository;
+        this.schoolRepository = schoolRepository;
         this.cascadeDeletionService = cascadeDeletionService;
         this.mapper = mapper;
         this.notificationService = notificationService;
@@ -51,7 +55,9 @@ public class SchoolDeletionRequestServiceImpl implements SchoolDeletionRequestSe
         if (caller.isBootstrapAdmin()) {
             throw new BadRequestException("The bootstrap admin does not own a school");
         }
-        School owned = caller.getOwnedSchool();
+        // Queried on School's owning FK side rather than User.ownedSchool - see
+        // SchoolRepository.findByOwningAdminId for why the mappedBy side isn't used.
+        School owned = schoolRepository.findByOwningAdminId(callerId).orElse(null);
         if (owned == null) {
             throw new BadRequestException("You do not own a school");
         }

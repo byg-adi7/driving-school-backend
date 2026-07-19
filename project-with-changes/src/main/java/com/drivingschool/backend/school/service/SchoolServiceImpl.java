@@ -123,8 +123,11 @@ public class SchoolServiceImpl implements SchoolService {
             User caller = userRepository.findById(callerId)
                     .orElseThrow(() -> new ResourceNotFoundException("User", "id", callerId));
             if (!caller.isBootstrapAdmin()) {
-                School owned = caller.getOwnedSchool();
-                return owned == null ? List.of() : List.of(schoolMapper.toResponse(owned));
+                // Queried on School's owning FK side rather than User.ownedSchool - see
+                // SchoolRepository.findByOwningAdminId for why the mappedBy side isn't used.
+                return schoolRepository.findByOwningAdminId(callerId)
+                        .map(owned -> List.of(schoolMapper.toResponse(owned)))
+                        .orElse(List.of());
             }
         }
         return schoolRepository.findAll().stream()

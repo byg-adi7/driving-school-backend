@@ -3,7 +3,6 @@ package com.drivingschool.backend.user.entity;
 import com.drivingschool.backend.common.base.BaseEntity;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.role.entity.Role;
-import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -74,11 +73,6 @@ public class User extends BaseEntity {
 
     @OneToOne(mappedBy = "user", fetch = FetchType.LAZY)
     private InstructorProfile instructorProfile;
-
-    // Only ever set for a non-bootstrap ADMIN-role user - every such admin owns
-    // exactly one school (see School.owningAdmin, the FK-owning side).
-    @OneToOne(mappedBy = "owningAdmin", fetch = FetchType.LAZY)
-    private School ownedSchool;
 
     @Builder
     public User(String email, String password, boolean enabled, boolean emailVerified) {

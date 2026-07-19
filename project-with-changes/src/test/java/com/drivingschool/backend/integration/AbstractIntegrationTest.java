@@ -11,6 +11,8 @@ import com.drivingschool.backend.school.dto.SchoolResponse;
 import com.drivingschool.backend.school.dto.SchoolWithAdminResponse;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -76,6 +78,22 @@ public abstract class AbstractIntegrationTest {
     @Autowired protected MockMvc mockMvc;
     @Autowired protected ObjectMapper objectMapper;
     @Autowired private StringRedisTemplate redisTemplate;
+    @PersistenceContext private EntityManager entityManager;
+
+    /**
+     * A whole test method shares ONE Hibernate persistence context (Spring's test-managed
+     * transaction binds a single EntityManager for the method's duration, unlike real
+     * production where every HTTP request gets its own) - so a DB-level ON DELETE CASCADE
+     * (e.g. the school/admin cascade-delete) isn't reflected back into any Java entity
+     * objects already resident in this session. Call this after such an operation and
+     * before asserting on a subsequent read in the same test, or Hibernate's stale
+     * first-level cache can return objects that no longer exist, or throw while
+     * autoflushing pending state tied to rows the DB already removed out from under it.
+     */
+    protected void clearPersistenceContext() {
+        entityManager.flush();
+        entityManager.clear();
+    }
 
     @BeforeEach
     void flushRateLimitState() {

@@ -11,6 +11,7 @@ import com.drivingschool.backend.school.entity.SchoolDeletionRequest;
 import com.drivingschool.backend.school.enums.SchoolDeletionRequestStatus;
 import com.drivingschool.backend.school.mapper.SchoolDeletionRequestMapper;
 import com.drivingschool.backend.school.repository.SchoolDeletionRequestRepository;
+import com.drivingschool.backend.school.repository.SchoolRepository;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,6 +37,7 @@ class SchoolDeletionRequestServiceImplTest {
 
     @Mock private SchoolDeletionRequestRepository requestRepository;
     @Mock private UserRepository userRepository;
+    @Mock private SchoolRepository schoolRepository;
     @Mock private SchoolAdminCascadeDeletionService cascadeDeletionService;
     @Mock private NotificationService notificationService;
     private final SchoolDeletionRequestMapper mapper = new SchoolDeletionRequestMapper();
@@ -44,7 +46,7 @@ class SchoolDeletionRequestServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new SchoolDeletionRequestServiceImpl(requestRepository, userRepository,
+        service = new SchoolDeletionRequestServiceImpl(requestRepository, userRepository, schoolRepository,
                 cascadeDeletionService, mapper, notificationService);
     }
 
@@ -66,10 +68,10 @@ class SchoolDeletionRequestServiceImplTest {
     void requestOwnSchoolDeletion_nonBootstrapAdminWithSchool_createsPendingRequestAndNotifiesBothChannels() {
         User caller = userWithId(1L);
         School owned = ownedSchool(10L, caller);
-        ReflectionTestUtils.setField(caller, "ownedSchool", owned);
         User bootstrap = userWithId(99L);
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(caller));
+        when(schoolRepository.findByOwningAdminId(1L)).thenReturn(Optional.of(owned));
         when(requestRepository.existsBySchoolIdAndStatus(10L, SchoolDeletionRequestStatus.PENDING)).thenReturn(false);
         when(requestRepository.save(any(SchoolDeletionRequest.class))).thenAnswer(inv -> inv.getArgument(0));
         when(userRepository.findByBootstrapAdminTrue()).thenReturn(Optional.of(bootstrap));
@@ -108,9 +110,9 @@ class SchoolDeletionRequestServiceImplTest {
     void requestOwnSchoolDeletion_whenAlreadyPending_throwsBadRequestException() {
         User caller = userWithId(1L);
         School owned = ownedSchool(10L, caller);
-        ReflectionTestUtils.setField(caller, "ownedSchool", owned);
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(caller));
+        when(schoolRepository.findByOwningAdminId(1L)).thenReturn(Optional.of(owned));
         when(requestRepository.existsBySchoolIdAndStatus(10L, SchoolDeletionRequestStatus.PENDING)).thenReturn(true);
 
         assertThatThrownBy(() -> service.requestOwnSchoolDeletion(1L)).isInstanceOf(BadRequestException.class);

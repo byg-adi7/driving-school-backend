@@ -6,6 +6,7 @@ import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.enums.SchoolDeletionRequestStatus;
 import com.drivingschool.backend.school.repository.SchoolDeletionRequestRepository;
+import com.drivingschool.backend.school.repository.SchoolRepository;
 import com.drivingschool.backend.school.service.SchoolAdminCascadeDeletionService;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
@@ -18,13 +19,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
+    private final SchoolRepository schoolRepository;
     private final SchoolDeletionRequestRepository schoolDeletionRequestRepository;
     private final SchoolAdminCascadeDeletionService cascadeDeletionService;
 
     public UserServiceImpl(UserRepository userRepository,
+                           SchoolRepository schoolRepository,
                            SchoolDeletionRequestRepository schoolDeletionRequestRepository,
                            SchoolAdminCascadeDeletionService cascadeDeletionService) {
         this.userRepository = userRepository;
+        this.schoolRepository = schoolRepository;
         this.schoolDeletionRequestRepository = schoolDeletionRequestRepository;
         this.cascadeDeletionService = cascadeDeletionService;
     }
@@ -66,10 +70,11 @@ public class UserServiceImpl implements UserService {
             throw new BadRequestException("Only the bootstrap admin can delete another admin's account");
         }
 
-        School owned = target.getOwnedSchool();
-        if (owned == null) {
-            throw new IllegalStateException("Admin " + target.getEmail() + " has no owned school - data integrity violation");
-        }
+        // Queried on School's owning FK side rather than User.ownedSchool - see
+        // SchoolRepository.findByOwningAdminId for why the mappedBy side isn't used.
+        School owned = schoolRepository.findByOwningAdminId(targetUserId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Admin " + target.getEmail() + " has no owned school - data integrity violation"));
 
         schoolDeletionRequestRepository.findBySchoolIdAndStatus(owned.getId(), SchoolDeletionRequestStatus.PENDING)
                 .ifPresent(pending -> {

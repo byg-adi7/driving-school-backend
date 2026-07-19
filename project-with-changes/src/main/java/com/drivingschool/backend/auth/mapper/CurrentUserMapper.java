@@ -2,6 +2,7 @@ package com.drivingschool.backend.auth.mapper;
 
 import com.drivingschool.backend.auth.dto.CurrentUserResponse;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
+import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.user.entity.User;
 import org.springframework.stereotype.Component;
@@ -11,14 +12,14 @@ import java.util.stream.Collectors;
 @Component
 public class CurrentUserMapper {
 
-    public CurrentUserResponse toResponse(User user, StudentProfile student, InstructorProfile instructor) {
+    public CurrentUserResponse toResponse(User user, StudentProfile student, InstructorProfile instructor, School ownedSchool) {
         Long schoolId = null;
         if (student != null) {
             schoolId = student.getSchool().getId();
         } else if (instructor != null) {
             schoolId = instructor.getSchool().getId();
-        } else if (user.getOwnedSchool() != null) {
-            schoolId = user.getOwnedSchool().getId();
+        } else if (ownedSchool != null) {
+            schoolId = ownedSchool.getId();
         }
 
         return CurrentUserResponse.builder()

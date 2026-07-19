@@ -204,8 +204,9 @@ public class AuthServiceImpl implements AuthService {
 
         StudentProfile student = studentProfileRepository.findByUserId(userId).orElse(null);
         InstructorProfile instructor = instructorProfileRepository.findByUserId(userId).orElse(null);
+        School ownedSchool = schoolRepository.findByOwningAdminId(userId).orElse(null);
 
-        return currentUserMapper.toResponse(user, student, instructor);
+        return currentUserMapper.toResponse(user, student, instructor, ownedSchool);
     }
 
     @Override

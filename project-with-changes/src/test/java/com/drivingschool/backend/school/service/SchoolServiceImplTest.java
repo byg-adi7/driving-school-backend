@@ -45,12 +45,13 @@ class SchoolServiceImplTest {
     @Mock private SchoolDeletionRequestRepository schoolDeletionRequestRepository;
     @Mock private SchoolAdminCascadeDeletionService cascadeDeletionService;
     private final SchoolMapper schoolMapper = new SchoolMapper();
-    private final SchoolAccessValidator accessValidator = new SchoolAccessValidator();
+    private SchoolAccessValidator accessValidator;
 
     private SchoolServiceImpl schoolService;
 
     @BeforeEach
     void setUp() {
+        accessValidator = new SchoolAccessValidator(schoolRepository);
         schoolService = new SchoolServiceImpl(schoolRepository, schoolMapper, userRepository, roleRepository,
                 passwordEncoder, currentUserService, schoolDeletionRequestRepository, cascadeDeletionService,
                 accessValidator);
@@ -148,9 +149,9 @@ class SchoolServiceImplTest {
     void getById_asOwningAdmin_returnsSchool() {
         User owner = userWithId(50L);
         School school = schoolWithId(1L, "Downtown", true, owner);
-        ReflectionTestUtils.setField(owner, "ownedSchool", school);
         when(schoolRepository.findById(1L)).thenReturn(Optional.of(school));
         when(userRepository.findById(50L)).thenReturn(Optional.of(owner));
+        when(schoolRepository.findByOwningAdminId(50L)).thenReturn(Optional.of(school));
 
         SchoolResponse response = schoolService.getById(1L, 50L, "ADMIN");
 
@@ -209,8 +210,8 @@ class SchoolServiceImplTest {
     void getAllActive_asNonBootstrapAdmin_returnsOnlyOwnSchool() {
         User owner = userWithId(50L);
         School owned = schoolWithId(1L, "My School", true, owner);
-        ReflectionTestUtils.setField(owner, "ownedSchool", owned);
         when(userRepository.findById(50L)).thenReturn(Optional.of(owner));
+        when(schoolRepository.findByOwningAdminId(50L)).thenReturn(Optional.of(owned));
 
         List<SchoolResponse> result = schoolService.getAllActive(50L, "ADMIN");
 

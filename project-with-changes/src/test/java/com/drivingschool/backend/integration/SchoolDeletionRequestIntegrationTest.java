@@ -77,6 +77,7 @@ class SchoolDeletionRequestIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/v1/school-deletion-requests/" + deletionRequest.getId() + "/approve")
                         .header("Authorization", bearer(bootstrapToken)))
                 .andExpect(status().isOk());
+        clearPersistenceContext();
 
         mockMvc.perform(get("/api/v1/schools/" + schoolId).header("Authorization", bearer(bootstrapToken)))
                 .andExpect(status().isNotFound());
@@ -120,6 +121,7 @@ class SchoolDeletionRequestIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(delete("/api/v1/schools/" + schoolId).header("Authorization", bearer(bootstrapToken)))
                 .andExpect(status().isOk());
+        clearPersistenceContext();
 
         mockMvc.perform(get("/api/v1/schools/" + schoolId).header("Authorization", bearer(bootstrapToken)))
                 .andExpect(status().isNotFound());
@@ -135,6 +137,7 @@ class SchoolDeletionRequestIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(delete("/api/v1/users/" + adminUserId).header("Authorization", bearer(bootstrapToken)))
                 .andExpect(status().isOk());
+        clearPersistenceContext();
 
         mockMvc.perform(get("/api/v1/schools/" + schoolId).header("Authorization", bearer(bootstrapToken)))
                 .andExpect(status().isNotFound());
