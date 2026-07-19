@@ -10,4 +10,8 @@ import java.util.List;
 public interface DrivingAssessmentRepository extends JpaRepository<DrivingAssessment, Long> {
 
     List<DrivingAssessment> findByStudentIdOrderByAssessmentDateDesc(Long studentId);
+
+    List<DrivingAssessment> findByInstructorIdOrderByAssessmentDateDesc(Long instructorId);
+
+    boolean existsByStudent_IdAndInstructor_Id(Long studentId, Long instructorId);
 }

@@ -2,6 +2,7 @@ package com.drivingschool.backend.quiz.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
+import com.drivingschool.backend.gamification.service.GamificationService;
 import com.drivingschool.backend.learning.entity.Course;
 import com.drivingschool.backend.learning.repository.CourseRepository;
 import com.drivingschool.backend.notification.dto.SendNotificationRequest;
@@ -51,6 +52,7 @@ public class QuizServiceImpl implements QuizService {
     private final ObjectMapper objectMapper;
     private final QuizValidator validator;
     private final NotificationService notificationService;
+    private final GamificationService gamificationService;
 
     public QuizServiceImpl(QuizRepository quizRepository,
                            QuizQuestionRepository quizQuestionRepository,
@@ -62,7 +64,8 @@ public class QuizServiceImpl implements QuizService {
                            LicenseWorkflowRepository licenseWorkflowRepository,
                            ObjectMapper objectMapper,
                            QuizValidator validator,
-                           NotificationService notificationService) {
+                           NotificationService notificationService,
+                           GamificationService gamificationService) {
         this.quizRepository = quizRepository;
         this.quizQuestionRepository = quizQuestionRepository;
         this.quizSubmissionRepository = quizSubmissionRepository;
@@ -74,6 +77,7 @@ public class QuizServiceImpl implements QuizService {
         this.objectMapper = objectMapper;
         this.validator = validator;
         this.notificationService = notificationService;
+        this.gamificationService = gamificationService;
     }
 
     // A brand-new quiz is always unpublished, so it can't actually appear in
@@ -218,8 +222,20 @@ public class QuizServiceImpl implements QuizService {
 
         notifyStudentOfResult(quiz, student, saved);
 
+        if (passed) {
+            awardQuizPoints(quiz, student);
+        }
+
         log.info("Quiz submitted: quizId={}, studentId={}, score={}, passed={}", quizId, student.getId(), score, passed);
         return quizMapper.toSubmissionResponse(saved);
+    }
+
+    private void awardQuizPoints(Quiz quiz, StudentProfile student) {
+        try {
+            gamificationService.awardQuizPassed(student.getId(), quiz.getId());
+        } catch (Exception ex) {
+            log.warn("Failed to award gamification points for quiz: quizId={}, studentId={}", quiz.getId(), student.getId(), ex);
+        }
     }
 
     private void notifyStudentOfResult(Quiz quiz, StudentProfile student, QuizSubmission submission) {

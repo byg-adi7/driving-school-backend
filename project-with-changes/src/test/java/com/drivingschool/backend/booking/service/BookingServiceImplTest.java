@@ -11,6 +11,7 @@ import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
+import com.drivingschool.backend.gamification.service.GamificationService;
 import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.notification.service.NotificationService;
 import com.drivingschool.backend.school.entity.School;
@@ -53,13 +54,15 @@ class BookingServiceImplTest {
     @Mock private VehicleRepository vehicleRepository;
     @Mock private BookingMapper bookingMapper;
     @Mock private NotificationService notificationService;
+    @Mock private GamificationService gamificationService;
 
     private BookingServiceImpl bookingService;
 
     @BeforeEach
     void setUp() {
         bookingService = new BookingServiceImpl(bookingRepository, studentProfileRepository,
-                instructorProfileRepository, vehicleRepository, bookingMapper, notificationService);
+                instructorProfileRepository, vehicleRepository, bookingMapper, notificationService,
+                gamificationService);
     }
 
     private User userWithId(Long id) {

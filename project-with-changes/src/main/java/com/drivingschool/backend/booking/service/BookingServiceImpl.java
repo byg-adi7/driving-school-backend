@@ -8,6 +8,7 @@ import com.drivingschool.backend.booking.mapper.BookingMapper;
 import com.drivingschool.backend.booking.repository.BookingRepository;
 import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
+import com.drivingschool.backend.gamification.service.GamificationService;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
 import com.drivingschool.backend.notification.dto.SendNotificationRequest;
@@ -41,19 +42,22 @@ public class BookingServiceImpl implements BookingService {
     private final VehicleRepository vehicleRepository;
     private final BookingMapper bookingMapper;
     private final NotificationService notificationService;
+    private final GamificationService gamificationService;
 
     public BookingServiceImpl(BookingRepository bookingRepository,
                               StudentProfileRepository studentProfileRepository,
                               InstructorProfileRepository instructorProfileRepository,
                               VehicleRepository vehicleRepository,
                               BookingMapper bookingMapper,
-                              NotificationService notificationService) {
+                              NotificationService notificationService,
+                              GamificationService gamificationService) {
         this.bookingRepository = bookingRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.instructorProfileRepository = instructorProfileRepository;
         this.vehicleRepository = vehicleRepository;
         this.bookingMapper = bookingMapper;
         this.notificationService = notificationService;
+        this.gamificationService = gamificationService;
     }
 
     @Override
@@ -176,7 +180,18 @@ public class BookingServiceImpl implements BookingService {
             throw new BadRequestException("Only confirmed bookings can be completed");
         }
         booking.complete();
-        return bookingMapper.toResponse(bookingRepository.save(booking));
+        Booking saved = bookingRepository.save(booking);
+        awardCompletionPoints(saved);
+        return bookingMapper.toResponse(saved);
+    }
+
+    private void awardCompletionPoints(Booking booking) {
+        try {
+            gamificationService.awardBookingCompleted(
+                    booking.getStudent().getId(), booking.getId(), LocalDateTime.now());
+        } catch (Exception ex) {
+            log.warn("Failed to award gamification points for completed booking: bookingId={}", booking.getId(), ex);
+        }
     }
 
     @Override

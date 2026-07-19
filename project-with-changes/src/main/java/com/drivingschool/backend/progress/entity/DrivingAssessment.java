@@ -74,4 +74,8 @@ public class DrivingAssessment extends BaseEntity {
         this.durationMinutes = durationMinutes;
         this.booking = booking;
     }
+
+    public void updateFeedback(String feedback) {
+        this.feedback = feedback;
+    }
 }

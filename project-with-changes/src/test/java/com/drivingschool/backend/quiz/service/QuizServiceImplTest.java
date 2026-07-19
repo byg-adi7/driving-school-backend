@@ -3,6 +3,7 @@ package com.drivingschool.backend.quiz.service;
 import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
+import com.drivingschool.backend.gamification.service.GamificationService;
 import com.drivingschool.backend.learning.entity.Course;
 import com.drivingschool.backend.learning.repository.CourseRepository;
 import com.drivingschool.backend.notification.service.NotificationService;
@@ -54,6 +55,7 @@ class QuizServiceImplTest {
     @Mock private LicenseWorkflowService licenseWorkflowService;
     @Mock private LicenseWorkflowRepository licenseWorkflowRepository;
     @Mock private NotificationService notificationService;
+    @Mock private GamificationService gamificationService;
     private final QuizMapper quizMapper = new QuizMapper();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final QuizValidator validator = new QuizValidator();
@@ -64,7 +66,7 @@ class QuizServiceImplTest {
     void setUp() {
         quizService = new QuizServiceImpl(quizRepository, quizQuestionRepository, quizSubmissionRepository,
                 courseRepository, studentProfileRepository, quizMapper, licenseWorkflowService,
-                licenseWorkflowRepository, objectMapper, validator, notificationService);
+                licenseWorkflowRepository, objectMapper, validator, notificationService, gamificationService);
     }
 
     private User userWithId(Long id) {
