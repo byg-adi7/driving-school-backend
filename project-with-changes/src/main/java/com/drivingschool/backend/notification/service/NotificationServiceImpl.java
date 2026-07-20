@@ -56,7 +56,7 @@ public class NotificationServiceImpl implements NotificationService {
                 .status(NotificationStatus.PENDING)
                 .recipientAddress(request.getRecipientAddress() != null
                         ? request.getRecipientAddress()
-                        : user.getEmail())
+                        : defaultRecipientAddress(user, request.getChannel()))
                 .build();
 
         Notification saved = notificationRepository.save(notification);
@@ -74,6 +74,26 @@ public class NotificationServiceImpl implements NotificationService {
 
         return notificationMapper.toResponse(
                 notificationRepository.findById(saved.getId()).orElse(saved));
+    }
+
+    // SMS has no use for a user's email, and email/in-app have no use for a
+    // phone number - each channel resolves its own notion of "address" from
+    // the user rather than sharing one fallback. Student/instructor phone
+    // numbers are optional (added at registration or later via profile
+    // settings), so this can still come back null - SmsNotificationSender
+    // treats a blank recipientAddress as "no phone number on file" and fails
+    // gracefully rather than sending anywhere.
+    private String defaultRecipientAddress(User user, NotificationChannel channel) {
+        if (channel != NotificationChannel.SMS) {
+            return user.getEmail();
+        }
+        if (user.getStudentProfile() != null) {
+            return user.getStudentProfile().getPhone();
+        }
+        if (user.getInstructorProfile() != null) {
+            return user.getInstructorProfile().getPhone();
+        }
+        return null;
     }
 
     @Override

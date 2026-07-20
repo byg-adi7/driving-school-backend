@@ -9,6 +9,7 @@ import com.drivingschool.backend.notification.enums.NotificationStatus;
 import com.drivingschool.backend.notification.mapper.NotificationMapper;
 import com.drivingschool.backend.notification.repository.NotificationRepository;
 import com.drivingschool.backend.security.CurrentUserService;
+import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -102,6 +103,44 @@ class NotificationServiceImplTest {
         org.mockito.ArgumentCaptor<Notification> captor = org.mockito.ArgumentCaptor.forClass(Notification.class);
         verify(notificationRepository, times(1)).save(captor.capture());
         assertThat(captor.getValue().getRecipientAddress()).isEqualTo("student@example.com");
+    }
+
+    @Test
+    void send_smsWithStudentPhoneOnFile_defaultsToStudentPhone() {
+        User user = userWithId(1L, "student@example.com");
+        StudentProfile profile = StudentProfile.builder().phone("+15550000000").build();
+        ReflectionTestUtils.setField(user, "studentProfile", profile);
+        SendNotificationRequest request = SendNotificationRequest.builder()
+                .userId(1L).subject("Lesson reminder").body("Your lesson is tomorrow")
+                .channel(NotificationChannel.SMS).build();
+
+        when(smsSender.supports(NotificationChannel.SMS)).thenReturn(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.send(request);
+
+        org.mockito.ArgumentCaptor<Notification> captor = org.mockito.ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository, times(1)).save(captor.capture());
+        assertThat(captor.getValue().getRecipientAddress()).isEqualTo("+15550000000");
+    }
+
+    @Test
+    void send_smsWithNoPhoneOnFile_recipientAddressIsNull() {
+        User user = userWithId(1L, "student@example.com");
+        SendNotificationRequest request = SendNotificationRequest.builder()
+                .userId(1L).subject("Lesson reminder").body("Your lesson is tomorrow")
+                .channel(NotificationChannel.SMS).build();
+
+        when(smsSender.supports(NotificationChannel.SMS)).thenReturn(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.send(request);
+
+        org.mockito.ArgumentCaptor<Notification> captor = org.mockito.ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository, times(1)).save(captor.capture());
+        assertThat(captor.getValue().getRecipientAddress()).isNull();
     }
 
     @Test

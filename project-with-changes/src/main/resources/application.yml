@@ -170,3 +170,13 @@ openroute:
 resend:
   apiKey: ${RESEND_API_KEY:}
 
+# Twilio (https://twilio.com) - SMS over plain HTTPS via their REST API, same
+# reasoning as Resend above (direct HTTPS call, no SDK dependency). Left
+# entirely unset by default: TwilioConfig.isConfigured() checks all three are
+# present, and SmsNotificationSender falls back to its existing safe
+# "not configured" behavior until real credentials are added.
+twilio:
+  accountSid: ${TWILIO_ACCOUNT_SID:}
+  authToken: ${TWILIO_AUTH_TOKEN:}
+  fromNumber: ${TWILIO_FROM_NUMBER:}
+
