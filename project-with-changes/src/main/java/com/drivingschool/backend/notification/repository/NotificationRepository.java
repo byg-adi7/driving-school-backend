@@ -1,6 +1,7 @@
 package com.drivingschool.backend.notification.repository;
 
 import com.drivingschool.backend.notification.entity.Notification;
+import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.notification.enums.NotificationStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,5 +15,5 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
     List<Notification> findByUserIdAndStatus(Long userId, NotificationStatus status);
 
-    Page<Notification> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
+    Page<Notification> findByUserIdAndChannelOrderByCreatedAtDesc(Long userId, NotificationChannel channel, Pageable pageable);
 }

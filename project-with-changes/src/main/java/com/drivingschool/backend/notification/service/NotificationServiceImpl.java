@@ -5,6 +5,7 @@ import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.notification.dto.NotificationResponse;
 import com.drivingschool.backend.notification.dto.SendNotificationRequest;
 import com.drivingschool.backend.notification.entity.Notification;
+import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.notification.enums.NotificationStatus;
 import com.drivingschool.backend.notification.mapper.NotificationMapper;
 import com.drivingschool.backend.notification.repository.NotificationRepository;
@@ -79,7 +80,9 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional(readOnly = true)
     public Page<NotificationResponse> getMyNotifications(Pageable pageable) {
         Long userId = currentUserService.requireUserId();
-        return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable)
+        // EMAIL/SMS/PUSH rows are delivery records for other channels, not app-UI
+        // content - only IN_APP notifications belong in this list.
+        return notificationRepository.findByUserIdAndChannelOrderByCreatedAtDesc(userId, NotificationChannel.IN_APP, pageable)
                 .map(notificationMapper::toResponse);
     }
 

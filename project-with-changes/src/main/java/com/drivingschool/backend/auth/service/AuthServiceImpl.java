@@ -19,6 +19,9 @@ import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
+import com.drivingschool.backend.notification.dto.SendNotificationRequest;
+import com.drivingschool.backend.notification.enums.NotificationChannel;
+import com.drivingschool.backend.notification.service.NotificationService;
 import com.drivingschool.backend.role.entity.Role;
 import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.role.repository.RoleRepository;
@@ -66,6 +69,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserService userService;
     private final RefreshTokenRevocationService refreshTokenRevocationService;
     private final SchoolDeletionRequestService schoolDeletionRequestService;
+    private final NotificationService notificationService;
     private final long passwordResetTokenExpirationMs;
 
     public AuthServiceImpl(AuthenticationManager authenticationManager,
@@ -84,6 +88,7 @@ public class AuthServiceImpl implements AuthService {
                            UserService userService,
                            RefreshTokenRevocationService refreshTokenRevocationService,
                            SchoolDeletionRequestService schoolDeletionRequestService,
+                           NotificationService notificationService,
                            @Value("${app.password-reset.token-expiration-ms}") long passwordResetTokenExpirationMs) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
@@ -101,6 +106,7 @@ public class AuthServiceImpl implements AuthService {
         this.userService = userService;
         this.refreshTokenRevocationService = refreshTokenRevocationService;
         this.schoolDeletionRequestService = schoolDeletionRequestService;
+        this.notificationService = notificationService;
         this.passwordResetTokenExpirationMs = passwordResetTokenExpirationMs;
     }
 
@@ -160,6 +166,8 @@ public class AuthServiceImpl implements AuthService {
         } else if (request.getRole() == RoleName.INSTRUCTOR) {
             createInstructorProfile(request, school, savedUser);
         }
+
+        sendWelcomeNotification(savedUser);
 
         UserPrincipal principal = new UserPrincipal(savedUser);
         String accessToken = jwtTokenProvider.generateAccessToken(principal);
@@ -363,6 +371,19 @@ public class AuthServiceImpl implements AuthService {
                 .user(user)
                 .build();
         instructorProfileRepository.save(profile);
+    }
+
+    private void sendWelcomeNotification(User user) {
+        try {
+            notificationService.send(SendNotificationRequest.builder()
+                    .userId(user.getId())
+                    .subject("Welcome to Aidly!")
+                    .body("Your account is ready. We're glad to have you on board - explore around and let us know if you need anything.")
+                    .channel(NotificationChannel.IN_APP)
+                    .build());
+        } catch (Exception ex) {
+            log.warn("Failed to send welcome notification: userId={}", user.getId(), ex);
+        }
     }
 
 }

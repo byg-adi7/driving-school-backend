@@ -138,7 +138,7 @@ class NotificationServiceImplTest {
         User user = userWithId(1L, "student@example.com");
         Notification notification = notificationFor(user, 10L);
         when(currentUserService.requireUserId()).thenReturn(1L);
-        when(notificationRepository.findByUserIdOrderByCreatedAtDesc(1L, Pageable.unpaged()))
+        when(notificationRepository.findByUserIdAndChannelOrderByCreatedAtDesc(1L, NotificationChannel.IN_APP, Pageable.unpaged()))
                 .thenReturn(new PageImpl<>(List.of(notification)));
 
         Page<com.drivingschool.backend.notification.dto.NotificationResponse> result =

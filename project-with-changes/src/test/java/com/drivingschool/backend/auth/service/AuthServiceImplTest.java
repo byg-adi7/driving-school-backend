@@ -15,6 +15,7 @@ import com.drivingschool.backend.common.exception.AuthenticationException;
 import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
+import com.drivingschool.backend.notification.service.NotificationService;
 import com.drivingschool.backend.role.entity.Role;
 import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.role.repository.RoleRepository;
@@ -75,6 +76,7 @@ class AuthServiceImplTest {
     @Mock private UserService userService;
     @Mock private RefreshTokenRevocationService refreshTokenRevocationService;
     @Mock private SchoolDeletionRequestService schoolDeletionRequestService;
+    @Mock private NotificationService notificationService;
 
     private AuthServiceImpl authService;
 
@@ -96,7 +98,7 @@ class AuthServiceImplTest {
                 schoolRepository, studentProfileRepository, instructorProfileRepository,
                 passwordEncoder, jwtTokenProvider, authMapper, currentUserMapper, currentUserService,
                 passwordResetTokenRepository, emailService, userService, refreshTokenRevocationService,
-                schoolDeletionRequestService, 3_600_000L);
+                schoolDeletionRequestService, notificationService, 3_600_000L);
     }
 
     // --- login ---

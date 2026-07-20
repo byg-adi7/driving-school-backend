@@ -14,6 +14,7 @@ import com.drivingschool.backend.school.repository.SchoolDeletionRequestReposito
 import com.drivingschool.backend.school.repository.SchoolRepository;
 import com.drivingschool.backend.school.validator.SchoolAccessValidator;
 import com.drivingschool.backend.security.CurrentUserService;
+import com.drivingschool.backend.notification.service.NotificationService;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,6 +45,7 @@ class SchoolServiceImplTest {
     @Mock private CurrentUserService currentUserService;
     @Mock private SchoolDeletionRequestRepository schoolDeletionRequestRepository;
     @Mock private SchoolAdminCascadeDeletionService cascadeDeletionService;
+    @Mock private NotificationService notificationService;
     private final SchoolMapper schoolMapper = new SchoolMapper();
     private SchoolAccessValidator accessValidator;
 
@@ -54,7 +56,7 @@ class SchoolServiceImplTest {
         accessValidator = new SchoolAccessValidator(schoolRepository);
         schoolService = new SchoolServiceImpl(schoolRepository, schoolMapper, userRepository, roleRepository,
                 passwordEncoder, currentUserService, schoolDeletionRequestRepository, cascadeDeletionService,
-                accessValidator);
+                accessValidator, notificationService);
     }
 
     private User userWithId(Long id) {

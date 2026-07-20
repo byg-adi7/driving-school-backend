@@ -15,6 +15,9 @@ import com.drivingschool.backend.school.repository.SchoolDeletionRequestReposito
 import com.drivingschool.backend.school.repository.SchoolRepository;
 import com.drivingschool.backend.school.validator.SchoolAccessValidator;
 import com.drivingschool.backend.security.CurrentUserService;
+import com.drivingschool.backend.notification.dto.SendNotificationRequest;
+import com.drivingschool.backend.notification.enums.NotificationChannel;
+import com.drivingschool.backend.notification.service.NotificationService;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +42,7 @@ public class SchoolServiceImpl implements SchoolService {
     private final SchoolDeletionRequestRepository schoolDeletionRequestRepository;
     private final SchoolAdminCascadeDeletionService cascadeDeletionService;
     private final SchoolAccessValidator accessValidator;
+    private final NotificationService notificationService;
 
     public SchoolServiceImpl(SchoolRepository schoolRepository,
                              SchoolMapper schoolMapper,
@@ -48,7 +52,8 @@ public class SchoolServiceImpl implements SchoolService {
                              CurrentUserService currentUserService,
                              SchoolDeletionRequestRepository schoolDeletionRequestRepository,
                              SchoolAdminCascadeDeletionService cascadeDeletionService,
-                             SchoolAccessValidator accessValidator) {
+                             SchoolAccessValidator accessValidator,
+                             NotificationService notificationService) {
         this.schoolRepository = schoolRepository;
         this.schoolMapper = schoolMapper;
         this.userRepository = userRepository;
@@ -58,6 +63,7 @@ public class SchoolServiceImpl implements SchoolService {
         this.schoolDeletionRequestRepository = schoolDeletionRequestRepository;
         this.cascadeDeletionService = cascadeDeletionService;
         this.accessValidator = accessValidator;
+        this.notificationService = notificationService;
     }
 
     @Override
@@ -94,6 +100,7 @@ public class SchoolServiceImpl implements SchoolService {
         School savedSchool = schoolRepository.save(school);
 
         log.info("Bootstrap admin created school '{}' with owning admin {}", savedSchool.getName(), savedAdmin.getEmail());
+        sendWelcomeNotification(savedAdmin);
         return SchoolWithAdminResponse.builder()
                 .school(schoolMapper.toResponse(savedSchool))
                 .adminUserId(savedAdmin.getId())
@@ -159,5 +166,18 @@ public class SchoolServiceImpl implements SchoolService {
                 });
 
         cascadeDeletionService.execute(schoolId);
+    }
+
+    private void sendWelcomeNotification(User user) {
+        try {
+            notificationService.send(SendNotificationRequest.builder()
+                    .userId(user.getId())
+                    .subject("Welcome to Aidly!")
+                    .body("Your admin account is ready. We're glad to have you on board - explore around and let us know if you need anything.")
+                    .channel(NotificationChannel.IN_APP)
+                    .build());
+        } catch (Exception ex) {
+            log.warn("Failed to send welcome notification: userId={}", user.getId(), ex);
+        }
     }
 }
