@@ -14,15 +14,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_users_single_bootstrap_admin ON users (boot
 -- unique in both directions. Deleting the owning admin's User row cascades
 -- straight through to the school (SchoolAdminCascadeDeletionService only
 -- ever calls userRepository.delete() on the admin, never
--- schoolRepository.delete() directly). No production data exists yet
--- (pre-launch, same basis as V8/V9/V11/V13), so this is added and tightened
--- directly rather than nullable-then-backfilled.
+-- schoolRepository.delete() directly).
 -- ============================================================
 ALTER TABLE schools ADD COLUMN owning_admin_id BIGINT;
 ALTER TABLE schools
     ADD CONSTRAINT fk_schools_owning_admin FOREIGN KEY (owning_admin_id) REFERENCES users(id) ON DELETE CASCADE;
 ALTER TABLE schools ADD CONSTRAINT uk_schools_owning_admin UNIQUE (owning_admin_id);
-ALTER TABLE schools ALTER COLUMN owning_admin_id SET NOT NULL;
 
 -- ============================================================
 -- student_profiles.school_id / instructor_profiles.school_id: were
@@ -31,6 +28,9 @@ ALTER TABLE schools ALTER COLUMN owning_admin_id SET NOT NULL;
 -- intentional operation (bootstrap-direct or bootstrap-approved), so
 -- RESTRICT must become CASCADE for it to actually succeed instead of
 -- failing with a foreign key violation.
+--
+-- This must run before the orphan cleanup below, so that cleanup can
+-- actually cascade instead of hitting the same RESTRICT violation itself.
 -- ============================================================
 ALTER TABLE student_profiles DROP CONSTRAINT IF EXISTS student_profiles_school_id_fkey;
 ALTER TABLE student_profiles
@@ -68,6 +68,21 @@ ALTER TABLE points_transactions
 ALTER TABLE badge_awards DROP CONSTRAINT IF EXISTS fk_badge_awards_student;
 ALTER TABLE badge_awards
     ADD CONSTRAINT fk_badge_awards_student FOREIGN KEY (student_id) REFERENCES student_profiles(id) ON DELETE CASCADE;
+
+-- ============================================================
+-- Pre-launch cleanup: this migration originally assumed no schools existed
+-- yet and set owning_admin_id NOT NULL directly. By the time it actually
+-- shipped, five schools already existed - all confirmed QA/route-testing
+-- artifacts (e.g. "Route Test School 1784337672", "Sentry Test School
+-- 1784381714"), none with any real owning admin to backfill from, since no
+-- admin-school relationship existed anywhere before this migration. They're
+-- deleted here (cascading through their student/instructor profiles,
+-- bookings, and gamification rows via the FKs just tightened above) so the
+-- NOT NULL constraint below can apply cleanly.
+-- ============================================================
+DELETE FROM schools WHERE owning_admin_id IS NULL;
+
+ALTER TABLE schools ALTER COLUMN owning_admin_id SET NOT NULL;
 
 -- ============================================================
 -- school_deletion_requests: a non-bootstrap admin can never delete their
