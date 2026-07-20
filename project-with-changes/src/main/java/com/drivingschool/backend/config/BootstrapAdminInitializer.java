@@ -24,11 +24,11 @@ import java.util.Optional;
  *
  * Behavior:
  * - Runs AFTER RoleDataSeeder (@Order(2) vs @Order(1))
- * - Checks if ADMIN role exists
- * - Checks if ADMIN user already exists
+ * - Checks if an admin with the configured email already exists; if so, self-heals
+ *   the bootstrap_admin flag onto that row if not already set, then stops - this
+ *   runs regardless of whether bootstrap creation is enabled below
  * - If bootstrap enabled AND no admin exists: creates one
- * - If admin exists: does nothing (idempotent)
- * - If bootstrap disabled: does nothing
+ * - If bootstrap disabled AND no admin exists: does nothing
  *
  * Configuration (application.yml):
  *   app:
@@ -90,6 +90,28 @@ public class BootstrapAdminInitializer implements CommandLineRunner {
     @Transactional
     public void run(String... args) {
         try {
+            // Self-heal the flag onto the pre-existing row FIRST, independent of whether
+            // bootstrap creation is enabled: no SQL migration can know the env-configured
+            // bootstrap email, so this is the only place that can backfill it for an
+            // environment that already had a bootstrap admin before this flag was
+            // introduced. This must run even when creation is disabled below - otherwise
+            // an environment that (correctly) disables re-creation after its first deploy
+            // never heals the flag onto its real admin, silently leaving it permissions-
+            // deficient (unable to create/delete schools or other admins).
+            Optional<User> existing = userRepository.findByEmail(
+                    environment.getProperty("app.bootstrap.admin.email")
+            );
+            if (existing.isPresent()) {
+                User admin = existing.get();
+                if (!admin.isBootstrapAdmin()) {
+                    admin.markAsBootstrapAdmin();
+                    userRepository.save(admin);
+                    log.info("Marked pre-existing bootstrap admin row as bootstrap admin: {}", admin.getEmail());
+                }
+                log.info("Bootstrap admin already exists ({}), skipping creation", admin.getEmail());
+                return;
+            }
+
             // Check if bootstrap is enabled
             boolean bootstrapEnabled = environment.getProperty(
                     "app.bootstrap.admin.enabled",
@@ -108,26 +130,6 @@ public class BootstrapAdminInitializer implements CommandLineRunner {
 
             if (adminRole == null) {
                 log.warn("ADMIN role does not exist, cannot create bootstrap admin");
-                return;
-            }
-
-            // Check if any ADMIN user already exists
-            Optional<User> existing = userRepository.findByEmail(
-                    environment.getProperty("app.bootstrap.admin.email")
-            );
-
-            if (existing.isPresent()) {
-                User admin = existing.get();
-                // Self-heal the flag onto the pre-existing row: no SQL migration can know
-                // the env-configured bootstrap email, so this is the only place that can
-                // backfill it for an environment that already had a bootstrap admin before
-                // this flag was introduced.
-                if (!admin.isBootstrapAdmin()) {
-                    admin.markAsBootstrapAdmin();
-                    userRepository.save(admin);
-                    log.info("Marked pre-existing bootstrap admin row as bootstrap admin: {}", admin.getEmail());
-                }
-                log.info("Bootstrap admin already exists ({}), skipping creation", admin.getEmail());
                 return;
             }
 

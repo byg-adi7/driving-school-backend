@@ -82,7 +82,6 @@ class BootstrapAdminInitializerTest {
         environment.setProperty("app.bootstrap.admin.email", "admin@example.com");
         User existingAdmin = User.builder().build();
         existingAdmin.markAsBootstrapAdmin();
-        when(roleRepository.findByName(RoleName.ADMIN)).thenReturn(Optional.of(adminRole()));
         when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(existingAdmin));
 
         initializer.run();
@@ -100,13 +99,36 @@ class BootstrapAdminInitializerTest {
         environment.setProperty("app.bootstrap.admin.enabled", "true");
         environment.setProperty("app.bootstrap.admin.email", "admin@example.com");
         User legacyAdmin = User.builder().build();
-        when(roleRepository.findByName(RoleName.ADMIN)).thenReturn(Optional.of(adminRole()));
         when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(legacyAdmin));
 
         initializer.run();
 
         assertThat(legacyAdmin.isBootstrapAdmin()).isTrue();
         verify(userRepository).save(legacyAdmin);
+    }
+
+    /**
+     * Regression test: a production deploy with app.bootstrap.admin.enabled=false
+     * (deliberately, to stop re-creation once the real admin already exists) must
+     * still self-heal the bootstrap_admin flag onto that pre-existing row. Previously
+     * the self-heal was nested inside the "enabled" branch, so a disabled deploy
+     * skipped it entirely - silently leaving the real admin without bootstrap
+     * privileges (unable to create/delete schools or other admins, School ownership
+     * lookups treating it as a regular non-owning admin) with no error surfaced
+     * anywhere until a caller's own request failed downstream.
+     */
+    @Test
+    void run_bootstrapDisabledButAdminExistsUnflagged_selfHealsAnyway() {
+        environment.setProperty("app.bootstrap.admin.enabled", "false");
+        environment.setProperty("app.bootstrap.admin.email", "admin@example.com");
+        User legacyAdmin = User.builder().build();
+        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(legacyAdmin));
+
+        initializer.run();
+
+        assertThat(legacyAdmin.isBootstrapAdmin()).isTrue();
+        verify(userRepository).save(legacyAdmin);
+        verify(roleRepository, never()).findByName(any());
     }
 
     @Test
