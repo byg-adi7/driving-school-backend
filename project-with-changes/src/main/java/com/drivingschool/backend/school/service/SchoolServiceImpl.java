@@ -68,7 +68,7 @@ public class SchoolServiceImpl implements SchoolService {
 
     @Override
     @Transactional
-    @CacheEvict(value = "schools", allEntries = true)
+    @CacheEvict(value = {"schools", "schools-active"}, allEntries = true)
     public SchoolWithAdminResponse createWithAdmin(CreateSchoolWithAdminRequest request) {
         if (!currentUserService.isBootstrapAdmin()) {
             throw new BadRequestException("Only the bootstrap admin can create a school");
@@ -123,7 +123,7 @@ public class SchoolServiceImpl implements SchoolService {
     }
 
     @Override
-    @Cacheable(value = "schools", key = "'active:' + #callerId")
+    @Cacheable(value = "schools-active", key = "#callerId")
     @Transactional(readOnly = true)
     public List<SchoolResponse> getAllActive(Long callerId, String callerRole) {
         if ("ADMIN".equals(callerRole)) {

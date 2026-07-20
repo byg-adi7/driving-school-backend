@@ -36,7 +36,7 @@ public class SchoolAdminCascadeDeletionServiceImpl implements SchoolAdminCascade
 
     @Override
     @Transactional
-    @CacheEvict(value = "schools", allEntries = true)
+    @CacheEvict(value = {"schools", "schools-active"}, allEntries = true)
     public void execute(Long schoolId) {
         School school = schoolRepository.findById(schoolId)
                 .orElseThrow(() -> new ResourceNotFoundException("School", "id", schoolId));
