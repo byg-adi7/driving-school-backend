@@ -112,18 +112,34 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private void notifyStudent(Booking booking, StudentProfile student, InstructorProfile instructor) {
+        String subject = "Upcoming practical lesson scheduled";
+        String body = "Your instructor %s %s has scheduled a %s lesson for you on %s. Please be present at the driving school at the scheduled time."
+                .formatted(instructor.getFirstName(), instructor.getLastName(),
+                        booking.getBookingType(), booking.getScheduledAt().format(NOTIFICATION_DATE_FORMAT));
+
         try {
-            SendNotificationRequest request = SendNotificationRequest.builder()
+            notificationService.send(SendNotificationRequest.builder()
                     .userId(student.getUser().getId())
-                    .subject("Upcoming practical lesson scheduled")
-                    .body("Your instructor %s %s has scheduled a %s lesson for you on %s. Please be present at the driving school at the scheduled time."
-                            .formatted(instructor.getFirstName(), instructor.getLastName(),
-                                    booking.getBookingType(), booking.getScheduledAt().format(NOTIFICATION_DATE_FORMAT)))
+                    .subject(subject)
+                    .body(body)
                     .channel(NotificationChannel.IN_APP)
-                    .build();
-            notificationService.send(request);
+                    .build());
         } catch (Exception ex) {
-            log.warn("Failed to send booking notification: bookingId={}, studentId={}", booking.getId(), student.getId(), ex);
+            log.warn("Failed to send booking IN_APP notification: bookingId={}, studentId={}", booking.getId(), student.getId(), ex);
+        }
+        // A scheduled lesson is time-sensitive enough to be worth a text, not
+        // just an in-app entry the student might not see in time - falls back
+        // to a harmless FAILED record until Twilio credentials are set, and
+        // to "no phone number on file" if the student never added one.
+        try {
+            notificationService.send(SendNotificationRequest.builder()
+                    .userId(student.getUser().getId())
+                    .subject(subject)
+                    .body(body)
+                    .channel(NotificationChannel.SMS)
+                    .build());
+        } catch (Exception ex) {
+            log.warn("Failed to send booking SMS notification: bookingId={}, studentId={}", booking.getId(), student.getId(), ex);
         }
     }
 
@@ -158,17 +174,32 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private void notifyStudentCancelled(Booking booking) {
+        String subject = "Practical lesson cancelled";
+        String body = "Your %s lesson scheduled for %s has been cancelled."
+                .formatted(booking.getBookingType(), booking.getScheduledAt().format(NOTIFICATION_DATE_FORMAT));
+
         try {
-            SendNotificationRequest request = SendNotificationRequest.builder()
+            notificationService.send(SendNotificationRequest.builder()
                     .userId(booking.getStudent().getUser().getId())
-                    .subject("Practical lesson cancelled")
-                    .body("Your %s lesson scheduled for %s has been cancelled."
-                            .formatted(booking.getBookingType(), booking.getScheduledAt().format(NOTIFICATION_DATE_FORMAT)))
+                    .subject(subject)
+                    .body(body)
                     .channel(NotificationChannel.IN_APP)
-                    .build();
-            notificationService.send(request);
+                    .build());
         } catch (Exception ex) {
-            log.warn("Failed to send cancellation notification: bookingId={}", booking.getId(), ex);
+            log.warn("Failed to send cancellation IN_APP notification: bookingId={}", booking.getId(), ex);
+        }
+        // A cancellation is the clearest case for SMS in this app - a student
+        // who doesn't check the app in time could otherwise show up for a
+        // lesson that no longer exists.
+        try {
+            notificationService.send(SendNotificationRequest.builder()
+                    .userId(booking.getStudent().getUser().getId())
+                    .subject(subject)
+                    .body(body)
+                    .channel(NotificationChannel.SMS)
+                    .build());
+        } catch (Exception ex) {
+            log.warn("Failed to send cancellation SMS notification: bookingId={}", booking.getId(), ex);
         }
     }
 
