@@ -136,6 +136,7 @@ public class SchoolDeletionRequestServiceImpl implements SchoolDeletionRequestSe
         request.reject(caller, body != null ? body.getReviewNotes() : null);
         SchoolDeletionRequest saved = requestRepository.save(request);
         log.info("Bootstrap admin {} rejected school deletion request id={}", caller.getEmail(), requestId);
+        notifyRequesterOfRejection(saved);
         return mapper.toResponse(saved);
     }
 
@@ -178,5 +179,38 @@ public class SchoolDeletionRequestServiceImpl implements SchoolDeletionRequestSe
                 log.warn("Failed to send school deletion request IN_APP notification: requestId={}", request.getId(), ex);
             }
         });
+    }
+
+    // requestedBy is nullable (ON DELETE SET NULL) - guard against the requester's
+    // account having been removed some other way between request and review.
+    private void notifyRequesterOfRejection(SchoolDeletionRequest request) {
+        User requester = request.getRequestedBy();
+        if (requester == null) {
+            return;
+        }
+        String reviewNotes = request.getReviewNotes();
+        String body = reviewNotes != null && !reviewNotes.isBlank()
+                ? "Your request to delete school \"%s\" was rejected. Reviewer notes: %s".formatted(request.getSchoolName(), reviewNotes)
+                : "Your request to delete school \"%s\" was rejected.".formatted(request.getSchoolName());
+        try {
+            notificationService.send(SendNotificationRequest.builder()
+                    .userId(requester.getId())
+                    .subject("School deletion request rejected")
+                    .body(body)
+                    .channel(NotificationChannel.IN_APP)
+                    .build());
+        } catch (Exception ex) {
+            log.warn("Failed to send deletion-rejected IN_APP notification: requestId={}", request.getId(), ex);
+        }
+        try {
+            notificationService.send(SendNotificationRequest.builder()
+                    .userId(requester.getId())
+                    .subject("School deletion request rejected")
+                    .body(body)
+                    .channel(NotificationChannel.EMAIL)
+                    .build());
+        } catch (Exception ex) {
+            log.warn("Failed to send deletion-rejected EMAIL notification: requestId={}", request.getId(), ex);
+        }
     }
 }

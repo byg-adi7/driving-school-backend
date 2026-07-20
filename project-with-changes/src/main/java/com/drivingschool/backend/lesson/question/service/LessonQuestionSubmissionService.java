@@ -10,11 +10,17 @@ import com.drivingschool.backend.lesson.question.enums.QuestionStatus;
 import com.drivingschool.backend.lesson.question.repository.LessonQuestionStatusHistoryRepository;
 import com.drivingschool.backend.lesson.question.repository.LessonQuestionSubmissionRepository;
 import com.drivingschool.backend.lesson.question.validator.QuestionValidator;
+import com.drivingschool.backend.instructor.entity.InstructorProfile;
+import com.drivingschool.backend.student.entity.StudentProfile;
+import com.drivingschool.backend.notification.dto.SendNotificationRequest;
+import com.drivingschool.backend.notification.enums.NotificationChannel;
+import com.drivingschool.backend.notification.service.NotificationService;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -22,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class LessonQuestionSubmissionService {
@@ -33,6 +40,7 @@ public class LessonQuestionSubmissionService {
     private final InstructorProfileRepository instructorProfileRepository;
     private final LessonQuestionStatusHistoryService statusHistoryService;
     private final QuestionValidator validator;
+    private final NotificationService notificationService;
 
     @Transactional
     public QuestionResponse submitQuestion(SubmitQuestionRequest request, Long callerId) {
@@ -65,6 +73,10 @@ public class LessonQuestionSubmissionService {
                 "Question submitted"
         );
 
+        if (instructorProfile != null) {
+            notifyInstructorOfNewQuestion(savedQuestion, studentProfile, instructorProfile);
+        }
+
         return mapToResponse(savedQuestion);
     }
 
@@ -94,6 +106,8 @@ public class LessonQuestionSubmissionService {
                 instructorProfile.getUser(),
                 "Response provided"
         );
+
+        notifyStudentOfResponse(updatedQuestion, instructorProfile);
 
         return mapToResponse(updatedQuestion);
     }
@@ -193,6 +207,37 @@ public class LessonQuestionSubmissionService {
                 .respondedByName(question.getRespondedBy() != null ? question.getRespondedBy().getDisplayName() : null)
                 .respondedAt(question.getRespondedAt())
                 .build();
+    }
+
+    private void notifyInstructorOfNewQuestion(LessonQuestionSubmission question, StudentProfile student,
+                                                InstructorProfile instructor) {
+        try {
+            notificationService.send(SendNotificationRequest.builder()
+                    .userId(instructor.getUser().getId())
+                    .subject("New question from " + student.getFirstName() + " " + student.getLastName())
+                    .body("%s asked: %s".formatted(
+                            student.getFirstName() + " " + student.getLastName(), question.getSubject()))
+                    .channel(NotificationChannel.IN_APP)
+                    .build());
+        } catch (Exception ex) {
+            log.warn("Failed to send new-question notification: questionId={}, instructorId={}",
+                    question.getId(), instructor.getId(), ex);
+        }
+    }
+
+    private void notifyStudentOfResponse(LessonQuestionSubmission question, InstructorProfile instructor) {
+        try {
+            notificationService.send(SendNotificationRequest.builder()
+                    .userId(question.getStudent().getUser().getId())
+                    .subject("Your question was answered")
+                    .body("%s %s answered your question: %s".formatted(
+                            instructor.getFirstName(), instructor.getLastName(), question.getSubject()))
+                    .channel(NotificationChannel.IN_APP)
+                    .build());
+        } catch (Exception ex) {
+            log.warn("Failed to send question-answered notification: questionId={}, studentId={}",
+                    question.getId(), question.getStudent().getId(), ex);
+        }
     }
 }
 

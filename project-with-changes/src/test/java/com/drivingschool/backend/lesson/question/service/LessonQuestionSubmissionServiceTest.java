@@ -13,6 +13,7 @@ import com.drivingschool.backend.lesson.question.enums.QuestionStatus;
 import com.drivingschool.backend.lesson.question.repository.LessonQuestionStatusHistoryRepository;
 import com.drivingschool.backend.lesson.question.repository.LessonQuestionSubmissionRepository;
 import com.drivingschool.backend.lesson.question.validator.QuestionValidator;
+import com.drivingschool.backend.notification.service.NotificationService;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
@@ -49,6 +50,7 @@ class LessonQuestionSubmissionServiceTest {
     @Mock private StudentProfileRepository studentProfileRepository;
     @Mock private InstructorProfileRepository instructorProfileRepository;
     @Mock private LessonQuestionStatusHistoryService statusHistoryService;
+    @Mock private NotificationService notificationService;
     private final QuestionValidator validator = new QuestionValidator();
 
     private LessonQuestionSubmissionService service;
@@ -57,7 +59,7 @@ class LessonQuestionSubmissionServiceTest {
     void setUp() {
         service = new LessonQuestionSubmissionService(questionRepository, statusHistoryRepository,
                 userRepository, studentProfileRepository, instructorProfileRepository,
-                statusHistoryService, validator);
+                statusHistoryService, validator, notificationService);
     }
 
     private User userWithId(Long id) {

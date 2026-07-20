@@ -281,6 +281,7 @@ public class AuthServiceImpl implements AuthService {
         passwordResetTokenRepository.save(resetToken);
 
         log.info("Password reset completed for user: {}", user.getEmail());
+        sendPasswordChangedNotification(user);
     }
 
     @Override
@@ -383,6 +384,23 @@ public class AuthServiceImpl implements AuthService {
                     .build());
         } catch (Exception ex) {
             log.warn("Failed to send welcome notification: userId={}", user.getId(), ex);
+        }
+    }
+
+    // EMAIL, not IN_APP: this is a security signal the user should see even if
+    // the reset means they can no longer log in to check in-app notifications
+    // (e.g. an attacker changed the password), and it should reach them
+    // wherever they actually are, not just inside the app.
+    private void sendPasswordChangedNotification(User user) {
+        try {
+            notificationService.send(SendNotificationRequest.builder()
+                    .userId(user.getId())
+                    .subject("Your Aidly password was changed")
+                    .body("Your password was just changed. If this wasn't you, please contact support immediately.")
+                    .channel(NotificationChannel.EMAIL)
+                    .build());
+        } catch (Exception ex) {
+            log.warn("Failed to send password-changed notification: userId={}", user.getId(), ex);
         }
     }
 
