@@ -91,20 +91,26 @@ public final class JwtTokenProvider {
         return TOKEN_TYPE_REFRESH.equals(parseClaims(token).get(CLAIM_TOKEN_TYPE, String.class));
     }
 
+    // These all represent routine, client-side authentication outcomes (an
+    // expired session, a tampered/garbled token, a bot probing endpoints) -
+    // not server-side failures. Logging them at ERROR level was feeding
+    // Sentry's logging integration one event per occurrence, so an expired
+    // token - which every client hits eventually - showed up as a recurring
+    // application error rather than the routine 401 it actually is.
     public boolean validateToken(String token) {
         try {
             parseClaims(token);
             return true;
         } catch (SignatureException ex) {
-            log.error("Invalid JWT signature");
+            log.warn("Invalid JWT signature");
         } catch (MalformedJwtException ex) {
-            log.error("Invalid JWT token");
+            log.warn("Invalid JWT token");
         } catch (ExpiredJwtException ex) {
-            log.error("Expired JWT token");
+            log.debug("Expired JWT token");
         } catch (UnsupportedJwtException ex) {
-            log.error("Unsupported JWT token");
+            log.warn("Unsupported JWT token");
         } catch (IllegalArgumentException ex) {
-            log.error("JWT claims string is empty");
+            log.warn("JWT claims string is empty");
         }
         return false;
     }

@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.HashMap;
 import java.util.List;
@@ -29,6 +31,18 @@ public class GlobalExceptionHandler {
         log.warn("Resource not found: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.failure(ex.getMessage()));
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleOptimisticLockingFailure(ObjectOptimisticLockingFailureException ex) {
+        // Thrown when an UPDATE affects zero rows because the row was already
+        // deleted - e.g. a bulk deleteAllByIdInBatch on a user whose
+        // notifications/etc. cascade-delete at the DB level, racing a request
+        // that loaded the row a moment earlier. The record is simply gone, so
+        // this is a 404, not a server bug - not worth alerting on.
+        log.warn("Optimistic locking failure - row no longer exists: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.failure("The resource you were updating no longer exists"));
     }
 
     @ExceptionHandler(BadRequestException.class)
@@ -100,6 +114,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoHandlerFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleNotFound(NoHandlerFoundException ex) {
         log.warn("Endpoint not found: {} {}", ex.getHttpMethod(), ex.getRequestURL());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.failure("Endpoint not found"));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(NoResourceFoundException ex) {
+        // Spring's static-resource handler throws this for any GET that
+        // didn't match an @RequestMapping - a plain "no such route" case
+        // (typo'd path, stale frontend link, bot probing). Without this
+        // handler it fell through to the generic Exception handler below and
+        // came back as a 500, which is both the wrong status code and noisy
+        // in Sentry for what's really a 404.
+        log.warn("No matching route: {}", ex.getResourcePath());
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.failure("Endpoint not found"));
     }
