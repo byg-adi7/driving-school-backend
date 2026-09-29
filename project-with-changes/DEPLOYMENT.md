@@ -76,8 +76,11 @@ In the web service's **Environment** tab, set:
 | `OPENROUTE_API_KEY` | your [OpenRouteService](https://openrouteservice.org/dev/#/signup) API key | Powers practical-lesson route generation (`POST /api/v1/lesson-routes/generate`). No fallback default - if unset, route generation fails at request time with a clear error (logged, not fatal to the app) rather than silently calling the real API with a fake key. Free tier is generous enough for this app's scale; the directions endpoint URL and request timeout are fixed app config, not something you need to set. |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` | your Twilio credentials and sending number | Optional. SMS (booking scheduled/cancelled texts) only sends once all three are set; until then the SMS channel is a safe no-op that records the message as FAILED. |
 
-`PORT` is injected by Render automatically (10000 by default) and is already wired up
-(`application-prod.yml` reads `${PORT:8080}`) - don't set it yourself.
+`PORT` is injected by Render automatically (10000 by default) and is already wired up -
+both `application.yml` and `application-prod.yml` read `${PORT:8080}`, so the app listens
+on Render's port whatever profile is active. Don't set it yourself. (The base config used
+to read `SERVER_PORT` instead, so without the `prod` profile the app listened on 8080
+while Render expected `PORT`, and the deploy failed - fixed 2026-09-29.)
 
 **Storage:** the app supports three providers via `STORAGE_PROVIDER`:
 
