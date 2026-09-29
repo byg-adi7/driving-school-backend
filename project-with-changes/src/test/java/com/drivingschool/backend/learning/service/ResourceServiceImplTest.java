@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -44,6 +45,7 @@ class ResourceServiceImplTest {
 
     @Mock private ResourceRepository resourceRepository;
     @Mock private VideoLessonRepository videoLessonRepository;
+    @Mock private com.drivingschool.backend.storage.StorageService storageService;
     private final LearningMapper mapper = new LearningMapper();
     private final LearningValidator validator = new LearningValidator(adminSchoolScope, callerSchoolScope);
 
@@ -51,7 +53,7 @@ class ResourceServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        resourceService = new ResourceServiceImpl(resourceRepository, videoLessonRepository, mapper, validator);
+        resourceService = new ResourceServiceImpl(resourceRepository, videoLessonRepository, mapper, validator, storageService);
     }
 
     private User userWithId(Long id) {
@@ -166,5 +168,163 @@ class ResourceServiceImplTest {
 
         assertThat(result).hasSize(1);
         assertThatCode(() -> resourceService.getByLesson(10L, 999L, "STUDENT")).doesNotThrowAnyException();
+    }
+
+    // --- uploaded files ---
+
+    private static final org.springframework.mock.web.MockMultipartFile PDF =
+            new org.springframework.mock.web.MockMultipartFile("file", "handbook.pdf", "application/pdf", new byte[]{1, 2, 3});
+
+    private com.drivingschool.backend.storage.StoredFile stored(String path) {
+        return com.drivingschool.backend.storage.StoredFile.builder()
+                .storagePath(path).fileName("handbook.pdf").fileSize(3L).contentType("application/pdf").build();
+    }
+
+    private Resource uploadedResourceFor(VideoLesson lesson) {
+        Resource resource = Resource.uploaded("Handbook", ResourceType.PDF, lesson, stored("course-resources/10/old.pdf"));
+        ReflectionTestUtils.setField(resource, "id", 31L);
+        return resource;
+    }
+
+    @Test
+    void upload_asOwningInstructor_storesThePdfAndReturnsADownloadUrl() throws Exception {
+        VideoLesson lesson = lessonFor(userWithId(1L), true);
+        when(videoLessonRepository.findById(10L)).thenReturn(Optional.of(lesson));
+        when(storageService.store(PDF, "course-resources", "10")).thenReturn(stored("course-resources/10/new.pdf"));
+        when(resourceRepository.save(any(Resource.class))).thenAnswer(inv -> {
+            Resource r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 40L);
+            return r;
+        });
+
+        ResourceResponse response = resourceService.upload(10L, "Highway Code", PDF, 1L, "INSTRUCTOR");
+
+        assertThat(response.isUploaded()).isTrue();
+        assertThat(response.getFileUrl()).isNull();
+        assertThat(response.getFileName()).isEqualTo("handbook.pdf");
+        assertThat(response.getDownloadUrl()).isEqualTo("/api/v1/resources/40/download");
+        assertThat(response.getType()).isEqualTo(ResourceType.PDF);
+    }
+
+    @Test
+    void upload_asUnrelatedInstructor_isDeniedBeforeAnythingIsStored() throws Exception {
+        when(videoLessonRepository.findById(10L)).thenReturn(Optional.of(lessonFor(userWithId(1L), true)));
+
+        assertThatThrownBy(() -> resourceService.upload(10L, "Highway Code", PDF, 999L, "INSTRUCTOR"))
+                .isInstanceOf(BadRequestException.class);
+        verify(storageService, never()).store(any(), any(), any());
+    }
+
+    @Test
+    void upload_fileRejectedByTheValidator_isABadRequest() throws Exception {
+        when(videoLessonRepository.findById(10L)).thenReturn(Optional.of(lessonFor(userWithId(1L), true)));
+        when(storageService.store(PDF, "course-resources", "10")).thenThrow(new IllegalArgumentException("Only PDF files are allowed"));
+
+        assertThatThrownBy(() -> resourceService.upload(10L, "Highway Code", PDF, 1L, "INSTRUCTOR"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Only PDF");
+        verify(resourceRepository, never()).save(any());
+    }
+
+    @Test
+    void upload_blankTitle_isRejected() {
+        when(videoLessonRepository.findById(10L)).thenReturn(Optional.of(lessonFor(userWithId(1L), true)));
+
+        assertThatThrownBy(() -> resourceService.upload(10L, " ", PDF, 1L, "INSTRUCTOR"))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void rename_asOwningInstructor_changesTheTitle() {
+        Resource resource = uploadedResourceFor(lessonFor(userWithId(1L), true));
+        when(resourceRepository.findById(31L)).thenReturn(Optional.of(resource));
+
+        ResourceResponse response = resourceService.rename(31L,
+                com.drivingschool.backend.learning.dto.UpdateResourceRequest.builder().title("Highway Code 2026").build(), 1L, "INSTRUCTOR");
+
+        assertThat(response.getTitle()).isEqualTo("Highway Code 2026");
+    }
+
+    @Test
+    void replaceFile_storesTheNewFileThenDeletesTheOldOne() throws Exception {
+        Resource resource = uploadedResourceFor(lessonFor(userWithId(1L), true));
+        when(resourceRepository.findById(31L)).thenReturn(Optional.of(resource));
+        when(storageService.store(PDF, "course-resources", "10")).thenReturn(stored("course-resources/10/new.pdf"));
+
+        resourceService.replaceFile(31L, PDF, 1L, "INSTRUCTOR");
+
+        assertThat(resource.getStoragePath()).isEqualTo("course-resources/10/new.pdf");
+        verify(storageService).delete("course-resources/10/old.pdf");
+    }
+
+    @Test
+    void replaceFile_insideATransaction_deletesTheOldFileOnlyAfterCommit() throws Exception {
+        Resource resource = uploadedResourceFor(lessonFor(userWithId(1L), true));
+        when(resourceRepository.findById(31L)).thenReturn(Optional.of(resource));
+        when(storageService.store(PDF, "course-resources", "10")).thenReturn(stored("course-resources/10/new.pdf"));
+
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            resourceService.replaceFile(31L, PDF, 1L, "INSTRUCTOR");
+            verify(storageService, never()).delete(any());
+            org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(org.springframework.transaction.support.TransactionSynchronization::afterCommit);
+            verify(storageService).delete("course-resources/10/old.pdf");
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void replaceFile_onALinkResource_isRejected() {
+        Resource link = resourceFor(lessonFor(userWithId(1L), true));
+        when(resourceRepository.findById(30L)).thenReturn(Optional.of(link));
+
+        assertThatThrownBy(() -> resourceService.replaceFile(30L, PDF, 1L, "INSTRUCTOR"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("external link");
+    }
+
+    @Test
+    void delete_uploadedResource_alsoDeletesTheStoredFile() throws Exception {
+        Resource resource = uploadedResourceFor(lessonFor(userWithId(1L), true));
+        when(resourceRepository.findById(31L)).thenReturn(Optional.of(resource));
+
+        resourceService.delete(31L, 1L, "INSTRUCTOR");
+
+        verify(resourceRepository).delete(resource);
+        verify(storageService).delete("course-resources/10/old.pdf");
+    }
+
+    @Test
+    void download_publishedLesson_openToAStudentOfTheSchool() throws Exception {
+        Resource resource = uploadedResourceFor(lessonFor(userWithId(1L), true));
+        org.springframework.core.io.Resource content = new org.springframework.core.io.ByteArrayResource(new byte[]{1});
+        when(resourceRepository.findById(31L)).thenReturn(Optional.of(resource));
+        when(storageService.load("course-resources/10/old.pdf")).thenReturn(content);
+
+        ResourceService.DownloadableFile file = resourceService.download(31L, 5L, "STUDENT");
+
+        assertThat(file.content()).isSameAs(content);
+        assertThat(file.fileName()).isEqualTo("handbook.pdf");
+    }
+
+    @Test
+    void download_unpublishedLesson_deniedToStudents() {
+        Resource resource = uploadedResourceFor(lessonFor(userWithId(1L), false));
+        when(resourceRepository.findById(31L)).thenReturn(Optional.of(resource));
+
+        assertThatThrownBy(() -> resourceService.download(31L, 5L, "STUDENT"))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void download_anotherSchoolsResource_isDenied() {
+        Resource resource = uploadedResourceFor(lessonFor(userWithId(1L), true));
+        when(resourceRepository.findById(31L)).thenReturn(Optional.of(resource));
+        doThrow(new BadRequestException("no access")).when(callerSchoolScope).requireSameSchool(any());
+
+        assertThatThrownBy(() -> resourceService.download(31L, 5L, "STUDENT"))
+                .isInstanceOf(BadRequestException.class);
     }
 }

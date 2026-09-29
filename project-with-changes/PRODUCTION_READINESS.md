@@ -291,3 +291,15 @@ The frontend had to poll for new messages. Per the product owner's choice (WebSo
 - **Single-instance by design**: Spring's in-memory broker only reaches sessions on the same instance, and Render assigns WebSocket connections to random instances - keep the service at one instance, or add a Redis pub/sub relay before scaling out (`DEPLOYMENT.md`).
 
 **Verified:** 17 new unit tests (interceptor, publisher, per-service events) plus `RealtimeWebSocketIntegrationTest` - the first real-port test in the suite: a real STOMP client over a real WebSocket against the running server, driven through the REST API (runs in CI; the Testcontainers holder was extracted into `IntegrationTestContainers` so both harnesses share one Postgres/Redis pair). Live against the built jar on a fresh Postgres + Redis: a 14-check Node STOMP client run passed - token/refresh-token/deleted-account rejection, subscription rules, heartbeat negotiation, every event type reaching the right user and no one else, ISO timestamps.
+
+---
+
+## Course Materials: PDF Upload, Edit and Delete (2026-09-29)
+
+Instructors had no way to upload a PDF for their students: lesson-note attachments are real uploads but private to one student, and course resources (visible to every student of the school) only stored a pasted external URL, with no upload, no edit and no download endpoint. Per the product owner's choice, course resources now support real files, reusing the attachment storage path (`StorageService` - Cloudinary in prod - plus `FileValidator`'s PDF signature/active-content checks):
+
+- `POST /resources/upload` (multipart: lessonId, title, file), `PUT /resources/{id}` (rename), `PUT /resources/{id}/file` (replace - new file stored first, old one deleted only after the change commits), `DELETE` (removes the stored file too, after commit), and `GET /resources/{id}/download` (`?inline=true` to view in the browser instead of saving), gated by the same school/published/owner rules as viewing the lesson.
+- Migration V17: `file_url` becomes nullable and `storage_path`/`file_name`/`file_size`/`content_type` are added, with a check constraint that a resource is exactly one of a link or an uploaded file. Existing link resources are unchanged.
+- The frontend guide now tells the frontend to use the OS file picker (device storage plus the cloud storage apps it already exposes) and drag-and-drop, how to view/download with the token (fetch + object URL), and lists provider-specific pickers (Google Picker, Dropbox Chooser) as optional external integrations needing the owner's approval.
+
+**Verified:** 17 new unit/security tests; full unit suite green. Live against the built jar on a fresh Postgres + Redis (V17 applied): a 14-check run passed - students blocked from uploading/deleting, a spoofed non-PDF rejected, a real PDF uploaded, listed, downloaded byte-for-byte, served inline for viewing, blocked for another school's student and for anonymous callers, renamed, replaced (students get the new bytes), deleted - and no stored file left orphaned on disk.

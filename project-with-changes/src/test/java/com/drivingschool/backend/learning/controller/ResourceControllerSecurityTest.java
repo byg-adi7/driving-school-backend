@@ -101,4 +101,63 @@ class ResourceControllerSecurityTest {
                         .with(SecurityTestUtils.withUser(1L, RoleName.STUDENT)))
                 .andExpect(status().isOk());
     }
+
+    // --- uploaded files ---
+
+    private static final org.springframework.mock.web.MockMultipartFile PDF =
+            new org.springframework.mock.web.MockMultipartFile("file", "handbook.pdf", "application/pdf", new byte[]{1});
+
+    @Test
+    @org.springframework.security.test.context.support.WithMockUser(roles = "STUDENT")
+    void upload_asStudent_isForbidden() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/v1/resources/upload")
+                        .file(PDF).param("lessonId", "10").param("title", "Handbook").with(csrf()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void upload_asInstructor_isCreated() throws Exception {
+        org.mockito.Mockito.when(resourceService.upload(org.mockito.ArgumentMatchers.eq(10L), org.mockito.ArgumentMatchers.eq("Handbook"),
+                        org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(ResourceResponse.builder().id(40L).uploaded(true).build());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/v1/resources/upload")
+                        .file(PDF).param("lessonId", "10").param("title", "Handbook")
+                        .with(csrf())
+                        .with(SecurityTestUtils.withUser(1L, RoleName.INSTRUCTOR)))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @org.springframework.security.test.context.support.WithMockUser(roles = "STUDENT")
+    void rename_asStudent_isForbidden() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/resources/1").with(csrf())
+                        .contentType("application/json").content("{\"title\":\"x\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void download_asStudent_streamsThePdfAsAnAttachment() throws Exception {
+        org.mockito.Mockito.when(resourceService.download(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new ResourceService.DownloadableFile(
+                        new org.springframework.core.io.ByteArrayResource(new byte[]{1, 2}), "Highway Code.pdf"));
+
+        mockMvc.perform(get("/api/v1/resources/1/download").with(SecurityTestUtils.withUser(5L, RoleName.STUDENT)))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Content-Disposition", org.hamcrest.Matchers.containsString("Highway")));
+    }
+
+    @Test
+    void download_inline_isServedForViewingInTheBrowser() throws Exception {
+        org.mockito.Mockito.when(resourceService.download(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new ResourceService.DownloadableFile(
+                        new org.springframework.core.io.ByteArrayResource(new byte[]{1, 2}), "handbook.pdf"));
+
+        mockMvc.perform(get("/api/v1/resources/1/download").param("inline", "true")
+                        .with(SecurityTestUtils.withUser(5L, RoleName.STUDENT)))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Content-Disposition", org.hamcrest.Matchers.startsWith("inline")));
+    }
 }

@@ -42,6 +42,10 @@ public class LearningMapper {
                 .title(resource.getTitle())
                 .fileUrl(resource.getFileUrl())
                 .type(resource.getType())
+                .uploaded(resource.isUploaded())
+                .fileName(resource.getFileName())
+                .fileSize(resource.getFileSize())
+                .downloadUrl(resource.isUploaded() ? "/api/v1/resources/" + resource.getId() + "/download" : null)
                 .build();
     }
 }
