@@ -9,7 +9,7 @@ import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.notification.enums.NotificationStatus;
 import com.drivingschool.backend.notification.mapper.NotificationMapper;
 import com.drivingschool.backend.notification.repository.NotificationRepository;
-import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
@@ -30,20 +30,20 @@ public class NotificationServiceImpl implements NotificationService {
     private final List<NotificationSender> notificationSenders;
     private final NotificationMapper notificationMapper;
     private final CurrentUserService currentUserService;
-    private final AdminSchoolScope adminSchoolScope;
+    private final CallerSchoolScope callerSchoolScope;
 
     public NotificationServiceImpl(UserRepository userRepository,
                                    NotificationRepository notificationRepository,
                                    List<NotificationSender> notificationSenders,
                                    NotificationMapper notificationMapper,
                                    CurrentUserService currentUserService,
-                                   AdminSchoolScope adminSchoolScope) {
+                                   CallerSchoolScope callerSchoolScope) {
         this.userRepository = userRepository;
         this.notificationRepository = notificationRepository;
         this.notificationSenders = notificationSenders;
         this.notificationMapper = notificationMapper;
         this.currentUserService = currentUserService;
-        this.adminSchoolScope = adminSchoolScope;
+        this.callerSchoolScope = callerSchoolScope;
     }
 
     @Override
@@ -83,7 +83,7 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Transactional
     public NotificationResponse sendAsCaller(SendNotificationRequest request) {
-        adminSchoolScope.requireAccessToUser(request.getUserId());
+        callerSchoolScope.requireSameSchoolAsUser(request.getUserId());
         return send(request);
     }
 

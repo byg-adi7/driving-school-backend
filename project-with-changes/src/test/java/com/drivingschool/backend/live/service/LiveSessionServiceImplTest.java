@@ -243,4 +243,19 @@ class LiveSessionServiceImplTest {
                 .isInstanceOf(BadRequestException.class);
         verify(attendanceRepository, never()).save(any());
     }
+
+    @Test
+    void schedule_atAnotherSchoolThanTheInstructors_isDenied() {
+        InstructorProfile instructor = instructorProfile(50L, userWithId(1L), schoolWithId(5L));
+        var request = com.drivingschool.backend.live.dto.CreateLiveSessionRequest.builder()
+                .instructorId(50L).schoolId(6L).title("Intro")
+                .scheduledAt(java.time.LocalDateTime.now().plusDays(1)).durationMinutes(60).build();
+
+        when(instructorProfileRepository.findById(50L)).thenReturn(Optional.of(instructor));
+
+        assertThatThrownBy(() -> service.schedule(request, 1L, "INSTRUCTOR"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("instructor's own school");
+        verify(liveSessionRepository, never()).save(any());
+    }
 }

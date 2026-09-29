@@ -88,7 +88,8 @@ public class AdminSchoolScope {
                 .orElseThrow(() -> new BadRequestException("You do not own a school")));
     }
 
-    private Long schoolIdOfUser(Long userId) {
+    /** The school of a user's student profile, instructor profile, or owned school - null if none. */
+    Long schoolIdOfUser(Long userId) {
         return studentProfileRepository.findByUserId(userId)
                 .map(profile -> profile.getSchool().getId())
                 .or(() -> instructorProfileRepository.findByUserId(userId)

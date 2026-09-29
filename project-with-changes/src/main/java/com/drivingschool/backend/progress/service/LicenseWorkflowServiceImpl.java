@@ -54,7 +54,7 @@ public class LicenseWorkflowServiceImpl implements LicenseWorkflowService {
     public LicenseWorkflowResponse initializeForStudent(Long studentId) {
         StudentProfile student = studentProfileRepository.findById(studentId)
                 .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "id", studentId));
-        validator.validateAdminSchoolAccess(student);
+        validator.validateSchoolAccess(student);
 
         if (licenseWorkflowRepository.existsByStudentId(studentId)) {
             throw new BadRequestException("License workflow already exists for student");
@@ -86,7 +86,7 @@ public class LicenseWorkflowServiceImpl implements LicenseWorkflowService {
     @Transactional
     public LicenseWorkflowResponse markQuizPassed(Long studentId) {
         LicenseWorkflow workflow = findByStudentId(studentId);
-        validator.validateAdminSchoolAccess(workflow.getStudent());
+        validator.validateSchoolAccess(workflow.getStudent());
         workflow.markQuizPassed();
         return licenseWorkflowMapper.toResponse(licenseWorkflowRepository.save(workflow));
     }
@@ -96,6 +96,7 @@ public class LicenseWorkflowServiceImpl implements LicenseWorkflowService {
     public LicenseWorkflowResponse advanceStage(Long studentId, AdvanceStageRequest request,
                                                 Long instructorUserId) {
         LicenseWorkflow workflow = findByStudentId(studentId);
+        validator.validateSchoolAccess(workflow.getStudent());
         LicenseStage targetStage = request.getTargetStage();
 
         if (LicenseWorkflow.isInstructorControlledStage(targetStage)) {

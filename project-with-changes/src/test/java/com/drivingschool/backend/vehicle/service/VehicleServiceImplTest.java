@@ -5,6 +5,7 @@ import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.repository.SchoolRepository;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.vehicle.dto.CreateVehicleRequest;
 import com.drivingschool.backend.vehicle.dto.UpdateVehicleRequest;
 import com.drivingschool.backend.vehicle.dto.UpdateVehicleStatusRequest;
@@ -37,13 +38,15 @@ class VehicleServiceImplTest {
     @Mock private VehicleRepository vehicleRepository;
     @Mock private SchoolRepository schoolRepository;
     @Mock private AdminSchoolScope adminSchoolScope;
+    @Mock private CallerSchoolScope callerSchoolScope;
     private final VehicleMapper vehicleMapper = new VehicleMapper();
 
     private VehicleServiceImpl vehicleService;
 
     @BeforeEach
     void setUp() {
-        vehicleService = new VehicleServiceImpl(vehicleRepository, schoolRepository, vehicleMapper, adminSchoolScope);
+        vehicleService = new VehicleServiceImpl(vehicleRepository, schoolRepository, vehicleMapper, adminSchoolScope,
+                callerSchoolScope);
     }
 
     private School schoolWithId(Long id) {
@@ -219,5 +222,22 @@ class VehicleServiceImplTest {
         assertThatThrownBy(() -> vehicleService.updateStatus(5L, request))
                 .isInstanceOf(BadRequestException.class);
         verify(vehicleRepository, never()).save(any());
+    }
+
+    @Test
+    void getById_vehicleOfAnotherSchool_throwsBadRequestException() {
+        Vehicle vehicle = vehicleWithId(5L, schoolWithId(2L), VehicleStatus.AVAILABLE);
+        when(vehicleRepository.findById(5L)).thenReturn(Optional.of(vehicle));
+        doThrow(new BadRequestException("no access")).when(callerSchoolScope).requireSameSchool(2L);
+
+        assertThatThrownBy(() -> vehicleService.getById(5L)).isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void getBySchool_anotherSchool_throwsBadRequestException() {
+        doThrow(new BadRequestException("no access")).when(callerSchoolScope).requireSameSchool(2L);
+
+        assertThatThrownBy(() -> vehicleService.getBySchool(2L)).isInstanceOf(BadRequestException.class);
+        verify(vehicleRepository, never()).findBySchoolId(any());
     }
 }

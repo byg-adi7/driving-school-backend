@@ -2,13 +2,14 @@ package com.drivingschool.backend.progress.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
+import com.drivingschool.backend.progress.dto.AdvanceStageRequest;
 import com.drivingschool.backend.progress.entity.LicenseWorkflow;
 import com.drivingschool.backend.progress.enums.LicenseStage;
 import com.drivingschool.backend.progress.mapper.LicenseWorkflowMapper;
 import com.drivingschool.backend.progress.repository.LicenseWorkflowRepository;
 import com.drivingschool.backend.progress.validator.LicenseWorkflowValidator;
 import com.drivingschool.backend.school.entity.School;
-import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.user.entity.User;
@@ -34,13 +35,13 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class LicenseWorkflowServiceImplTest {
 
-    private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+    private final CallerSchoolScope callerSchoolScope = mock(CallerSchoolScope.class);
 
     @Mock private LicenseWorkflowRepository licenseWorkflowRepository;
     @Mock private StudentProfileRepository studentProfileRepository;
     @Mock private InstructorProfileRepository instructorProfileRepository;
     private final LicenseWorkflowMapper licenseWorkflowMapper = new LicenseWorkflowMapper();
-    private final LicenseWorkflowValidator validator = new LicenseWorkflowValidator(adminSchoolScope);
+    private final LicenseWorkflowValidator validator = new LicenseWorkflowValidator(callerSchoolScope);
 
     private LicenseWorkflowServiceImpl service;
 
@@ -126,10 +127,10 @@ class LicenseWorkflowServiceImplTest {
     // and verified the correct student. No change needed/tested at the service level.
 
     @Test
-    void initializeForStudent_asAdminOfAnotherSchool_isDeniedBeforeRevealingWorkflowState() {
+    void initializeForStudent_asCallerOfAnotherSchool_isDeniedBeforeRevealingWorkflowState() {
         LicenseWorkflow existing = workflowFor(userWithId(1L));
         when(studentProfileRepository.findById(20L)).thenReturn(Optional.of(existing.getStudent()));
-        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+        doThrow(new BadRequestException("no access")).when(callerSchoolScope).requireSameSchool(any());
 
         assertThatThrownBy(() -> service.initializeForStudent(20L))
                 .isInstanceOf(BadRequestException.class)
@@ -139,12 +140,24 @@ class LicenseWorkflowServiceImplTest {
     }
 
     @Test
-    void markQuizPassed_asAdminOfAnotherSchool_isDenied() {
+    void markQuizPassed_asCallerOfAnotherSchool_isDenied() {
         LicenseWorkflow workflow = workflowFor(userWithId(1L));
         when(licenseWorkflowRepository.findByStudentId(20L)).thenReturn(Optional.of(workflow));
-        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+        doThrow(new BadRequestException("no access")).when(callerSchoolScope).requireSameSchool(any());
 
         assertThatThrownBy(() -> service.markQuizPassed(20L))
+                .isInstanceOf(BadRequestException.class);
+        verify(licenseWorkflowRepository, never()).save(any());
+    }
+
+    @Test
+    void advanceStage_asInstructorOfAnotherSchool_isDenied() {
+        LicenseWorkflow workflow = workflowFor(userWithId(1L));
+        when(licenseWorkflowRepository.findByStudentId(20L)).thenReturn(Optional.of(workflow));
+        doThrow(new BadRequestException("no access")).when(callerSchoolScope).requireSameSchool(any());
+        AdvanceStageRequest request = AdvanceStageRequest.builder().targetStage(LicenseStage.THEORY_COMPLETED).build();
+
+        assertThatThrownBy(() -> service.advanceStage(20L, request, 5L))
                 .isInstanceOf(BadRequestException.class);
         verify(licenseWorkflowRepository, never()).save(any());
     }

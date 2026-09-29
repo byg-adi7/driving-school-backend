@@ -8,7 +8,7 @@ import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.notification.enums.NotificationStatus;
 import com.drivingschool.backend.notification.mapper.NotificationMapper;
 import com.drivingschool.backend.notification.repository.NotificationRepository;
-import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.user.entity.User;
@@ -43,7 +43,7 @@ class NotificationServiceImplTest {
     @Mock private NotificationSender emailSender;
     @Mock private NotificationSender smsSender;
     @Mock private CurrentUserService currentUserService;
-    @Mock private AdminSchoolScope adminSchoolScope;
+    @Mock private CallerSchoolScope callerSchoolScope;
     private final NotificationMapper notificationMapper = new NotificationMapper();
 
     private NotificationServiceImpl service;
@@ -71,7 +71,7 @@ class NotificationServiceImplTest {
         org.mockito.Mockito.lenient().when(emailSender.supports(NotificationChannel.EMAIL)).thenReturn(true);
         org.mockito.Mockito.lenient().when(smsSender.supports(NotificationChannel.EMAIL)).thenReturn(false);
         service = new NotificationServiceImpl(userRepository, notificationRepository,
-                List.of(emailSender, smsSender), notificationMapper, currentUserService, adminSchoolScope);
+                List.of(emailSender, smsSender), notificationMapper, currentUserService, callerSchoolScope);
     }
 
     @Test
@@ -231,7 +231,7 @@ class NotificationServiceImplTest {
     void sendAsCaller_recipientOutsideCallersSchool_isRejectedBeforeAnythingIsSaved() {
         SendNotificationRequest request = SendNotificationRequest.builder()
                 .userId(1L).subject("x").body("y").channel(NotificationChannel.EMAIL).build();
-        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccessToUser(1L);
+        doThrow(new BadRequestException("no access")).when(callerSchoolScope).requireSameSchoolAsUser(1L);
 
         assertThatThrownBy(() -> service.sendAsCaller(request)).isInstanceOf(BadRequestException.class);
         verify(notificationRepository, never()).save(any());

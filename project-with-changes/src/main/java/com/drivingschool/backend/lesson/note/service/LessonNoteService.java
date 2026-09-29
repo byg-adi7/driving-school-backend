@@ -52,6 +52,12 @@ public class LessonNoteService {
 
         var student = studentProfileRepository.findById(request.getStudentId())
                 .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "id", request.getStudentId()));
+        // Writing a note is also what grants an instructor read access to the student's
+        // whole note history (see LessonNoteValidator.validateStudentNotesAccess), so this
+        // must never be possible across schools.
+        if (!student.getSchool().getId().equals(instructor.getSchool().getId())) {
+            throw new BadRequestException("You can only write lesson notes for students in your own school");
+        }
 
         Booking booking = null;
         if (request.getBookingId() != null) {

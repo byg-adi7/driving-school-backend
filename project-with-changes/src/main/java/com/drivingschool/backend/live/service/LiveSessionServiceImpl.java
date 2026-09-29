@@ -73,6 +73,11 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         InstructorProfile instructor = instructorProfileRepository.findById(request.getInstructorId())
                 .orElseThrow(() -> new ResourceNotFoundException("InstructorProfile", "id", request.getInstructorId()));
         validator.validateInstructorSelf(instructor, userId, role);
+        // The session (and its meeting URL) is shown to every student of request.schoolId,
+        // so it must be the instructor's own school.
+        if (!instructor.getSchool().getId().equals(request.getSchoolId())) {
+            throw new BadRequestException("A session can only be scheduled at its instructor's own school");
+        }
 
         School school = schoolRepository.findById(request.getSchoolId())
                 .orElseThrow(() -> new ResourceNotFoundException("School", "id", request.getSchoolId()));

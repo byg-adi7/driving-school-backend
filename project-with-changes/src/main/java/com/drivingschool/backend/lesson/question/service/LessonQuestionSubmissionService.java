@@ -1,5 +1,6 @@
 package com.drivingschool.backend.lesson.question.service;
 
+import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.lesson.question.dto.QuestionResponse;
 import com.drivingschool.backend.lesson.question.dto.RespondToQuestionRequest;
@@ -53,6 +54,10 @@ public class LessonQuestionSubmissionService {
                 ? instructorProfileRepository.findById(request.getAssignedInstructorId())
                 .orElseThrow(() -> new ResourceNotFoundException("InstructorProfile", "id", request.getAssignedInstructorId()))
                 : null;
+        if (instructorProfile != null
+                && !instructorProfile.getSchool().getId().equals(studentProfile.getSchool().getId())) {
+            throw new BadRequestException("You can only assign a question to an instructor at your own school");
+        }
 
         LessonQuestionSubmission question = LessonQuestionSubmission.builder()
                 .student(studentProfile)
@@ -170,7 +175,7 @@ public class LessonQuestionSubmissionService {
 
     @Transactional(readOnly = true)
     public Page<QuestionResponse> getQuestionsByStatus(QuestionStatus status, Pageable pageable) {
-        Page<LessonQuestionSubmission> questions = validator.adminSchoolFilter()
+        Page<LessonQuestionSubmission> questions = validator.listingSchoolFilter()
                 .map(schoolId -> questionRepository.findByStatusAndSchoolId(status, schoolId, pageable))
                 .orElseGet(() -> questionRepository.findByStatus(status, pageable));
         return questions.map(this::mapToResponse);
