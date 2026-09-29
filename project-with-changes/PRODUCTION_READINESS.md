@@ -366,3 +366,11 @@ A wrong password still gets a plain 401, so the flow can't be used to probe acco
 - A 29-check live smoke run of the built jar against fresh Postgres and Redis: V18 applied, 5-miss lockout, and the auth rate limit on the new endpoints.
 - Existing integration tests mark the accounts they create as verified before logging in; the flow itself has its own test.
 - Full unit suite: 787 tests, green.
+
+## Verification Switch Until a Verified Email Domain Exists (2026-09-29)
+
+Without its own domain, Resend only delivers from `onboarding@resend.dev` to the Resend account owner's address. So with verification required, no other new account could ever log in. The product owner chose an on/off switch: `VERIFICATION_REQUIRED` (`app.verification.required`, default `true`).
+
+- **When `false`:** login returns tokens for unverified accounts without a challenge, and the app logs a warning at startup. Accounts stay unverified, so each one verifies at its next login once the switch is back on. That way every real account's email still gets checked eventually.
+- **Going live:** the steps are in `DEPLOYMENT.md` ("Going live with account verification").
+- **Tests:** 1 new unit test. Full unit suite: 788 tests, green.

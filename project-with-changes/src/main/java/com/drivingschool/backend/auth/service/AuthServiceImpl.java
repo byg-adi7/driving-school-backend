@@ -76,6 +76,7 @@ public class AuthServiceImpl implements AuthService {
     private final AdminSchoolScope adminSchoolScope;
     private final AccountVerificationService accountVerificationService;
     private final long passwordResetTokenExpirationMs;
+    private final boolean verificationRequired;
 
     public AuthServiceImpl(AuthenticationManager authenticationManager,
                            UserRepository userRepository,
@@ -96,7 +97,8 @@ public class AuthServiceImpl implements AuthService {
                            NotificationService notificationService,
                            AdminSchoolScope adminSchoolScope,
                            AccountVerificationService accountVerificationService,
-                           @Value("${app.password-reset.token-expiration-ms}") long passwordResetTokenExpirationMs) {
+                           @Value("${app.password-reset.token-expiration-ms}") long passwordResetTokenExpirationMs,
+                           @Value("${app.verification.required:true}") boolean verificationRequired) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -117,6 +119,11 @@ public class AuthServiceImpl implements AuthService {
         this.adminSchoolScope = adminSchoolScope;
         this.accountVerificationService = accountVerificationService;
         this.passwordResetTokenExpirationMs = passwordResetTokenExpirationMs;
+        this.verificationRequired = verificationRequired;
+        if (!verificationRequired) {
+            log.warn("Account verification is OFF (VERIFICATION_REQUIRED=false): unverified accounts log in "
+                    + "without a one-time code. Turn it back on once email delivery works for real users.");
+        }
     }
 
     @Override
@@ -129,8 +136,9 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findById(principal.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", principal.getId()));
 
-        // Right password, unverified account: no tokens until a one-time code is confirmed.
-        if (!user.isAccountVerified()) {
+        // Right password, unverified account: no tokens until a one-time code is confirmed -
+        // unless verification is switched off (e.g. before a verified email domain exists).
+        if (verificationRequired && !user.isAccountVerified()) {
             log.info("Login for unverified account {} - verification required", user.getEmail());
             return AuthResponse.builder()
                     .verificationRequired(true)

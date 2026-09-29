@@ -42,7 +42,7 @@ d.CODE("https://<your-service-name>.onrender.com/api/v1")
 d.P("Every path in this document is relative to that base (e.g. \"POST /auth/login\" "
     "means POST https://.../api/v1/auth/login). Every endpoint requires a Bearer JWT "
     "in the Authorization header EXCEPT: login, refresh-token, forgot-password, "
-    "reset-password. (Register also requires a token — see the Authentication section, "
+    "reset-password, verification/send and verification/confirm. (Register also requires a token — see the Authentication section, "
     "there is no public self-registration.)")
 
 # =====================================================================
@@ -70,7 +70,9 @@ d.T(["Code", "Meaning in this API"], [
     ["401", "Missing/expired/invalid access token"],
     ["403", "Authenticated, but wrong role or not the owner of this resource"],
     ["404", "Resource doesn't exist"],
+    ["429", "Too many requests - rate limit, or a verification code resent too soon (see the Retry-After header)"],
     ["500", "Unexpected server error — report these, they're bugs"],
+    ["503", "An outside provider (email, WhatsApp) failed or isn't configured - safe to retry"],
 ])
 
 d.H(2, "Pagination")
@@ -168,6 +170,11 @@ d.P("Every account created from now on must be verified before it can log in: at
     "their profile) by entering a 6-digit code. Accounts that existed before this "
     "feature, and the bootstrap admin, are already verified and never see this. Once "
     "verified, an account logs in normally forever after.")
+d.P("The backend can run with verification switched OFF (it is, until the company has "
+    "its own email domain): then login simply returns tokens for everyone and "
+    "verificationRequired never appears. Build the verification screens anyway and always "
+    "branch on verificationRequired - when the backend switches verification on, the app "
+    "must work with no frontend release.")
 d.P("The flow to build:", bold=True)
 d.BULLETS([
     "1. POST /auth/login with the right password answers 200 with verificationRequired=true, "
@@ -1137,11 +1144,19 @@ d.P("The REST endpoints stay the source of truth - events are a signal to update
 d.H(1, "Notifications")
 d.P("Two things happen here: the system automatically sends notifications for certain "
     "events, and admins/instructors can manually send an arbitrary notification via "
-    "POST /send. Automatic IN_APP notifications currently fire on: a booking being "
-    "created, a booking being cancelled, a quiz being submitted (pass or fail), a new "
-    "lesson note being added, and a driving assessment being recorded. All of these are "
-    "fire-and-forget from the frontend's perspective — nothing needs to be called to "
-    "trigger them, they're side effects of the endpoints above.")
+    "POST /send. Automatic IN_APP notifications currently fire on: a new account "
+    "(welcome), a booking being created or cancelled (also by SMS when configured), a "
+    "quiz being submitted (pass or fail), a new lesson note, a driving assessment being "
+    "recorded, a new direct message, a school announcement (also by email), a lesson "
+    "question being asked (to the instructor(s)) or answered (to the student), and school "
+    "deletion requests (to the admins involved). A password change sends an EMAIL. All of "
+    "these are side effects of the endpoints above - nothing needs to be called to trigger "
+    "them.")
+d.P("They're created a moment AFTER the action succeeds, never as part of it: a "
+    "notification that fails can't fail the booking/message/etc., and a booking that fails "
+    "never notifies anyone. So don't re-fetch GET /notifications/me in the same breath as "
+    "the action's response and expect the new item - update from the NOTIFICATION_CREATED "
+    "WebSocket event instead (see \"Realtime updates\"), or refresh a bit later.")
 
 ENDPOINT("POST", "/notifications/send", "Send a notification to a user.", access="ADMIN or INSTRUCTOR",
     request=[
@@ -1246,6 +1261,8 @@ d.BULLETS([
     "endpoints listed at the top of this document.",
     "On a 401, call POST /auth/refresh-token once, retry the original request with the new "
     "access token; if that also fails, force the user back to the login screen.",
+    "Login has TWO possible successful answers: tokens, or verificationRequired + a "
+    "challenge (see item 13). Check for verificationRequired first.",
     "Call POST /auth/logout on explicit sign-out to revoke the refresh token server-side, "
     "then clear local storage.",
 ])
@@ -1363,6 +1380,26 @@ d.BULLETS([
     "Student: the lesson's materials list with \"View\" (opens the PDF, ?inline=true) and "
     "\"Download\" buttons - both fetch with the access token (see GET "
     "/resources/{id}/download).",
+])
+
+d.H(2, "13. Account verification screens")
+d.BULLETS([
+    "After login: if the response has verificationRequired=true, go to a \"Verify your "
+    "account\" screen instead of the app (full flow and error cases in the Authentication "
+    "section).",
+    "Channel choice: show EMAIL always, WHATSAPP only when listed, with maskedEmail / "
+    "maskedPhone so the user knows where the code goes.",
+    "Code entry: a 6-digit numeric input (inputmode=numeric, autocomplete=one-time-code so "
+    "phones can auto-fill it), a Resend button disabled for the Retry-After seconds after "
+    "each send, and the server's message shown on a wrong code.",
+    "On success the confirm response IS the login response - store the tokens and continue "
+    "exactly as after a normal login (GET /auth/me, route by role).",
+    "Keep challengeId in memory only; on \"please log in again\" or after 15 minutes, send "
+    "the user back to the login form.",
+    "Wherever a phone number is entered (the register form, profile edit), collect it with "
+    "the country code (+233...) - it's what makes WhatsApp codes possible.",
+    "Verification may be switched off on the backend for now (login then just returns "
+    "tokens). Build and keep this flow anyway - it turns on without a frontend release.",
 ])
 
 d.save("Frontend_API_Guide.docx")

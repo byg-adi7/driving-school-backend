@@ -104,7 +104,7 @@ class AuthServiceImplTest {
                 schoolRepository, studentProfileRepository, instructorProfileRepository,
                 passwordEncoder, jwtTokenProvider, authMapper, currentUserMapper, currentUserService,
                 passwordResetTokenRepository, emailService, userService, refreshTokenRevocationService,
-                schoolDeletionRequestService, notificationService, adminSchoolScope, accountVerificationService, 3_600_000L);
+                schoolDeletionRequestService, notificationService, adminSchoolScope, accountVerificationService, 3_600_000L, true);
     }
 
     // --- login ---
@@ -639,5 +639,32 @@ class AuthServiceImplTest {
         assertThat(authService.confirmVerification(request)).isSameAs(tokens);
         assertThat(user.getLastLoginAt()).isNotNull();
         verify(userRepository).save(user);
+    }
+
+    @Test
+    void login_forAnUnverifiedAccount_withVerificationSwitchedOff_returnsTokens() {
+        AuthServiceImpl withoutVerification = new AuthServiceImpl(authenticationManager, userRepository, roleRepository,
+                schoolRepository, studentProfileRepository, instructorProfileRepository,
+                passwordEncoder, jwtTokenProvider, authMapper, currentUserMapper, currentUserService,
+                passwordResetTokenRepository, emailService, userService, refreshTokenRevocationService,
+                schoolDeletionRequestService, notificationService, adminSchoolScope, accountVerificationService,
+                3_600_000L, false);
+        User user = User.builder().email("new@example.com").password("encoded").enabled(true).emailVerified(false).build();
+        ReflectionTestUtils.setField(user, "id", 1L);
+        user.addRole(Role.builder().name(RoleName.STUDENT).build());
+        UserPrincipal principal = new UserPrincipal(user);
+        AuthResponse tokens = AuthResponse.builder().accessToken("access").build();
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(authentication);
+        when(authentication.getPrincipal()).thenReturn(principal);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(jwtTokenProvider.generateAccessToken(principal)).thenReturn("access");
+        when(jwtTokenProvider.generateRefreshToken(principal)).thenReturn("refresh");
+        when(authMapper.toAuthResponse(user, "access", "refresh")).thenReturn(tokens);
+
+        AuthResponse response = withoutVerification.login(LoginRequest.builder().email("new@example.com").password("password123").build());
+
+        assertThat(response).isSameAs(tokens);
+        assertThat(user.isAccountVerified()).isFalse(); // still has to verify once the switch is back on
+        verify(accountVerificationService, never()).startChallenge(any());
     }
 }
