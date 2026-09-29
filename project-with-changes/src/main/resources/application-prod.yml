@@ -114,6 +114,12 @@ sentry:
   traces-sample-rate: ${SENTRY_TRACES_SAMPLE_RATE:0.1}
 
 app:
+  rate-limit:
+    # Render puts Cloudflare in front of every request: getRemoteAddr() is a Cloudflare
+    # edge server, and CF-Connecting-IP is the only header that carries the visitor's IP
+    # without being forgeable (see ClientIpResolver). Override/blank it only if the app
+    # is ever deployed somewhere that ISN'T behind Cloudflare.
+    client-ip-header: ${RATE_LIMIT_CLIENT_IP_HEADER:CF-Connecting-IP}
   jwt:
     secret: ${JWT_SECRET}
     access-token-expiration-ms: ${JWT_ACCESS_EXPIRATION_MS:900000}
