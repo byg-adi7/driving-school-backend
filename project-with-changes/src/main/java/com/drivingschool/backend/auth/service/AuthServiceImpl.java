@@ -238,6 +238,17 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new AuthenticationException("User not found"));
 
+        // Login refuses disabled accounts, but refresh never re-checked - so a
+        // soft-deleted or admin-disabled user holding a refresh token could keep
+        // minting new access tokens indefinitely.
+        if (!user.isEnabled() || user.isDeleted()) {
+            throw new AuthenticationException("Account is disabled");
+        }
+        long issuedAtSeconds = jwtTokenProvider.getIssuedAtFromToken(refreshToken).getTime() / 1000;
+        if (refreshTokenRevocationService.isRevokedForUser(user.getId(), issuedAtSeconds)) {
+            throw new AuthenticationException("Refresh token has been revoked");
+        }
+
         UserPrincipal principal = new UserPrincipal(user);
         String newAccessToken = jwtTokenProvider.generateAccessToken(principal);
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(principal);
@@ -283,6 +294,11 @@ public class AuthServiceImpl implements AuthService {
 
         resetToken.markUsed();
         passwordResetTokenRepository.save(resetToken);
+
+        // A reset is often a response to a compromised account: every session that
+        // existed before it must stop being refreshable. (Already-issued access tokens
+        // still run out their short lifetime - 15 minutes by default.)
+        refreshTokenRevocationService.revokeAllForUser(user.getId(), jwtTokenProvider.getRefreshTokenExpirationMs());
 
         log.info("Password reset completed for user: {}", user.getEmail());
         sendPasswordChangedNotification(user);

@@ -214,3 +214,11 @@ The school/admin ownership model (one owning admin per school, plus the unrestri
 **Live-verified** against a freshly migrated Postgres 16 + Redis 7 (throwaway containers, the app booted from the built jar - all 15 migrations applied, `ddl-auto=validate` passed, and the new school-filtered JPQL parsed at startup): a 25-check HTTP smoke run mirroring the integration test passed in full. (`AdminSchoolScopingIntegrationTest` itself can't run on this machine for the same Testcontainers/Docker Engine API quirk documented above - CI is its real verification.)
 
 **Found while verifying, not fixed (unrelated, pre-existing):** the `@Async` `SmsNotificationSender` (and likely the email sender, same pattern) runs before the caller's transaction commits, so when a booking-created SMS is dispatched it tries to update a `Notification` row that isn't committed yet and fails with `ObjectOptimisticLockingFailureException` - the SMS delivery record is left at `PENDING`. Only surfaces once real async dispatch races a still-open transaction; fix is to dispatch after commit (e.g. `@TransactionalEventListener(phase = AFTER_COMMIT)`).
+
+---
+
+## Disabled Accounts and Refresh Tokens (2026-09-29)
+
+Login already refused disabled accounts (Spring's `DaoAuthenticationProvider` status check), but nothing after login re-checked: `POST /auth/refresh-token` never looked at `enabled`/`deletedAt`, so a soft-deleted or admin-disabled user holding a refresh token could keep minting access tokens indefinitely, and `JwtAuthenticationFilter` kept authenticating an already-issued access token for its full lifetime. A password reset also revoked nothing - a leaked refresh token stayed valid for its full 7 days even after the owner reset their password.
+
+**Fixed:** the filter no longer authenticates a disabled/soft-deleted account's token; refresh rejects disabled/soft-deleted accounts; and a password reset revokes every refresh token already issued to that user via a per-user Redis marker (`revoked:refresh:user:{id}` = the reset's epoch second, TTL = the refresh-token lifetime, compared against the token's `iat` - strictly-before, in whole seconds, since JWT `iat` has one-second precision). Already-issued access tokens still run out their short lifetime (15 minutes by default) after a reset. 9 new tests; full unit suite 678 green.

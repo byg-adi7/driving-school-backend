@@ -72,6 +72,7 @@ class JwtAuthenticationFilterTest {
         when(jwtTokenProvider.isAccessToken("good-token")).thenReturn(true);
         when(jwtTokenProvider.getEmailFromToken("good-token")).thenReturn("user@example.com");
         when(userDetailsService.loadUserByUsername("user@example.com")).thenReturn(userPrincipal);
+        when(userPrincipal.isEnabled()).thenReturn(true);
 
         filter.doFilter(request, response, filterChain);
 
@@ -101,6 +102,27 @@ class JwtAuthenticationFilterTest {
                 .thenThrow(new UsernameNotFoundException("User not found with email: deleted@example.com"));
 
         assertThatCode(() -> filter.doFilter(request, response, filterChain)).doesNotThrowAnyException();
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(filterChain).doFilter(request, response);
+    }
+
+    /**
+     * An access token issued before the account was disabled or soft-deleted must stop
+     * authenticating immediately, not keep working until it expires.
+     */
+    @Test
+    void doFilter_validTokenForDisabledUser_proceedsUnauthenticated() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/schools");
+        request.addHeader("Authorization", "Bearer good-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        when(jwtTokenProvider.validateToken("good-token")).thenReturn(true);
+        when(jwtTokenProvider.isAccessToken("good-token")).thenReturn(true);
+        when(jwtTokenProvider.getEmailFromToken("good-token")).thenReturn("disabled@example.com");
+        when(userDetailsService.loadUserByUsername("disabled@example.com")).thenReturn(userPrincipal);
+        when(userPrincipal.isEnabled()).thenReturn(false);
+
+        filter.doFilter(request, response, filterChain);
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
         verify(filterChain).doFilter(request, response);

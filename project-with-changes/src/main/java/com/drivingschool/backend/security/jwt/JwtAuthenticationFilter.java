@@ -45,10 +45,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                // Login already refuses disabled accounts (DaoAuthenticationProvider's
+                // status check), but an access token issued before an admin disabled or
+                // soft-deleted the account would otherwise keep working until it expired.
+                if (userDetails.isEnabled()) {
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                } else {
+                    log.debug("JWT belongs to a disabled account: {}", email);
+                }
             } catch (UsernameNotFoundException ex) {
                 // The token is well-formed/signed and not expired, but the account it
                 // names no longer exists - e.g. a bootstrap-approved school/admin

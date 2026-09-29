@@ -83,6 +83,14 @@ public final class JwtTokenProvider {
         return parseClaims(token).getExpiration();
     }
 
+    public Date getIssuedAtFromToken(String token) {
+        return parseClaims(token).getIssuedAt();
+    }
+
+    public long getRefreshTokenExpirationMs() {
+        return jwtProperties.getRefreshTokenExpirationMs();
+    }
+
     public boolean isAccessToken(String token) {
         return TOKEN_TYPE_ACCESS.equals(parseClaims(token).get(CLAIM_TOKEN_TYPE, String.class));
     }
