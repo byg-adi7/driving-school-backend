@@ -62,6 +62,7 @@ In the web service's **Environment** tab, set:
 | `REDIS_PORT` | the port from the same URL | |
 | `REDIS_PASSWORD` | leave unset | Internal Key Value connections are unauthenticated by default; set it only if you enable auth on the instance |
 | `JWT_SECRET` | a random string, 32+ characters | e.g. `openssl rand -base64 48` |
+| `JWT_ACCESS_EXPIRATION_MS` / `JWT_REFRESH_EXPIRATION_MS` | leave unset | Token lifetimes: 900000 (15 minutes) and 604800000 (7 days) by default. |
 | `BOOTSTRAP_ADMIN_ENABLED` | `true` for the very first deploy only | Flip back to `false` after you've logged in once and changed the password |
 | `BOOTSTRAP_ADMIN_EMAIL` | your admin email | |
 | `BOOTSTRAP_ADMIN_PASSWORD` | a strong password | Change it after first login regardless. **Do set this whenever `BOOTSTRAP_ADMIN_ENABLED=true`** - if left unset, the app now boots fine and simply skips creating the admin (logged as an error), rather than the startup crash this used to cause (an unresolvable placeholder was thrown as an exception from a `CommandLineRunner`, failing the whole app). |
@@ -69,8 +70,10 @@ In the web service's **Environment** tab, set:
 | `RESEND_API_KEY` | your [Resend](https://resend.com) API key | **Required for new accounts to log in:** login now needs a verified account, and the email verification code goes out through Resend - without it, sending a code fails with 503 and a new user can only verify by WhatsApp (if that's set up). Also needed for password-reset emails and the `EMAIL` notification channel. Sent over plain HTTPS via Resend's API, not raw SMTP (the app moved off SMTP when its previous host, Railway, blocked outbound SMTP). No fallback default - if unset, mail sending fails at send time (logged, not fatal). Free tier covers 3,000 emails/month. |
 | `MAIL_FROM` | an address on a domain verified in Resend, or `onboarding@resend.dev` for testing | Must be a domain you've added and verified in Resend's dashboard for sending to arbitrary recipients - the sandbox address (`onboarding@resend.dev`) works without verification but can only send to your own account email. |
 | `PASSWORD_RESET_URL` | your frontend's reset-password page URL, or `http://localhost:3000/reset-password` if not deployed yet | e.g. `https://yourapp.com/reset-password`. Defaults to the localhost dev URL if unset (same reasoning as `CORS_ALLOWED_ORIGINS`) - this is the base URL each password-reset email links to with `?token=...` appended, so it only matters once real users are actually requesting resets. Update it once the frontend has a real URL. |
+| `PASSWORD_RESET_TOKEN_EXPIRATION_MS` | leave unset | How long a reset link works: 3600000 (1 hour) by default. |
 | `STORAGE_PROVIDER` | `cloudinary` (default in prod), `gcs`, or `local` | **See the storage section below before going live.** |
 | `CLOUDINARY_URL` | `cloudinary://<api_key>:<api_secret>@<cloud_name>` | Required when `STORAGE_PROVIDER=cloudinary`. Copy this directly from the Cloudinary dashboard ("API Environment variable") - it's the one variable Cloudinary's SDK needs, no separate cloud_name/key/secret fields. |
+| `GCS_BUCKET_NAME` / `GCP_PROJECT_ID` | leave unset | Only when `STORAGE_PROVIDER=gcs` (the bucket is then required, the project optional). |
 | `SENTRY_DSN` | your Sentry project's DSN | Optional - error tracking stays off (no-op) if unset. Get a DSN from [sentry.io](https://sentry.io) (or self-hosted Sentry). |
 | `SENTRY_TRACES_SAMPLE_RATE` | a number 0.0-1.0, default `0.1` | Fraction of requests to trace for performance monitoring; only matters if `SENTRY_DSN` is set. |
 | `OPENROUTE_API_KEY` | your [OpenRouteService](https://openrouteservice.org/dev/#/signup) API key | Powers practical-lesson route generation (`POST /api/v1/lesson-routes/generate`). No fallback default - if unset, route generation fails at request time with a clear error (logged, not fatal to the app) rather than silently calling the real API with a fake key. Free tier is generous enough for this app's scale; the directions endpoint URL and request timeout are fixed app config, not something you need to set. |
@@ -103,11 +106,69 @@ while Render expected `PORT`, and the deploy failed - fixed 2026-09-29.)
   the `prod` profile is active (`StorageProperties` fails fast at startup) - it's a
   dev/test-only option, never a real choice for a live deployment.
 
+### Render environment checklist
+
+Every variable the app reads, and what to do with each on Render (web service →
+**Environment**). Render never reads `.env` files or anything else from the repo for
+these - secrets must not live in GitHub - so each one is typed in here, and saving
+redeploys the service. The table above explains each variable in detail.
+
+**Required - the app won't start (or can't work) without them**
+
+| Variable | Value |
+|---|---|
+| `SPRING_PROFILES_ACTIVE` | `prod` |
+| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD` | from the Render Postgres Info page (internal hostname, port `5432`) |
+| `REDIS_HOST` / `REDIS_PORT` | from the Render Key Value **internal** URL |
+| `JWT_SECRET` | a random 32+ character string (`openssl rand -base64 48`) |
+| `CLOUDINARY_URL` | from the Cloudinary dashboard (the prod default storage is Cloudinary; startup fails without it) |
+| `BOOTSTRAP_ADMIN_EMAIL` | the bootstrap admin's email - keep it set permanently |
+
+**Needed for features that are live today**
+
+| Variable | Value |
+|---|---|
+| `RESEND_API_KEY` | your Resend API key (email codes, password resets, email notifications) |
+| `MAIL_FROM` | `onboarding@resend.dev` for now; `Aidly <no-reply@mail.yourdomain.com>` once a domain is verified in Resend |
+| `VERIFICATION_REQUIRED` | `false` for now (no verified email domain yet); `true` or delete it once `MAIL_FROM` is on your own domain |
+| `OPENROUTE_API_KEY` | your OpenRouteService key (practical-lesson route generation) |
+| `CORS_ALLOWED_ORIGINS` | the frontend's URL(s), comma-separated, once it's deployed (localhost dev origins until then) |
+| `PASSWORD_RESET_URL` | the frontend's reset-password page once deployed (`http://localhost:3000/reset-password` until then) |
+
+**Bootstrap admin (first deploy only)**
+
+| Variable | Value |
+|---|---|
+| `BOOTSTRAP_ADMIN_ENABLED` | `true` for the first deploy, then `false` |
+| `BOOTSTRAP_ADMIN_PASSWORD` | a strong password for the first deploy; can be deleted once `BOOTSTRAP_ADMIN_ENABLED=false` |
+
+**Optional - switch features on when you're ready**
+
+| Variable | Turns on |
+|---|---|
+| `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN` + `TWILIO_FROM_NUMBER` | booking SMS texts |
+| `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN` + `TWILIO_VERIFY_SERVICE_SID` | WhatsApp verification codes |
+| `SENTRY_DSN` (+ `SENTRY_TRACES_SAMPLE_RATE`, default `0.1`) | error tracking |
+
+**Don't set** - Render or the defaults handle them: `PORT` (Render injects it),
+`REDIS_PASSWORD` (internal Key Value has no auth), `RATE_LIMIT_CLIENT_IP_HEADER`
+(`CF-Connecting-IP` in prod), `STORAGE_PROVIDER` (`cloudinary` in prod), the
+`JWT_*_EXPIRATION_MS` / `PASSWORD_RESET_TOKEN_EXPIRATION_MS` lifetimes, `GCS_BUCKET_NAME` /
+`GCP_PROJECT_ID` (only for `gcs` storage), and **never** `VERIFICATION_LOG_CODES` (it would
+write login codes into the logs).
+
+**Checking a change took effect:** the new values only apply after the redeploy that saving
+triggers has gone live (Events tab). Some settings announce themselves at startup - e.g.
+`VERIFICATION_REQUIRED=false` logs `Account verification is OFF`.
+
 ### 4. Create the bootstrap admin on the first deploy
 
 With `BOOTSTRAP_ADMIN_ENABLED=true` (and `BOOTSTRAP_ADMIN_EMAIL`/`BOOTSTRAP_ADMIN_PASSWORD`
 set), the first successful boot creates the one bootstrap admin account. Log in, change the
-password, then set `BOOTSTRAP_ADMIN_ENABLED=false`.
+password, then set `BOOTSTRAP_ADMIN_ENABLED=false` - after that `BOOTSTRAP_ADMIN_PASSWORD` is
+no longer read and can be deleted. **Keep `BOOTSTRAP_ADMIN_EMAIL` set for good:** every start
+looks the bootstrap admin up by that address (without it the prod default,
+`admin@company.com`, is used and the real admin isn't found).
 
 ### 5. Turn on auto-deploy after CI
 
