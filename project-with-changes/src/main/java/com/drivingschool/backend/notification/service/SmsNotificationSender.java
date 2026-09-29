@@ -30,6 +30,11 @@ public class SmsNotificationSender implements NotificationSender {
     // it didn't. Once those variables are set, real delivery kicks in with no
     // code change needed.
     @Override
+    public boolean isAsynchronous() {
+        return true;
+    }
+
+    @Override
     @Async("notificationExecutor")
     public void send(Notification notification) {
         if (!twilioConfig.isConfigured()) {

@@ -67,4 +67,10 @@ class InAppNotificationSenderTest {
 
         assertThat(notification.getStatus()).isEqualTo(NotificationStatus.FAILED);
     }
+
+    @Test
+    void isAsynchronous_matchesHowSendRuns() {
+        // NotificationServiceImpl defers async senders until after commit - it delivers synchronously.
+        assertThat(sender.isAsynchronous()).isFalse();
+    }
 }

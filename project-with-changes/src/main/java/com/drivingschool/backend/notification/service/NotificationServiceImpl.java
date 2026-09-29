@@ -18,6 +18,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 
@@ -69,7 +71,7 @@ public class NotificationServiceImpl implements NotificationService {
                 .filter(sender -> sender.supports(request.getChannel()))
                 .findFirst()
                 .ifPresentOrElse(
-                        sender -> sender.send(saved),
+                        sender -> dispatch(sender, saved),
                         () -> {
                             saved.markFailed("No sender configured for channel: " + request.getChannel());
                             notificationRepository.save(saved);
@@ -78,6 +80,25 @@ public class NotificationServiceImpl implements NotificationService {
 
         return notificationMapper.toResponse(
                 notificationRepository.findById(saved.getId()).orElse(saved));
+    }
+
+    // An @Async sender dispatched mid-transaction raced the commit: its save() on the
+    // background thread tried to UPDATE a row that wasn't committed yet and failed with
+    // ObjectOptimisticLockingFailureException, leaving the delivery record stuck at
+    // PENDING (seen live on booking-created SMS). Deferring to afterCommit fixes that,
+    // and also means a rolled-back caller (e.g. a booking that failed to save) never
+    // sends a message about something that doesn't exist.
+    private void dispatch(NotificationSender sender, Notification notification) {
+        if (sender.isAsynchronous() && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    sender.send(notification);
+                }
+            });
+            return;
+        }
+        sender.send(notification);
     }
 
     @Override
