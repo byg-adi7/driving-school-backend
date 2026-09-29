@@ -235,11 +235,11 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void register_validStudent_createsUserAndProfileAndReturnsTokens() {
+    void register_validStudent_createsUserAndProfileWithoutIssuingTokens() {
         School activeSchool = School.builder().active(true).build();
         Role studentRole = Role.builder().name(RoleName.STUDENT).build();
         User savedUser = existingUser(RoleName.STUDENT);
-        AuthResponse expectedResponse = AuthResponse.builder().accessToken("access").refreshToken("refresh").build();
+        AuthResponse expectedResponse = AuthResponse.builder().build();
 
         when(currentUserService.hasRole(RoleName.ADMIN)).thenReturn(true);
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
@@ -247,15 +247,15 @@ class AuthServiceImplTest {
         when(roleRepository.findByName(RoleName.STUDENT)).thenReturn(Optional.of(studentRole));
         when(passwordEncoder.encode("password123")).thenReturn("encoded-password");
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
-        when(jwtTokenProvider.generateAccessToken(any(UserPrincipal.class))).thenReturn("access");
-        when(jwtTokenProvider.generateRefreshToken(any(UserPrincipal.class))).thenReturn("refresh");
-        when(authMapper.toAuthResponse(eq(savedUser), eq("access"), eq("refresh"))).thenReturn(expectedResponse);
+        when(authMapper.toRegisteredUserResponse(savedUser)).thenReturn(expectedResponse);
 
         AuthResponse response = authService.register(validStudentRequest().build());
 
         assertThat(response).isEqualTo(expectedResponse);
         verify(studentProfileRepository).save(any());
         verify(instructorProfileRepository, never()).save(any());
+        verify(jwtTokenProvider, never()).generateAccessToken(any());
+        verify(jwtTokenProvider, never()).generateRefreshToken(any());
     }
 
     // --- refreshToken ---

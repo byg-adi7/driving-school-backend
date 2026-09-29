@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -40,7 +41,11 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", bearer(adminToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                // the creating admin gets the new user's identity, never a session for it
+                .andExpect(jsonPath("$.data.user.email").value("instructor.lifecycle@example.com"))
+                .andExpect(jsonPath("$.data.accessToken").doesNotExist())
+                .andExpect(jsonPath("$.data.refreshToken").doesNotExist());
 
         AuthResponse instructorAuth = loginFull("instructor.lifecycle@example.com", "SecurePass123!");
         assertThat(instructorAuth.getAccessToken()).isNotBlank();

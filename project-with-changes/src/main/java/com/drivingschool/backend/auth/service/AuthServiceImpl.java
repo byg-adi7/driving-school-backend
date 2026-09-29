@@ -173,12 +173,8 @@ public class AuthServiceImpl implements AuthService {
 
         sendWelcomeNotification(savedUser);
 
-        UserPrincipal principal = new UserPrincipal(savedUser);
-        String accessToken = jwtTokenProvider.generateAccessToken(principal);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(principal);
-
         log.info("User registered: {} with role {}", savedUser.getEmail(), request.getRole());
-        return authMapper.toAuthResponse(savedUser, accessToken, refreshToken);
+        return authMapper.toRegisteredUserResponse(savedUser);
     }
 
     @Override
