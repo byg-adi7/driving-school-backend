@@ -278,3 +278,16 @@ The backend now runs on Render (Docker web service + Render Postgres + Render Ke
 ## Unassigned Lesson Questions Reach the School's Instructors (2026-09-29)
 
 A lesson question sent without `assignedInstructorId` notified nobody and appeared in no instructor's inbox - only the admin-facing status listing. Per the product owner's choice, the instructor stays optional ("any instructor"), and now: every active instructor of the student's school gets an IN_APP notification; the question shows in each of their `GET /lesson-questions/pending` inboxes (new `findInstructorInbox` query: my pending questions plus my school's unclaimed ones) and is readable by them; and the first instructor to answer it or change its status claims it (becomes its instructor), so it drops out of everyone else's inbox. 5 new unit tests plus inbox/claim checks in `AdminSchoolScopingIntegrationTest`; full unit suite 730 green.
+
+---
+
+## Realtime Push over WebSockets (2026-09-29)
+
+The frontend had to poll for new messages. Per the product owner's choice (WebSockets, no external realtime service), the backend now pushes events over STOMP on a plain WebSocket at `/ws`:
+
+- **Auth**: browsers can't set headers on the handshake, so it's public and the access token goes in the STOMP CONNECT frame; `StompAuthChannelInterceptor` applies the REST API's checks (valid ACCESS token, existing, enabled account). A client may only SUBSCRIBE to its own `/user/queue/...` and may never SEND. Allowed origins = `CORS_ALLOWED_ORIGINS`.
+- **Events** on `/user/queue/events`: `MESSAGE_CREATED` (to both participants, `mine` per receiver), `CONVERSATION_READ` (read receipts), `NOTIFICATION_CREATED` (every IN_APP notification), `ANNOUNCEMENT_CREATED`. `RealtimePublisher` sends only after the caller's transaction commits, never on rollback, and a failed push never breaks the request.
+- 10s STOMP heartbeats, per Render's keepalive recommendation; clients reconnect with backoff after deploys (documented in the frontend guide).
+- **Single-instance by design**: Spring's in-memory broker only reaches sessions on the same instance, and Render assigns WebSocket connections to random instances - keep the service at one instance, or add a Redis pub/sub relay before scaling out (`DEPLOYMENT.md`).
+
+**Verified:** 17 new unit tests (interceptor, publisher, per-service events) plus `RealtimeWebSocketIntegrationTest` - the first real-port test in the suite: a real STOMP client over a real WebSocket against the running server, driven through the REST API (runs in CI; the Testcontainers holder was extracted into `IntegrationTestContainers` so both harnesses share one Postgres/Redis pair). Live against the built jar on a fresh Postgres + Redis: a 14-check Node STOMP client run passed - token/refresh-token/deleted-account rejection, subscription rules, heartbeat negotiation, every event type reaching the right user and no one else, ISO timestamps.

@@ -16,6 +16,8 @@ import com.drivingschool.backend.messaging.repository.MessageRepository;
 import com.drivingschool.backend.notification.dto.SendNotificationRequest;
 import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.notification.service.NotificationService;
+import com.drivingschool.backend.realtime.RealtimeEvent;
+import com.drivingschool.backend.realtime.RealtimePublisher;
 import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.student.entity.StudentProfile;
@@ -52,19 +54,22 @@ public class MessagingServiceImpl implements MessagingService {
     private final InstructorProfileRepository instructorProfileRepository;
     private final CurrentUserService currentUserService;
     private final NotificationService notificationService;
+    private final RealtimePublisher realtimePublisher;
 
     public MessagingServiceImpl(ConversationRepository conversationRepository,
                                 MessageRepository messageRepository,
                                 StudentProfileRepository studentProfileRepository,
                                 InstructorProfileRepository instructorProfileRepository,
                                 CurrentUserService currentUserService,
-                                NotificationService notificationService) {
+                                NotificationService notificationService,
+                                RealtimePublisher realtimePublisher) {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.instructorProfileRepository = instructorProfileRepository;
         this.currentUserService = currentUserService;
         this.notificationService = notificationService;
+        this.realtimePublisher = realtimePublisher;
     }
 
     @Override
@@ -167,6 +172,9 @@ public class MessagingServiceImpl implements MessagingService {
                 ? fullName(conversation.getStudent().getFirstName(), conversation.getStudent().getLastName())
                 : fullName(conversation.getInstructor().getFirstName(), conversation.getInstructor().getLastName());
         notifyRecipient(recipient, senderName, request.getBody(), conversationId);
+        // Both sides: the recipient sees it arrive, and the sender's other tabs/devices stay in sync.
+        realtimePublisher.publishAfterCommit(recipient.getId(), RealtimeEvent.MESSAGE_CREATED, toResponse(saved, recipient.getId()));
+        realtimePublisher.publishAfterCommit(myUserId, RealtimeEvent.MESSAGE_CREATED, toResponse(saved, myUserId));
 
         return toResponse(saved, myUserId);
     }
@@ -175,8 +183,16 @@ public class MessagingServiceImpl implements MessagingService {
     @Transactional
     public void markRead(Long conversationId) {
         Long myUserId = currentUserService.requireUserId();
-        requireParticipant(conversationId, myUserId);
-        messageRepository.markReadForRecipient(conversationId, myUserId, LocalDateTime.now());
+        Conversation conversation = requireParticipant(conversationId, myUserId);
+        LocalDateTime readAt = LocalDateTime.now();
+        if (messageRepository.markReadForRecipient(conversationId, myUserId, readAt) > 0) {
+            // Read receipt for the other participant - only when something was actually unread.
+            Long otherUserId = conversation.getStudent().getUser().getId().equals(myUserId)
+                    ? conversation.getInstructor().getUser().getId()
+                    : conversation.getStudent().getUser().getId();
+            realtimePublisher.publishAfterCommit(otherUserId, RealtimeEvent.CONVERSATION_READ,
+                    Map.of("conversationId", conversationId, "readByUserId", myUserId, "readAt", readAt));
+        }
     }
 
     // ------------------------------------------------------------------

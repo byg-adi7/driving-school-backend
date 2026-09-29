@@ -8,6 +8,8 @@ import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.notification.enums.NotificationStatus;
 import com.drivingschool.backend.notification.mapper.NotificationMapper;
 import com.drivingschool.backend.notification.repository.NotificationRepository;
+import com.drivingschool.backend.realtime.RealtimeEvent;
+import com.drivingschool.backend.realtime.RealtimePublisher;
 import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.student.entity.StudentProfile;
@@ -31,6 +33,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -46,6 +49,7 @@ class NotificationServiceImplTest {
     @Mock private NotificationSender smsSender;
     @Mock private CurrentUserService currentUserService;
     @Mock private CallerSchoolScope callerSchoolScope;
+    @Mock private RealtimePublisher realtimePublisher;
     private final NotificationMapper notificationMapper = new NotificationMapper();
 
     private NotificationServiceImpl service;
@@ -73,7 +77,8 @@ class NotificationServiceImplTest {
         org.mockito.Mockito.lenient().when(emailSender.supports(NotificationChannel.EMAIL)).thenReturn(true);
         org.mockito.Mockito.lenient().when(smsSender.supports(NotificationChannel.EMAIL)).thenReturn(false);
         service = new NotificationServiceImpl(userRepository, notificationRepository,
-                List.of(emailSender, smsSender), notificationMapper, currentUserService, callerSchoolScope);
+                List.of(emailSender, smsSender), notificationMapper, currentUserService, callerSchoolScope,
+                realtimePublisher);
     }
 
     @Test
@@ -296,5 +301,19 @@ class NotificationServiceImplTest {
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
+    }
+
+    @Test
+    void send_inApp_isPushedToTheUser_butOtherChannelsAreNot() {
+        User user = userWithId(1L, "student@example.com");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.send(SendNotificationRequest.builder().userId(1L).subject("s").body("b")
+                .channel(NotificationChannel.IN_APP).build());
+        service.send(SendNotificationRequest.builder().userId(1L).subject("s").body("b")
+                .channel(NotificationChannel.EMAIL).build());
+
+        verify(realtimePublisher, times(1)).publishAfterCommit(eq(1L), eq(RealtimeEvent.NOTIFICATION_CREATED), any());
     }
 }

@@ -152,6 +152,11 @@ public class SecurityConfig {
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password").permitAll()
                         
+                        // WebSocket handshake: browsers can't send an Authorization header on
+                        // it, so the access token is checked on the STOMP CONNECT frame instead
+                        // (StompAuthChannelInterceptor) - nothing is reachable before that.
+                        .requestMatchers("/ws", "/ws/**").permitAll()
+
                         // TEMPORARY: echoes only the caller's own request headers, to settle
                         // how the real client IP reaches the app behind Render's proxy - see
                         // ClientIpDiagnosticsController. Remove together with that class.

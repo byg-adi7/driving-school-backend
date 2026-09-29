@@ -10,7 +10,10 @@ import com.drivingschool.backend.messaging.repository.AnnouncementRepository;
 import com.drivingschool.backend.notification.entity.Notification;
 import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.notification.enums.NotificationStatus;
+import com.drivingschool.backend.notification.mapper.NotificationMapper;
 import com.drivingschool.backend.notification.repository.NotificationRepository;
+import com.drivingschool.backend.realtime.RealtimeEvent;
+import com.drivingschool.backend.realtime.RealtimePublisher;
 import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.student.entity.StudentProfile;
@@ -42,6 +45,8 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     private final AnnouncementEmailDispatcher emailDispatcher;
     private final CurrentUserService currentUserService;
     private final CallerSchoolScope callerSchoolScope;
+    private final RealtimePublisher realtimePublisher;
+    private final NotificationMapper notificationMapper;
 
     public AnnouncementServiceImpl(AnnouncementRepository announcementRepository,
                                    InstructorProfileRepository instructorProfileRepository,
@@ -49,7 +54,9 @@ public class AnnouncementServiceImpl implements AnnouncementService {
                                    NotificationRepository notificationRepository,
                                    AnnouncementEmailDispatcher emailDispatcher,
                                    CurrentUserService currentUserService,
-                                   CallerSchoolScope callerSchoolScope) {
+                                   CallerSchoolScope callerSchoolScope,
+                                   RealtimePublisher realtimePublisher,
+                                   NotificationMapper notificationMapper) {
         this.announcementRepository = announcementRepository;
         this.instructorProfileRepository = instructorProfileRepository;
         this.studentProfileRepository = studentProfileRepository;
@@ -57,6 +64,8 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         this.emailDispatcher = emailDispatcher;
         this.currentUserService = currentUserService;
         this.callerSchoolScope = callerSchoolScope;
+        this.realtimePublisher = realtimePublisher;
+        this.notificationMapper = notificationMapper;
     }
 
     @Override
@@ -103,13 +112,19 @@ public class AnnouncementServiceImpl implements AnnouncementService {
                     .recipientAddress(student.getUser().getEmail())
                     .build());
         }
-        notificationRepository.saveAll(inApp);
+        AnnouncementResponse response = toResponse(announcement, students.size());
+        for (Notification notification : notificationRepository.saveAll(inApp)) {
+            Long studentUserId = notification.getUser().getId();
+            realtimePublisher.publishAfterCommit(studentUserId, RealtimeEvent.NOTIFICATION_CREATED,
+                    notificationMapper.toResponse(notification));
+            realtimePublisher.publishAfterCommit(studentUserId, RealtimeEvent.ANNOUNCEMENT_CREATED, response);
+        }
         List<Long> emailIds = notificationRepository.saveAll(email).stream().map(Notification::getId).toList();
         dispatchEmailsAfterCommit(emailIds);
 
         log.info("Instructor {} announced to {} students of school {}", instructor.getId(), students.size(),
                 instructor.getSchool().getId());
-        return toResponse(announcement, students.size());
+        return response;
     }
 
     @Override

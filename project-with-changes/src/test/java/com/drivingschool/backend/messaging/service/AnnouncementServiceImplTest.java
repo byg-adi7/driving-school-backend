@@ -10,6 +10,8 @@ import com.drivingschool.backend.notification.entity.Notification;
 import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.notification.enums.NotificationStatus;
 import com.drivingschool.backend.notification.repository.NotificationRepository;
+import com.drivingschool.backend.realtime.RealtimeEvent;
+import com.drivingschool.backend.realtime.RealtimePublisher;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
@@ -51,13 +53,15 @@ class AnnouncementServiceImplTest {
     @Mock private AnnouncementEmailDispatcher emailDispatcher;
     @Mock private CurrentUserService currentUserService;
     @Mock private CallerSchoolScope callerSchoolScope;
+    @Mock private RealtimePublisher realtimePublisher;
 
     private AnnouncementServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new AnnouncementServiceImpl(announcementRepository, instructorProfileRepository, studentProfileRepository,
-                notificationRepository, emailDispatcher, currentUserService, callerSchoolScope);
+                notificationRepository, emailDispatcher, currentUserService, callerSchoolScope, realtimePublisher,
+                new com.drivingschool.backend.notification.mapper.NotificationMapper());
     }
 
     private School school() {
@@ -162,5 +166,17 @@ class AnnouncementServiceImplTest {
         service.listForMySchool(Pageable.unpaged());
 
         verify(announcementRepository, never()).findBySchoolId(any(), any());
+    }
+
+    @Test
+    void create_pushesTheAnnouncementAndANotificationToEachStudent() {
+        School school = school();
+        stubCreate(school, List.of(student(1L, school), student(2L, school)));
+
+        service.create(request());
+
+        verify(realtimePublisher, times(2)).publishAfterCommit(any(), eq(RealtimeEvent.NOTIFICATION_CREATED), any());
+        verify(realtimePublisher).publishAfterCommit(eq(1L), eq(RealtimeEvent.ANNOUNCEMENT_CREATED), any());
+        verify(realtimePublisher).publishAfterCommit(eq(2L), eq(RealtimeEvent.ANNOUNCEMENT_CREATED), any());
     }
 }

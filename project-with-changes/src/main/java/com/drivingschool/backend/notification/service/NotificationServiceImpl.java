@@ -9,6 +9,8 @@ import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.notification.enums.NotificationStatus;
 import com.drivingschool.backend.notification.mapper.NotificationMapper;
 import com.drivingschool.backend.notification.repository.NotificationRepository;
+import com.drivingschool.backend.realtime.RealtimeEvent;
+import com.drivingschool.backend.realtime.RealtimePublisher;
 import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.user.entity.User;
@@ -33,19 +35,22 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationMapper notificationMapper;
     private final CurrentUserService currentUserService;
     private final CallerSchoolScope callerSchoolScope;
+    private final RealtimePublisher realtimePublisher;
 
     public NotificationServiceImpl(UserRepository userRepository,
                                    NotificationRepository notificationRepository,
                                    List<NotificationSender> notificationSenders,
                                    NotificationMapper notificationMapper,
                                    CurrentUserService currentUserService,
-                                   CallerSchoolScope callerSchoolScope) {
+                                   CallerSchoolScope callerSchoolScope,
+                                   RealtimePublisher realtimePublisher) {
         this.userRepository = userRepository;
         this.notificationRepository = notificationRepository;
         this.notificationSenders = notificationSenders;
         this.notificationMapper = notificationMapper;
         this.currentUserService = currentUserService;
         this.callerSchoolScope = callerSchoolScope;
+        this.realtimePublisher = realtimePublisher;
     }
 
     @Override
@@ -78,8 +83,12 @@ public class NotificationServiceImpl implements NotificationService {
                         }
                 );
 
-        return notificationMapper.toResponse(
+        NotificationResponse response = notificationMapper.toResponse(
                 notificationRepository.findById(saved.getId()).orElse(saved));
+        if (request.getChannel() == NotificationChannel.IN_APP) {
+            realtimePublisher.publishAfterCommit(user.getId(), RealtimeEvent.NOTIFICATION_CREATED, response);
+        }
+        return response;
     }
 
     // An @Async sender dispatched mid-transaction raced the commit: its save() on the
