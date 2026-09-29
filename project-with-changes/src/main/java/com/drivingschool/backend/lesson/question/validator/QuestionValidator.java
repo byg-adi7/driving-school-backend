@@ -6,6 +6,7 @@ import com.drivingschool.backend.lesson.question.dto.SubmitQuestionRequest;
 import com.drivingschool.backend.lesson.question.entity.LessonQuestionSubmission;
 import com.drivingschool.backend.lesson.question.enums.QuestionStatus;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -14,9 +15,11 @@ import java.util.Optional;
 public class QuestionValidator {
 
     private final AdminSchoolScope adminSchoolScope;
+    private final CallerSchoolScope callerSchoolScope;
 
-    public QuestionValidator(AdminSchoolScope adminSchoolScope) {
+    public QuestionValidator(AdminSchoolScope adminSchoolScope, CallerSchoolScope callerSchoolScope) {
         this.adminSchoolScope = adminSchoolScope;
+        this.callerSchoolScope = callerSchoolScope;
     }
 
     public void validateSubmitRequest(SubmitQuestionRequest request) {
@@ -38,6 +41,8 @@ public class QuestionValidator {
         if (question.getInstructor() != null && !question.getInstructor().getUser().getId().equals(callerId)) {
             throw new BadRequestException("You are not assigned to this question");
         }
+        // An unassigned question is open to any instructor - of the student's own school.
+        callerSchoolScope.requireSameSchool(question.getStudent().getSchool().getId());
     }
 
     public void validateStatusUpdate(LessonQuestionSubmission question, QuestionStatus newStatus, Long userId, String role) {
@@ -50,6 +55,10 @@ public class QuestionValidator {
             throw new BadRequestException("You are not assigned to this question");
         }
 
+        if ("INSTRUCTOR".equals(role)) {
+            callerSchoolScope.requireSameSchool(question.getStudent().getSchool().getId());
+        }
+
         if ("ADMIN".equals(role)) {
             adminSchoolScope.requireAccess(question.getStudent().getSchool().getId());
         }
@@ -60,11 +69,11 @@ public class QuestionValidator {
     }
 
     /**
-     * @return the one school an ADMIN-only listing must be filtered to for a regular
-     *         admin, or empty for the bootstrap admin (every school).
+     * @return the one school the by-status listing must be filtered to - a regular
+     *         admin's or an instructor's own - or empty for the bootstrap admin.
      */
-    public Optional<Long> adminSchoolFilter() {
-        return adminSchoolScope.restrictedSchoolId();
+    public Optional<Long> listingSchoolFilter() {
+        return callerSchoolScope.callerSchoolId();
     }
 
     public void validateReadAccess(LessonQuestionSubmission question, Long userId, String role) {

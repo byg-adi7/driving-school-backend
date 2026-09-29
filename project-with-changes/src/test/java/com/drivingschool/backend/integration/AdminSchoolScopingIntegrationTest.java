@@ -218,4 +218,117 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
                 .andReturn();
         assertThat(pageContentIds(bootstrapNotes)).contains(noteId);
     }
+
+    @Test
+    void instructorsAndStudents_cannotReachAnotherSchoolsRecords() throws Exception {
+        // Everyone is registered through the bootstrap admin to stay inside the
+        // 10-per-minute auth-endpoint rate limit (register + login count against it).
+        String bootstrapToken = login(BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_PASSWORD);
+        Long schoolAId = createSchoolWithAdmin(bootstrapToken, "Staff Scope School A", "owner.staff.a@example.com")
+                .getSchool().getId();
+        Long schoolBId = createSchoolWithAdmin(bootstrapToken, "Staff Scope School B", "owner.staff.b@example.com")
+                .getSchool().getId();
+
+        Person instructorA = registerAndIdentify(bootstrapToken, schoolAId, RoleName.INSTRUCTOR, "instructor.staff.a@example.com", "LIC-STAFF-A");
+        Person studentA = registerAndIdentify(bootstrapToken, schoolAId, RoleName.STUDENT, "student.staff.a@example.com", null);
+        Person instructorB = registerAndIdentify(bootstrapToken, schoolBId, RoleName.INSTRUCTOR, "instructor.staff.b@example.com", "LIC-STAFF-B");
+        Person studentB = registerAndIdentify(bootstrapToken, schoolBId, RoleName.STUDENT, "student.staff.b@example.com", null);
+
+        // An instructor can't write a lesson note for another school's student (which
+        // would also have unlocked reading that student's whole note history)...
+        mockMvc.perform(post("/api/v1/lesson-notes")
+                        .header("Authorization", bearer(instructorA.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "studentId", studentB.profileId(),
+                                "lessonSummary", "Parking practice in the school car park.",
+                                "strengths", "Careful, well-controlled clutch work throughout.",
+                                "weaknesses", "Loses reference points when reversing into a bay.",
+                                "recommendations", "Repeat bay parking with a focus on mirror checks."))))
+                .andExpect(status().isBadRequest());
+        // ...nor record a driving assessment for one.
+        mockMvc.perform(post("/api/v1/driving-assessments")
+                        .header("Authorization", bearer(instructorA.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "studentId", studentB.profileId(),
+                                "assessmentDate", LocalDateTime.now().withNano(0).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                                "score", 90,
+                                "result", "PASSED"))))
+                .andExpect(status().isBadRequest());
+
+        // An instructor can't schedule a live session under another school.
+        mockMvc.perform(post("/api/v1/live-sessions")
+                        .header("Authorization", bearer(instructorA.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "instructorId", instructorA.profileId(),
+                                "schoolId", schoolBId,
+                                "title", "Not my school",
+                                "scheduledAt", LocalDateTime.now().plusDays(3).withNano(0).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                                "durationMinutes", 60,
+                                "meetingUrl", "https://example.com/meet"))))
+                .andExpect(status().isBadRequest());
+
+        // An instructor can't message another school's user, or read its vehicles.
+        mockMvc.perform(post("/api/v1/notifications/send")
+                        .header("Authorization", bearer(instructorA.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "userId", studentB.userId(),
+                                "subject", "Not your student",
+                                "body", "This should never be delivered.",
+                                "channel", NotificationChannel.IN_APP.name()))))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/vehicles/school/" + schoolBId).header("Authorization", bearer(instructorA.token())))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/vehicles/school/" + schoolAId).header("Authorization", bearer(instructorA.token())))
+                .andExpect(status().isOk());
+
+        // An instructor can't read another school's student's license workflow.
+        mockMvc.perform(post("/api/v1/progress/license/students/" + studentB.profileId() + "/initialize")
+                        .header("Authorization", bearer(bootstrapToken)))
+                .andExpect(status().isCreated());
+        mockMvc.perform(get("/api/v1/progress/license/students/" + studentB.profileId())
+                        .header("Authorization", bearer(instructorA.token())))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/progress/license/students/" + studentB.profileId())
+                        .header("Authorization", bearer(instructorB.token())))
+                .andExpect(status().isOk());
+
+        // A student can't assign a question to another school's instructor.
+        mockMvc.perform(post("/api/v1/lesson-questions")
+                        .header("Authorization", bearer(studentA.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "subject", "Roundabouts",
+                                "questionBody", "Who has priority on a mini roundabout?",
+                                "assignedInstructorId", instructorB.profileId()))))
+                .andExpect(status().isBadRequest());
+
+        // An unassigned question is only open to instructors of the student's own school.
+        MvcResult questionResult = mockMvc.perform(post("/api/v1/lesson-questions")
+                        .header("Authorization", bearer(studentB.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "subject", "Mirrors",
+                                "questionBody", "How often should I check my mirrors on a motorway?"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> question = (Map<String, Object>) objectMapper
+                .readValue(questionResult.getResponse().getContentAsString(), Map.class).get("data");
+        Object questionId = question.get("id");
+
+        mockMvc.perform(post("/api/v1/lesson-questions/" + questionId + "/respond")
+                        .header("Authorization", bearer(instructorA.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("response", "Every five to eight seconds."))))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/v1/lesson-questions/" + questionId + "/respond")
+                        .header("Authorization", bearer(instructorB.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("response", "Every five to eight seconds."))))
+                .andExpect(status().isOk());
+    }
 }

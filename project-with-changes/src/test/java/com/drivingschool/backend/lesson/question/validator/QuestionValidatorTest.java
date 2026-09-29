@@ -6,6 +6,7 @@ import com.drivingschool.backend.lesson.question.entity.LessonQuestionSubmission
 import com.drivingschool.backend.lesson.question.enums.QuestionStatus;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.user.entity.User;
 import org.junit.jupiter.api.Test;
@@ -16,12 +17,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class QuestionValidatorTest {
 
     private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+    private final CallerSchoolScope callerSchoolScope = mock(CallerSchoolScope.class);
 
-    private final QuestionValidator validator = new QuestionValidator(adminSchoolScope);
+    private final QuestionValidator validator = new QuestionValidator(adminSchoolScope, callerSchoolScope);
 
     private User userWithId(Long id) {
         User user = User.builder().email("u" + id + "@example.com").password("x").enabled(true).emailVerified(true).build();
@@ -54,7 +59,7 @@ class QuestionValidatorTest {
     }
 
     @Test
-    void validateInstructorAccess_whenUnassigned_allowsAnyInstructor() {
+    void validateInstructorAccess_whenUnassigned_allowsAnyInstructorOfTheStudentsSchool() {
         LessonQuestionSubmission question = questionAssignedTo(null, userWithId(2L), QuestionStatus.PENDING);
 
         assertThatCode(() -> validator.validateInstructorAccess(question, 999L)).doesNotThrowAnyException();
@@ -150,6 +155,24 @@ class QuestionValidatorTest {
         doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
 
         assertThatThrownBy(() -> validator.validateReadAccess(question, 999L, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void validateInstructorAccess_unassignedQuestionFromAnotherSchool_denied() {
+        LessonQuestionSubmission question = questionAssignedTo(null, userWithId(2L), QuestionStatus.PENDING);
+        doThrow(new BadRequestException("no access")).when(callerSchoolScope).requireSameSchool(any());
+
+        assertThatThrownBy(() -> validator.validateInstructorAccess(question, 999L))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void validateStatusUpdate_instructorOnUnassignedQuestionFromAnotherSchool_denied() {
+        LessonQuestionSubmission question = questionAssignedTo(null, userWithId(2L), QuestionStatus.PENDING);
+        doThrow(new BadRequestException("no access")).when(callerSchoolScope).requireSameSchool(any());
+
+        assertThatThrownBy(() -> validator.validateStatusUpdate(question, QuestionStatus.ANSWERED, 999L, "INSTRUCTOR"))
                 .isInstanceOf(BadRequestException.class);
     }
 }

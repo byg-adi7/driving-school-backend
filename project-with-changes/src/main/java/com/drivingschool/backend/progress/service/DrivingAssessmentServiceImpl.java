@@ -67,6 +67,11 @@ public class DrivingAssessmentServiceImpl implements DrivingAssessmentService {
 
         StudentProfile student = studentProfileRepository.findById(request.getStudentId())
                 .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "id", request.getStudentId()));
+        // Same reasoning as lesson notes: recording an assessment grants read access to the
+        // student's assessment history (and a PASSED result awards them points).
+        if (!student.getSchool().getId().equals(instructor.getSchool().getId())) {
+            throw new BadRequestException("You can only assess students in your own school");
+        }
 
         Booking booking = null;
         if (request.getBookingId() != null) {

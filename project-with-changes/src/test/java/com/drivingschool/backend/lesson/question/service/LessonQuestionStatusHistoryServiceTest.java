@@ -10,6 +10,7 @@ import com.drivingschool.backend.lesson.question.repository.LessonQuestionSubmis
 import com.drivingschool.backend.lesson.question.validator.QuestionValidator;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,10 +36,11 @@ import static org.mockito.Mockito.when;
 class LessonQuestionStatusHistoryServiceTest {
 
     private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+    private final CallerSchoolScope callerSchoolScope = mock(CallerSchoolScope.class);
 
     @Mock private LessonQuestionStatusHistoryRepository statusHistoryRepository;
     @Mock private LessonQuestionSubmissionRepository questionRepository;
-    private final QuestionValidator validator = new QuestionValidator(adminSchoolScope);
+    private final QuestionValidator validator = new QuestionValidator(adminSchoolScope, callerSchoolScope);
 
     private LessonQuestionStatusHistoryService service;
 

@@ -36,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -64,6 +65,14 @@ class DrivingAssessmentServiceImplTest {
                 gamificationService);
     }
 
+    // Every profile fixture shares one school (with a real id), as real same-school
+    // students and instructors do - cross-school checks compare school ids.
+    private School defaultSchool() {
+        School school = School.builder().active(true).build();
+        ReflectionTestUtils.setField(school, "id", 1L);
+        return school;
+    }
+
     private User userWithId(Long id) {
         User user = User.builder().email("u" + id + "@example.com").password("x").enabled(true).emailVerified(true).build();
         ReflectionTestUtils.setField(user, "id", id);
@@ -72,14 +81,14 @@ class DrivingAssessmentServiceImplTest {
 
     private StudentProfile studentProfile(Long profileId, User user) {
         StudentProfile student = StudentProfile.builder().firstName("Sam").lastName("Student")
-                .user(user).school(School.builder().active(true).build()).build();
+                .user(user).school(defaultSchool()).build();
         ReflectionTestUtils.setField(student, "id", profileId);
         return student;
     }
 
     private InstructorProfile instructorProfile(Long profileId, User user) {
         InstructorProfile instructor = InstructorProfile.builder().firstName("Ivy").lastName("Instructor")
-                .user(user).active(true).school(School.builder().active(true).build()).build();
+                .user(user).active(true).school(defaultSchool()).build();
         ReflectionTestUtils.setField(instructor, "id", profileId);
         return instructor;
     }
@@ -301,5 +310,22 @@ class DrivingAssessmentServiceImplTest {
         var response = service.getAssessment(900L, 2L, "STUDENT");
 
         assertThat(response.getId()).isEqualTo(900L);
+    }
+
+    @Test
+    void createAssessment_forStudentOfAnotherSchool_throwsBadRequestException() {
+        CreateDrivingAssessmentRequest request = validRequest(AssessmentResult.PASSED);
+        School otherSchool = School.builder().active(true).build();
+        ReflectionTestUtils.setField(otherSchool, "id", 2L);
+        StudentProfile student = studentProfile(60L, userWithId(2L));
+        ReflectionTestUtils.setField(student, "school", otherSchool);
+
+        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructorProfile(50L, userWithId(1L))));
+        when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(student));
+
+        assertThatThrownBy(() -> service.createAssessment(request, 1L))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("own school");
+        verify(drivingAssessmentRepository, never()).save(any());
     }
 }

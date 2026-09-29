@@ -5,6 +5,7 @@ import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.repository.SchoolRepository;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.vehicle.dto.CreateVehicleRequest;
 import com.drivingschool.backend.vehicle.dto.UpdateVehicleRequest;
 import com.drivingschool.backend.vehicle.dto.UpdateVehicleStatusRequest;
@@ -27,13 +28,16 @@ public class VehicleServiceImpl implements VehicleService {
     private final SchoolRepository schoolRepository;
     private final VehicleMapper vehicleMapper;
     private final AdminSchoolScope adminSchoolScope;
+    private final CallerSchoolScope callerSchoolScope;
 
     public VehicleServiceImpl(VehicleRepository vehicleRepository, SchoolRepository schoolRepository,
-                               VehicleMapper vehicleMapper, AdminSchoolScope adminSchoolScope) {
+                               VehicleMapper vehicleMapper, AdminSchoolScope adminSchoolScope,
+                               CallerSchoolScope callerSchoolScope) {
         this.vehicleRepository = vehicleRepository;
         this.schoolRepository = schoolRepository;
         this.vehicleMapper = vehicleMapper;
         this.adminSchoolScope = adminSchoolScope;
+        this.callerSchoolScope = callerSchoolScope;
     }
 
     @Override
@@ -68,12 +72,14 @@ public class VehicleServiceImpl implements VehicleService {
     public VehicleResponse getById(Long id) {
         Vehicle vehicle = vehicleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Vehicle", "id", id));
+        callerSchoolScope.requireSameSchool(vehicle.getSchool().getId());
         return vehicleMapper.toResponse(vehicle);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<VehicleResponse> getBySchool(Long schoolId) {
+        callerSchoolScope.requireSameSchool(schoolId);
         return vehicleRepository.findBySchoolId(schoolId).stream()
                 .map(vehicleMapper::toResponse)
                 .toList();

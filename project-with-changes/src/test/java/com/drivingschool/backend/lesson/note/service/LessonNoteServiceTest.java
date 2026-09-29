@@ -56,6 +56,14 @@ class LessonNoteServiceTest {
                 notificationService);
     }
 
+    // Every profile fixture shares one school (with a real id), as real same-school
+    // students and instructors do - cross-school checks compare school ids.
+    private School defaultSchool() {
+        School school = School.builder().active(true).build();
+        ReflectionTestUtils.setField(school, "id", 1L);
+        return school;
+    }
+
     private User userWithId(Long id) {
         User user = User.builder().email("u" + id + "@example.com").password("x").enabled(true).emailVerified(true).build();
         ReflectionTestUtils.setField(user, "id", id);
@@ -63,13 +71,13 @@ class LessonNoteServiceTest {
     }
 
     private StudentProfile studentProfile(Long profileId, User user) {
-        StudentProfile student = StudentProfile.builder().user(user).school(School.builder().active(true).build()).build();
+        StudentProfile student = StudentProfile.builder().user(user).school(defaultSchool()).build();
         ReflectionTestUtils.setField(student, "id", profileId);
         return student;
     }
 
     private InstructorProfile instructorProfile(Long profileId, User user) {
-        InstructorProfile instructor = InstructorProfile.builder().user(user).active(true).school(School.builder().active(true).build()).build();
+        InstructorProfile instructor = InstructorProfile.builder().user(user).active(true).school(defaultSchool()).build();
         ReflectionTestUtils.setField(instructor, "id", profileId);
         return instructor;
     }
@@ -334,5 +342,27 @@ class LessonNoteServiceTest {
         lessonNoteService.getAllNotes(Pageable.unpaged());
 
         verify(lessonNoteRepository, never()).findAllNotesBySchoolId(any(), any());
+    }
+
+    @Test
+    void createLessonNote_forStudentOfAnotherSchool_throwsBadRequestException() {
+        CreateLessonNoteRequest request = new CreateLessonNoteRequest();
+        request.setStudentId(60L);
+        request.setLessonSummary("A solid first lesson on quiet roads.");
+        request.setStrengths("Good mirror checks and steady steering control.");
+        request.setWeaknesses("Needs to slow down earlier before junctions.");
+        request.setRecommendations("Practice roundabouts next session.");
+        School otherSchool = School.builder().active(true).build();
+        ReflectionTestUtils.setField(otherSchool, "id", 2L);
+        StudentProfile student = studentProfile(60L, userWithId(2L));
+        ReflectionTestUtils.setField(student, "school", otherSchool);
+
+        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructorProfile(50L, userWithId(1L))));
+        when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(student));
+
+        assertThatThrownBy(() -> lessonNoteService.createLessonNote(request, 1L))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("own school");
+        verify(lessonNoteRepository, never()).save(any());
     }
 }

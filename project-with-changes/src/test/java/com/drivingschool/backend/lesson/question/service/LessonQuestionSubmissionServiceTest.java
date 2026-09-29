@@ -16,6 +16,7 @@ import com.drivingschool.backend.lesson.question.validator.QuestionValidator;
 import com.drivingschool.backend.notification.service.NotificationService;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.user.entity.User;
@@ -48,6 +49,7 @@ import static org.mockito.Mockito.when;
 class LessonQuestionSubmissionServiceTest {
 
     private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+    private final CallerSchoolScope callerSchoolScope = mock(CallerSchoolScope.class);
 
     @Mock private LessonQuestionSubmissionRepository questionRepository;
     @Mock private LessonQuestionStatusHistoryRepository statusHistoryRepository;
@@ -56,7 +58,7 @@ class LessonQuestionSubmissionServiceTest {
     @Mock private InstructorProfileRepository instructorProfileRepository;
     @Mock private LessonQuestionStatusHistoryService statusHistoryService;
     @Mock private NotificationService notificationService;
-    private final QuestionValidator validator = new QuestionValidator(adminSchoolScope);
+    private final QuestionValidator validator = new QuestionValidator(adminSchoolScope, callerSchoolScope);
 
     private LessonQuestionSubmissionService service;
 
@@ -67,6 +69,14 @@ class LessonQuestionSubmissionServiceTest {
                 statusHistoryService, validator, notificationService);
     }
 
+    // Every profile fixture shares one school (with a real id), as real same-school
+    // students and instructors do - cross-school checks compare school ids.
+    private School defaultSchool() {
+        School school = School.builder().active(true).build();
+        ReflectionTestUtils.setField(school, "id", 1L);
+        return school;
+    }
+
     private User userWithId(Long id) {
         User user = User.builder().email("u" + id + "@example.com").password("x").enabled(true).emailVerified(true).build();
         ReflectionTestUtils.setField(user, "id", id);
@@ -74,13 +84,13 @@ class LessonQuestionSubmissionServiceTest {
     }
 
     private StudentProfile studentProfile(Long id, User user) {
-        StudentProfile profile = StudentProfile.builder().user(user).school(School.builder().active(true).build()).build();
+        StudentProfile profile = StudentProfile.builder().user(user).school(defaultSchool()).build();
         ReflectionTestUtils.setField(profile, "id", id);
         return profile;
     }
 
     private InstructorProfile instructorProfile(Long id, User user) {
-        InstructorProfile profile = InstructorProfile.builder().user(user).active(true).school(School.builder().active(true).build()).build();
+        InstructorProfile profile = InstructorProfile.builder().user(user).active(true).school(defaultSchool()).build();
         ReflectionTestUtils.setField(profile, "id", id);
         return profile;
     }
@@ -389,13 +399,34 @@ class LessonQuestionSubmissionServiceTest {
     }
 
     @Test
-    void getQuestionsByStatus_asRegularAdmin_isFilteredToTheirSchool() {
-        when(adminSchoolScope.restrictedSchoolId()).thenReturn(Optional.of(7L));
+    void getQuestionsByStatus_asRegularAdminOrInstructor_isFilteredToTheirSchool() {
+        when(callerSchoolScope.callerSchoolId()).thenReturn(Optional.of(7L));
         when(questionRepository.findByStatusAndSchoolId(eq(QuestionStatus.PENDING), eq(7L), any()))
                 .thenReturn(new PageImpl<>(java.util.List.of()));
 
         service.getQuestionsByStatus(QuestionStatus.PENDING, Pageable.unpaged());
 
         verify(questionRepository, never()).findByStatus(any(), any());
+    }
+
+    @Test
+    void submitQuestion_assignedToInstructorOfAnotherSchool_throwsBadRequestException() {
+        StudentProfile student = studentProfile(10L, userWithId(1L));
+        InstructorProfile instructor = instructorProfile(20L, userWithId(2L));
+        School otherSchool = School.builder().active(true).build();
+        ReflectionTestUtils.setField(otherSchool, "id", 2L);
+        ReflectionTestUtils.setField(instructor, "school", otherSchool);
+        SubmitQuestionRequest request = new SubmitQuestionRequest();
+        request.setSubject("Subject");
+        request.setQuestionBody("Question body text");
+        request.setAssignedInstructorId(20L);
+
+        when(studentProfileRepository.findByUserId(1L)).thenReturn(Optional.of(student));
+        when(instructorProfileRepository.findById(20L)).thenReturn(Optional.of(instructor));
+
+        assertThatThrownBy(() -> service.submitQuestion(request, 1L))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("own school");
+        verify(questionRepository, never()).save(any());
     }
 }
