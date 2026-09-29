@@ -539,19 +539,75 @@ ENDPOINT("GET", "/video-lessons/course/{courseId}", "List lessons for a course."
     notes=["A student (or non-owning instructor) only sees published lessons in this list; "
            "the owning instructor/admin sees drafts too."])
 
-d.H(2, "Resources")
-ENDPOINT("POST", "/resources", "Attach a resource to a video lesson.", access="ADMIN or the lesson's owning INSTRUCTOR",
+d.H(2, "Resources (course materials: PDFs students can view and download)")
+d.P("Instructors (and admins) share course materials by UPLOADING files - e.g. a PDF "
+    "handbook, a highway-code summary, a practice sheet - onto a video lesson of one of "
+    "their courses. Every student of the school can then view it in the browser or "
+    "download it once the lesson is published. The file is stored by the backend itself "
+    "(Cloudinary in production), so it doesn't need to live anywhere else first.")
+
+d.P("Picking the file - make sure instructors/admins can upload from wherever the file is:", bold=True)
+d.BULLETS([
+    "Use a standard file input: <input type=\"file\" accept=\"application/pdf\">. It "
+    "opens the operating system's own picker, which already covers the device's local "
+    "storage AND the cloud storage apps the user has on that device - iCloud Drive, Google "
+    "Drive, OneDrive, Dropbox (via the Files app on iOS, the document picker on Android, "
+    "and synced folders / the Finder or Explorer sidebar on desktop). Also support "
+    "drag-and-drop onto the upload area on desktop.",
+    "Whatever the source, the app sends the file's bytes to POST /resources/upload as "
+    "multipart/form-data - the backend always keeps its own copy.",
+    "Optional, NOT built by default: an in-app \"Import from Google Drive / Dropbox\" "
+    "button using that provider's own picker (Google Picker API, Dropbox Chooser). These are "
+    "external services the app has to be registered with (API keys, consent screens) - "
+    "agree it with the product owner before adding one. The picker gives you a file or "
+    "link; download its bytes in the app and upload them like any other file.",
+    "Validate client-side before uploading (PDF only, 50 MB max) for a fast error message, "
+    "and show upload progress - the server enforces the same rules and also rejects files "
+    "that aren't really PDFs or that contain active content (scripts, embedded files).",
+])
+
+ENDPOINT("POST", "/resources/upload", "Upload a PDF as a resource of a video lesson.", access="ADMIN or the lesson's owning INSTRUCTOR",
+    request=[
+        ["lessonId", "number (form field)", "yes", "the video lesson to attach it to"],
+        ["title", "string (form field)", "yes", "max 200 chars - what students see"],
+        ["file", "file (form field)", "yes", "PDF, max 50 MB"],
+    ],
+    response=[
+        ["id / title / type", "", "type is PDF"],
+        ["uploaded", "boolean", "true for an uploaded file"],
+        ["fileName / fileSize", "", "original name and size in bytes"],
+        ["downloadUrl", "string", "/api/v1/resources/{id}/download - relative to the API host"],
+    ],
+    notes=["multipart/form-data, not JSON. 400 with a message if the file isn't a valid PDF, "
+           "is too large, or the caller doesn't own the lesson's course."])
+ENDPOINT("PUT", "/resources/{resourceId}", "Rename a resource.", access="ADMIN or owning INSTRUCTOR",
+    request=[["title", "string", "yes", "max 200 chars"]])
+ENDPOINT("PUT", "/resources/{resourceId}/file", "Replace an uploaded resource's file with a new version.", access="ADMIN or owning INSTRUCTOR",
+    request=[["file", "file (form field)", "yes", "PDF, max 50 MB - multipart/form-data"]],
+    notes=["Same resource id and title; students get the new file from the same downloadUrl. "
+           "The old file is deleted."])
+ENDPOINT("DELETE", "/resources/{resourceId}", "Delete a resource (and its stored file).", access="ADMIN or owning INSTRUCTOR")
+ENDPOINT("GET", "/resources/lesson/{lessonId}", "List a lesson's resources.", access="ADMIN, INSTRUCTOR, or STUDENT of the course's school",
+    notes=["Students only see resources of a PUBLISHED lesson.",
+           "Each item is either an uploaded file (uploaded=true, use downloadUrl) or an external "
+           "link (uploaded=false, open fileUrl)."])
+ENDPOINT("GET", "/resources/{resourceId}/download", "Get an uploaded resource's file.", access="Anyone who can see the lesson",
+    params=[["inline", "boolean (query)", "no", "true = serve it for viewing in the browser's PDF viewer; default false = download"]],
+    notes=["Needs the Authorization header like every other endpoint - so a plain <a href> or "
+           "<iframe src> pointing at it will NOT work. Fetch it with the token, then:",
+           "View: fetch ...?inline=true, turn the response into a Blob, "
+           "URL.createObjectURL(blob), and open that URL in a new tab or an <iframe>/<embed> "
+           "(or render it with pdf.js for a consistent in-app viewer, incl. on mobile).",
+           "Download: fetch it, then create a temporary <a href=objectUrl download=fileName> and "
+           "click it. Revoke the object URL afterwards."])
+ENDPOINT("POST", "/resources", "Add an external LINK resource instead of a file.", access="ADMIN or the lesson's owning INSTRUCTOR",
     request=[
         ["lessonId", "number", "yes", ""],
         ["title", "string", "yes", "max 200 chars"],
-        ["fileUrl", "string", "yes", "max 500 chars — again, host the file yourself and pass the URL"],
+        ["fileUrl", "string", "yes", "max 500 chars - a URL hosted elsewhere (e.g. a web page or video)"],
         ["type", "enum", "yes", "PDF, DOCUMENT, LINK, IMAGE, OTHER"],
-    ])
-ENDPOINT("DELETE", "/resources/{resourceId}", "Delete a resource.", access="ADMIN or owning INSTRUCTOR")
-ENDPOINT("GET", "/resources/lesson/{lessonId}", "List resources for a lesson.", access="ADMIN, INSTRUCTOR, or STUDENT",
-    notes=["Unlike lesson-note attachments (below), these are just metadata rows pointing at "
-           "a URL you host — there's no upload/download endpoint here, the frontend fetches "
-           "fileUrl directly."])
+    ],
+    notes=["For files, prefer POST /resources/upload - a link can break or change without the app knowing."])
 
 # =====================================================================
 # QUIZZES
@@ -1149,8 +1205,9 @@ d.BULLETS([
 
 d.H(2, "4. File uploads are multipart, and PDF-only")
 d.BULLETS([
-    "Only the lesson-note attachment endpoints (upload and replace) take multipart/form-data. "
-    "Every other endpoint in this API is JSON.",
+    "Only the file endpoints take multipart/form-data: lesson-note attachments (upload and "
+    "replace) and course resources (POST /resources/upload, PUT /resources/{id}/file). Every "
+    "other endpoint in this API is JSON.",
     "50 MB max, PDF only, enforced server-side — validate client-side too for a faster "
     "error message, but don't rely on client-side validation alone.",
 ])
@@ -1227,6 +1284,16 @@ d.BULLETS([
     "and call POST /conversations/{id}/read when a thread is opened.",
     "Instructors also need an \"announce to all my students\" form (POST /announcements); "
     "everyone gets an announcements list (GET /announcements).",
+])
+
+d.H(2, "12. Course materials (PDF) screens")
+d.BULLETS([
+    "Instructor/admin: on each video lesson of their course, an \"Add material\" upload "
+    "(file picker covering device + cloud storage, plus drag-and-drop), and per item: "
+    "rename, replace file, delete (with a confirmation).",
+    "Student: the lesson's materials list with \"View\" (opens the PDF, ?inline=true) and "
+    "\"Download\" buttons - both fetch with the access token (see GET "
+    "/resources/{id}/download).",
 ])
 
 d.save("Frontend_API_Guide.docx")
