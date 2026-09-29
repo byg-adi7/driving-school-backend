@@ -84,6 +84,11 @@ public class QuestionValidator {
         if ("INSTRUCTOR".equals(role) && question.getInstructor() != null && question.getInstructor().getUser().getId().equals(userId)) {
             return;
         }
+        if ("INSTRUCTOR".equals(role) && question.getInstructor() == null) {
+            // Unclaimed: open to every instructor of the student's school, who were all notified.
+            callerSchoolScope.requireSameSchool(question.getStudent().getSchool().getId());
+            return;
+        }
         if ("STUDENT".equals(role) && question.getStudent() != null && question.getStudent().getUser().getId().equals(userId)) {
             return;
         }

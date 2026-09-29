@@ -272,3 +272,9 @@ The backend now runs on Render (Docker web service + Render Postgres + Render Ke
 **Verified:** 30 new unit/security tests plus `MessagingIntegrationTest` (runs in CI); full unit suite 725 green. Live: V16 applied on a fresh Postgres 16 and passed `ddl-auto=validate`, and a 24-check HTTP smoke run passed - including the announcement's email batch reaching Resend's real `/emails/batch` endpoint after commit (rejected there only for the missing local API key, and both delivery records settled to FAILED rather than staying PENDING).
 
 **Not built (needs a product/infrastructure decision - raised with the owner, not assumed):** realtime delivery. Clients poll; see the options discussed for WebSockets or an external realtime/push provider.
+
+---
+
+## Unassigned Lesson Questions Reach the School's Instructors (2026-09-29)
+
+A lesson question sent without `assignedInstructorId` notified nobody and appeared in no instructor's inbox - only the admin-facing status listing. Per the product owner's choice, the instructor stays optional ("any instructor"), and now: every active instructor of the student's school gets an IN_APP notification; the question shows in each of their `GET /lesson-questions/pending` inboxes (new `findInstructorInbox` query: my pending questions plus my school's unclaimed ones) and is readable by them; and the first instructor to answer it or change its status claims it (becomes its instructor), so it drops out of everyone else's inbox. 5 new unit tests plus inbox/claim checks in `AdminSchoolScopingIntegrationTest`; full unit suite 730 green.

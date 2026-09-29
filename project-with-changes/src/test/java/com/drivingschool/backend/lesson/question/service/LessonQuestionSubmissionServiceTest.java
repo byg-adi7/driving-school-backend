@@ -375,16 +375,16 @@ class LessonQuestionSubmissionServiceTest {
     }
 
     @Test
-    void getInstructorPendingQuestions_resolvesProfileIdAndFiltersByPending() {
+    void getInstructorPendingQuestions_includesMineAndMySchoolsUnclaimedOnes() {
         InstructorProfile instructor = instructorProfile(20L, userWithId(2L));
         Pageable pageable = Pageable.unpaged();
         when(instructorProfileRepository.findByUserId(2L)).thenReturn(Optional.of(instructor));
-        when(questionRepository.findByInstructorAndStatus(eq(20L), eq(QuestionStatus.PENDING), any()))
+        when(questionRepository.findInstructorInbox(eq(20L), eq(1L), eq(QuestionStatus.PENDING), any()))
                 .thenReturn(new PageImpl<>(java.util.List.of()));
 
         service.getInstructorPendingQuestions(2L, pageable);
 
-        verify(questionRepository, times(1)).findByInstructorAndStatus(eq(20L), eq(QuestionStatus.PENDING), any());
+        verify(questionRepository, times(1)).findInstructorInbox(eq(20L), eq(1L), eq(QuestionStatus.PENDING), any());
     }
 
     @Test
@@ -428,5 +428,67 @@ class LessonQuestionSubmissionServiceTest {
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("own school");
         verify(questionRepository, never()).save(any());
+    }
+
+    // --- unassigned questions reach the school's instructors ---
+
+    @Test
+    void submitQuestion_unassigned_notifiesEveryActiveInstructorOfTheSchool() {
+        StudentProfile student = studentProfile(10L, userWithId(1L));
+        InstructorProfile active1 = instructorProfile(20L, userWithId(2L));
+        InstructorProfile active2 = instructorProfile(21L, userWithId(3L));
+        InstructorProfile inactive = instructorProfile(22L, userWithId(4L));
+        inactive.setActive(false);
+        SubmitQuestionRequest request = new SubmitQuestionRequest();
+        request.setSubject("Roundabouts");
+        request.setQuestionBody("Who has priority on a mini roundabout?");
+
+        when(studentProfileRepository.findByUserId(1L)).thenReturn(Optional.of(student));
+        when(questionRepository.save(any(LessonQuestionSubmission.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(instructorProfileRepository.findBySchoolIdExcludingDeletedUsers(1L)).thenReturn(java.util.List.of(active1, active2, inactive));
+
+        service.submitQuestion(request, 1L);
+
+        org.mockito.ArgumentCaptor<com.drivingschool.backend.notification.dto.SendNotificationRequest> sent =
+                org.mockito.ArgumentCaptor.forClass(com.drivingschool.backend.notification.dto.SendNotificationRequest.class);
+        verify(notificationService, times(2)).send(sent.capture());
+        assertThat(sent.getAllValues()).extracting(r -> r.getUserId()).containsExactlyInAnyOrder(2L, 3L);
+    }
+
+    @Test
+    void respondToQuestion_unassigned_isClaimedByTheRespondingInstructor() {
+        StudentProfile student = studentProfile(10L, userWithId(1L));
+        InstructorProfile responder = instructorProfile(20L, userWithId(2L));
+        LessonQuestionSubmission question = LessonQuestionSubmission.builder()
+                .student(student).subject("Mirrors").questionBody("How often?").status(QuestionStatus.PENDING).build();
+        RespondToQuestionRequest request = new RespondToQuestionRequest();
+        request.setResponse("Every five to eight seconds.");
+
+        when(questionRepository.findById(5L)).thenReturn(Optional.of(question));
+        when(instructorProfileRepository.findByUserId(2L)).thenReturn(Optional.of(responder));
+        when(questionRepository.save(any(LessonQuestionSubmission.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.respondToQuestion(5L, request, 2L);
+
+        assertThat(question.getInstructor()).isSameAs(responder);
+    }
+
+    @Test
+    void updateQuestionStatus_instructorPickingUpAnUnassignedQuestion_claimsIt() {
+        StudentProfile student = studentProfile(10L, userWithId(1L));
+        InstructorProfile instructor = instructorProfile(20L, userWithId(2L));
+        LessonQuestionSubmission question = LessonQuestionSubmission.builder()
+                .student(student).subject("Mirrors").questionBody("How often?").status(QuestionStatus.PENDING).build();
+        UpdateQuestionStatusRequest request = new UpdateQuestionStatusRequest();
+        request.setNewStatus(QuestionStatus.IN_PROGRESS);
+
+        when(questionRepository.findById(5L)).thenReturn(Optional.of(question));
+        when(instructorProfileRepository.findByUserId(2L)).thenReturn(Optional.of(instructor));
+        when(questionRepository.save(any(LessonQuestionSubmission.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(userWithId(2L)));
+
+        service.updateQuestionStatus(5L, request, 2L, "INSTRUCTOR");
+
+        assertThat(question.getInstructor()).isSameAs(instructor);
     }
 }

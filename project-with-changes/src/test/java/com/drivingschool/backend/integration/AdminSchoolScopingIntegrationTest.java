@@ -321,6 +321,16 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
                 .readValue(questionResult.getResponse().getContentAsString(), Map.class).get("data");
         Object questionId = question.get("id");
 
+        // It lands in the pending inbox of school B's instructors, not school A's.
+        String instructorBInbox = mockMvc.perform(get("/api/v1/lesson-questions/pending")
+                        .header("Authorization", bearer(instructorB.token())))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(instructorBInbox).contains("How often should I check my mirrors on a motorway?");
+        String instructorAInbox = mockMvc.perform(get("/api/v1/lesson-questions/pending")
+                        .header("Authorization", bearer(instructorA.token())))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(instructorAInbox).doesNotContain("How often should I check my mirrors on a motorway?");
+
         mockMvc.perform(post("/api/v1/lesson-questions/" + questionId + "/respond")
                         .header("Authorization", bearer(instructorA.token()))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -331,6 +341,11 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("response", "Every five to eight seconds."))))
                 .andExpect(status().isOk());
+        // Answering claims it: it's now instructor B's question.
+        String answered = mockMvc.perform(get("/api/v1/lesson-questions/" + questionId)
+                        .header("Authorization", bearer(studentB.token())))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(answered).contains("\"instructorId\":" + instructorB.profileId());
 
         // Published course content is confined to its own school too.
         MvcResult courseResult = mockMvc.perform(post("/api/v1/courses")

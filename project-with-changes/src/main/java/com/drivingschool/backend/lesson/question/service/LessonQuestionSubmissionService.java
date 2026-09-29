@@ -80,6 +80,14 @@ public class LessonQuestionSubmissionService {
 
         if (instructorProfile != null) {
             notifyInstructorOfNewQuestion(savedQuestion, studentProfile, instructorProfile);
+        } else {
+            // Previously an unassigned question notified nobody and appeared in no
+            // instructor's inbox - it only surfaced in the admin-facing status listing.
+            // Now every active instructor of the student's school is told, and whoever
+            // answers (or picks it up) first takes it - see claimIfUnassigned.
+            instructorProfileRepository.findBySchoolIdExcludingDeletedUsers(studentProfile.getSchool().getId()).stream()
+                    .filter(InstructorProfile::isActive)
+                    .forEach(instructor -> notifyInstructorOfNewQuestion(savedQuestion, studentProfile, instructor));
         }
 
         return mapToResponse(savedQuestion);
@@ -96,6 +104,7 @@ public class LessonQuestionSubmissionService {
 
         var instructorProfile = instructorProfileRepository.findByUserId(callerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + callerId));
+        claimIfUnassigned(question, instructorProfile);
 
         question.setResponse(request.getResponse());
         question.setStatus(QuestionStatus.ANSWERED);
@@ -123,6 +132,11 @@ public class LessonQuestionSubmissionService {
                 .orElseThrow(() -> new ResourceNotFoundException("Question not found with ID: " + questionId));
 
         validator.validateStatusUpdate(question, request.getNewStatus(), userId, role);
+        if ("INSTRUCTOR".equals(role) && question.getInstructor() == null) {
+            // Picking up an unclaimed question (e.g. marking it IN_PROGRESS) takes it too.
+            claimIfUnassigned(question, instructorProfileRepository.findByUserId(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + userId)));
+        }
 
         QuestionStatus previousStatus = question.getStatus();
         question.setStatus(request.getNewStatus());
@@ -183,12 +197,12 @@ public class LessonQuestionSubmissionService {
 
     @Transactional(readOnly = true)
     public Page<QuestionResponse> getInstructorPendingQuestions(Long callerId, Pageable pageable) {
-        Long profileId = instructorProfileRepository.findByUserId(callerId)
-                .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + callerId))
-                .getId();
+        InstructorProfile instructor = instructorProfileRepository.findByUserId(callerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + callerId));
 
-        Page<LessonQuestionSubmission> questions = questionRepository.findByInstructorAndStatus(
-                profileId,
+        Page<LessonQuestionSubmission> questions = questionRepository.findInstructorInbox(
+                instructor.getId(),
+                instructor.getSchool().getId(),
                 QuestionStatus.PENDING,
                 pageable
         );
@@ -214,6 +228,14 @@ public class LessonQuestionSubmissionService {
                 .respondedByName(question.getRespondedBy() != null ? question.getRespondedBy().getDisplayName() : null)
                 .respondedAt(question.getRespondedAt())
                 .build();
+    }
+
+    // The first instructor to answer (or pick up) an unassigned question becomes its
+    // instructor, so it leaves every other instructor's inbox.
+    private void claimIfUnassigned(LessonQuestionSubmission question, InstructorProfile instructor) {
+        if (question.getInstructor() == null) {
+            question.setInstructor(instructor);
+        }
     }
 
     private void notifyInstructorOfNewQuestion(LessonQuestionSubmission question, StudentProfile student,
