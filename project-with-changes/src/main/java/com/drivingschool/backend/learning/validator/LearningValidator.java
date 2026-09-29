@@ -6,20 +6,31 @@ import com.drivingschool.backend.learning.entity.Course;
 import com.drivingschool.backend.learning.entity.VideoLesson;
 import com.drivingschool.backend.learning.enums.CourseStatus;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import org.springframework.stereotype.Component;
 
 @Component
 public class LearningValidator {
 
     private final AdminSchoolScope adminSchoolScope;
+    private final CallerSchoolScope callerSchoolScope;
 
-    public LearningValidator(AdminSchoolScope adminSchoolScope) {
+    public LearningValidator(AdminSchoolScope adminSchoolScope, CallerSchoolScope callerSchoolScope) {
         this.adminSchoolScope = adminSchoolScope;
+        this.callerSchoolScope = callerSchoolScope;
     }
 
     /** An ADMIN creating content under an instructor must share that instructor's school. */
     public void validateAdminSchoolAccess(InstructorProfile instructor) {
         adminSchoolScope.requireAccess(instructor.getSchool().getId());
+    }
+
+    /**
+     * Just the school rule, for listings that apply their own per-item visibility -
+     * e.g. a course's lessons, where each lesson's own published flag decides.
+     */
+    public void validateCourseSchoolAccess(Course course) {
+        callerSchoolScope.requireSameSchool(course.getInstructor().getSchool().getId());
     }
 
     public void validateCourseOwnership(Course course, Long userId, String role) {
@@ -36,10 +47,12 @@ public class LearningValidator {
     }
 
     /**
-     * Published courses are open to any authenticated role; draft/archived
+     * A course is only visible within its own school (bootstrap admin: every school).
+     * Within it, published courses are open to any authenticated role; draft/archived
      * courses are only visible to the owning instructor or ADMIN.
      */
     public void validateCourseReadAccess(Course course, Long userId, String role) {
+        callerSchoolScope.requireSameSchool(course.getInstructor().getSchool().getId());
         if (course.getStatus() == CourseStatus.PUBLISHED) {
             return;
         }
@@ -58,11 +71,12 @@ public class LearningValidator {
     }
 
     /**
-     * Published lessons are open to any authenticated role (mirrors the quiz
-     * module's equivalent policy); unpublished lessons are only visible to the
-     * owning instructor or ADMIN.
+     * Same school rule as courses. Within the school, published lessons are open to any
+     * authenticated role (mirrors the quiz module's equivalent policy); unpublished
+     * lessons are only visible to the owning instructor or ADMIN.
      */
     public void validateLessonReadAccess(VideoLesson lesson, Long userId, String role) {
+        callerSchoolScope.requireSameSchool(lesson.getCourse().getInstructor().getSchool().getId());
         if (lesson.isPublished()) {
             return;
         }
