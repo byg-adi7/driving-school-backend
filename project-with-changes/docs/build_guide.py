@@ -780,7 +780,11 @@ ENDPOINT("PUT", "/lesson-notes/{lessonNoteId}/attachments/{attachmentId}", "Repl
 # =====================================================================
 d.H(1, "Lesson Questions (student Q&A)")
 d.P("A student asks a question (optionally targeted at a specific instructor); an "
-    "instructor responds; status moves through a small workflow with a full audit history.")
+    "instructor responds; status moves through a small workflow with a full audit history. "
+    "For back-and-forth conversation, use Messaging (below) instead.")
+d.P("Always send assignedInstructorId - pick it from GET /conversations/contacts. An "
+    "unassigned question notifies no instructor and appears in no instructor's "
+    "assigned/pending inbox; it only surfaces in GET /lesson-questions/status/{status}.")
 
 ENDPOINT("POST", "/lesson-questions", "Submit a question.", access="STUDENT only",
     request=[
@@ -917,6 +921,56 @@ ENDPOINT("PATCH", "/driving-assessments/{id}/feedback", "Edit the feedback text 
 ENDPOINT("GET", "/driving-assessments/{id}", "Get an assessment by ID.", access="ADMIN, the authoring INSTRUCTOR, or the assessment's STUDENT")
 ENDPOINT("GET", "/driving-assessments/student/{studentId}", "List a student's assessments.", access="ADMIN, the student themselves, or an instructor who has assessed that student")
 ENDPOINT("GET", "/driving-assessments/instructor/{instructorId}", "List an instructor's authored assessments.", access="ADMIN or the instructor themselves")
+
+# =====================================================================
+# MESSAGING & ANNOUNCEMENTS
+# =====================================================================
+d.H(1, "Messaging & Announcements")
+d.P("Private one-to-one conversations between a student and an instructor of the SAME "
+    "school, plus one-way announcements from an instructor to every student of their "
+    "school. Admins don't take part in conversations and can't read them.")
+d.P("There is no push/realtime channel: poll GET /conversations (and GET /notifications/me) "
+    "while the messaging screen is open, e.g. every 10-30 seconds, and refresh the open "
+    "thread when its unreadCount or lastMessageAt changes. Each new message also creates "
+    "an IN_APP notification for the recipient (\"New message from <name>\").")
+
+d.H(2, "Conversations")
+ENDPOINT("GET", "/conversations/contacts", "Who I can message.", access="STUDENT or INSTRUCTOR",
+    response=[["profileId / firstName / lastName", "", "a student gets their school's ACTIVE instructors; an instructor gets their school's students"]],
+    notes=["This is also the instructor picker for POST /lesson-questions' assignedInstructorId - "
+           "students previously had no way to list their instructors."])
+ENDPOINT("POST", "/conversations", "Open my conversation with someone (or get the existing one).", access="STUDENT or INSTRUCTOR",
+    request=[["participantProfileId", "number", "yes", "the OTHER person's profile id: an InstructorProfile.id for a student caller, a StudentProfile.id for an instructor caller"]],
+    response=[["id", "number", "the conversation id used by every endpoint below"],
+              ["counterpartName / counterpartRole", "", "the other participant"],
+              ["unreadCount / lastMessagePreview / lastMessageAt", "", ""]],
+    notes=["Idempotent: there is exactly one conversation per student-instructor pair, so "
+           "calling this again returns the same one (200 both times).",
+           "400 if the other person is at a different school, is an inactive instructor, or "
+           "their account has been deleted."])
+ENDPOINT("GET", "/conversations", "My inbox, most recent activity first.", access="STUDENT or INSTRUCTOR",
+    response=[["[] of the same shape as POST /conversations", "", "unreadCount counts messages the OTHER person sent that I haven't read"]])
+ENDPOINT("GET", "/conversations/{id}/messages", "A conversation's messages, NEWEST first (paginated, 50 per page by default).", access="Participants only",
+    response=[["content[].body / sentAt / readAt", "", ""],
+              ["content[].mine", "boolean", "true for messages the caller sent - use it to align chat bubbles"]],
+    notes=["Reverse the page for a top-to-bottom chat view; load page=1, 2, ... to scroll back in history.",
+           "Anyone who isn't one of the two participants gets 400."])
+ENDPOINT("POST", "/conversations/{id}/messages", "Send a message.", access="Participants only",
+    request=[["body", "string", "yes", "1-5000 chars"]])
+ENDPOINT("POST", "/conversations/{id}/read", "Mark everything the other person sent me here as read.", access="Participants only",
+    notes=["Call it when the user opens the thread - it's what brings unreadCount back to 0."])
+
+d.H(2, "Announcements")
+ENDPOINT("POST", "/announcements", "Announce something to every student of my school.", access="INSTRUCTOR only",
+    request=[["subject", "string", "yes", "max 200 chars"],
+             ["body", "string", "yes", "max 5000 chars"]],
+    response=[["recipientCount", "number", "how many students it went to"]],
+    notes=["Delivered to each student as an IN_APP notification immediately, and by email "
+           "(sent in the background in batches, so the response doesn't wait for it).",
+           "One-way: students can't reply to an announcement - a student who wants to "
+           "respond messages the instructor through a conversation."])
+ENDPOINT("GET", "/announcements", "My school's announcements, newest first (paginated).", access="STUDENT, INSTRUCTOR, or ADMIN",
+    notes=["The bootstrap admin sees every school's."])
 
 # =====================================================================
 # NOTIFICATIONS
@@ -1128,6 +1182,17 @@ d.BULLETS([
     "Driving assessments are instructor-authored, like lesson notes, but are NOT editable "
     "beyond the feedback text (no score/result edit, no delete) — don't reuse the "
     "lesson-note edit/delete UI pattern for assessments.",
+])
+
+d.H(2, "11. Messaging screens")
+d.BULLETS([
+    "Student and instructor both need an inbox (GET /conversations), a thread view "
+    "(GET /conversations/{id}/messages, newest first) and a \"new conversation\" picker "
+    "fed by GET /conversations/contacts.",
+    "Poll while the inbox/thread is open - there's no realtime push - and call POST "
+    "/conversations/{id}/read when a thread is opened.",
+    "Instructors also need an \"announce to all my students\" form (POST /announcements); "
+    "everyone gets an announcements list (GET /announcements).",
 ])
 
 d.save("Frontend_API_Guide.docx")
