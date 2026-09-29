@@ -76,6 +76,7 @@ In the web service's **Environment** tab, set:
 | `OPENROUTE_API_KEY` | your [OpenRouteService](https://openrouteservice.org/dev/#/signup) API key | Powers practical-lesson route generation (`POST /api/v1/lesson-routes/generate`). No fallback default - if unset, route generation fails at request time with a clear error (logged, not fatal to the app) rather than silently calling the real API with a fake key. Free tier is generous enough for this app's scale; the directions endpoint URL and request timeout are fixed app config, not something you need to set. |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` | your Twilio credentials and sending number | Optional. SMS (booking scheduled/cancelled texts) only sends once all three are set; until then the SMS channel is a safe no-op that records the message as FAILED. |
 | `TWILIO_VERIFY_SERVICE_SID` | the `VA...` SID of a Twilio Verify service | Optional - turns on WhatsApp as an account-verification channel (email is always offered). Needs `TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN` too, but not `TWILIO_FROM_NUMBER`. Setup in the Twilio console: create a Verify service with **code length 6**, and connect your own WhatsApp sender (a WhatsApp Business number - Twilio requires your own sender for WhatsApp codes and creates the message templates itself). Only numbers stored in international format (`+233...`) are offered WhatsApp. |
+| `VERIFICATION_REQUIRED` | `false` until real users can receive codes, then `true` (or unset) | Whether login requires a verified account. Defaults to `true`. Set `false` while email only goes to your own Resend account (no verified domain yet) so everyone can log in; accounts created meanwhile stay unverified and verify at their next login once it's `true` again. See "Going live with account verification" below. |
 | `VERIFICATION_LOG_CODES` | leave unset | **Never set in production.** Local-development switch: when no `RESEND_API_KEY` is set, writes verification codes to the log instead of refusing to send them. On by default only in the `dev` profile. |
 | `RATE_LIMIT_CLIENT_IP_HEADER` | leave unset | Which request header holds the visitor's real IP for rate limiting. Defaults to `CF-Connecting-IP` in the prod profile - verified on Render: it always carries the real IP and Cloudflare blocks requests that try to fake it, while `getRemoteAddr()` is a Cloudflare edge server and `X-Forwarded-For`'s first entry is client-controlled. Only change it if the app moves somewhere that isn't behind Cloudflare. |
 
@@ -114,6 +115,32 @@ Web service → **Settings** → **Auto-Deploy** → **After CI Checks Pass**. F
 every push to `main` deploys automatically once GitHub Actions is green. Per Render's docs,
 checks concluding `success`, `neutral` or `skipped` count as passed; if any check fails - or
 a push has no checks at all - Render doesn't deploy it.
+
+## Going live with account verification
+
+Login requires a one-time code for every account created since verification shipped
+(older accounts were marked verified). Codes go by email through Resend, or by WhatsApp
+through Twilio Verify when that's configured.
+
+**Until you own a domain** Resend only delivers from `onboarding@resend.dev` to your own
+Resend account email, so other new users could never receive a code. Run with
+`VERIFICATION_REQUIRED=false` meanwhile: everyone logs in with just their password.
+To test the code screens, temporarily set it to `true` and use an account whose email
+is your Resend account's.
+
+**Once you have a domain:**
+
+1. Resend dashboard → Domains → add a subdomain such as `mail.yourdomain.com`, copy the
+   DNS records it shows into your registrar's DNS settings, and wait for "Verified".
+2. On Render set `MAIL_FROM` to an address on it, e.g. `Aidly <no-reply@mail.yourdomain.com>`
+   (keep `RESEND_API_KEY`).
+3. Set `VERIFICATION_REQUIRED=true` (or delete the variable - `true` is the default). Render
+   redeploys on save.
+4. Log in with a new test account on a real inbox and confirm the code arrives.
+
+Every account created while the switch was off then verifies at its next login.
+WhatsApp can be switched on at any time independently (`TWILIO_VERIFY_SERVICE_SID`, see
+the table above).
 
 ## How the pipeline works
 

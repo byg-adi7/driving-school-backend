@@ -117,6 +117,11 @@ app:
     reset-url: ${PASSWORD_RESET_URL:http://localhost:3000/reset-password}
 
   verification:
+    # Whether login requires a verified account (one-time code by email/WhatsApp).
+    # Switch off with VERIFICATION_REQUIRED=false only while real users can't receive
+    # codes yet (e.g. no verified Resend domain). Accounts created meanwhile stay
+    # unverified and verify at their next login once it's back on.
+    required: ${VERIFICATION_REQUIRED:true}
     # Dev convenience only: when email delivery isn't configured (no
     # RESEND_API_KEY), log the one-time code instead of refusing to send it.
     # Never enable in production - anyone with log access could log in as anyone.
