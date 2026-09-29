@@ -157,11 +157,6 @@ public class SecurityConfig {
                         // (StompAuthChannelInterceptor) - nothing is reachable before that.
                         .requestMatchers("/ws", "/ws/**").permitAll()
 
-                        // TEMPORARY: echoes only the caller's own request headers, to settle
-                        // how the real client IP reaches the app behind Render's proxy - see
-                        // ClientIpDiagnosticsController. Remove together with that class.
-                        .requestMatchers(HttpMethod.GET, "/api/v1/diagnostics/client-ip").permitAll()
-
                         // All other auth endpoints require authentication
                         .requestMatchers("/api/v1/auth/**").authenticated()
                         

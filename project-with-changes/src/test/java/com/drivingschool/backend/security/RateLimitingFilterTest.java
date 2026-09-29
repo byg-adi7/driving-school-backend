@@ -29,7 +29,7 @@ class RateLimitingFilterTest {
 
     @BeforeEach
     void setUp() {
-        filter = new RateLimitingFilter(rateLimiter);
+        filter = new RateLimitingFilter(rateLimiter, new ClientIpResolver(""));
     }
 
     @Test
@@ -95,5 +95,23 @@ class RateLimitingFilterTest {
         assertThat(response.getStatus()).isEqualTo(429);
         assertThat(response.getHeader("X-Rate-Limit-Retry-After-Seconds")).isEqualTo("42");
         assertThat(response.getContentAsString()).contains("Too many requests");
+    }
+
+    @Test
+    void doFilter_behindCloudflare_keysByTheVisitorNotTheEdgeServer() throws Exception {
+        RateLimitingFilter behindCloudflare = new RateLimitingFilter(rateLimiter, new ClientIpResolver("CF-Connecting-IP"));
+        when(rateLimiter.tryConsume(eq("ratelimit:auth:102.176.94.206"), eq(10), eq(Duration.ofMinutes(1))))
+                .thenReturn(new RateLimiter.RateLimitResult(true, 9, 0), new RateLimiter.RateLimitResult(true, 8, 0));
+
+        // Same visitor through two different Cloudflare edges -> the same counter.
+        for (String edge : new String[]{"172.71.151.230", "172.68.22.31"}) {
+            MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login");
+            request.setRemoteAddr(edge);
+            request.addHeader("CF-Connecting-IP", "102.176.94.206");
+            behindCloudflare.doFilter(request, new MockHttpServletResponse(), filterChain);
+        }
+
+        verify(rateLimiter, org.mockito.Mockito.times(2))
+                .tryConsume(eq("ratelimit:auth:102.176.94.206"), eq(10), eq(Duration.ofMinutes(1)));
     }
 }

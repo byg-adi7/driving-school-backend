@@ -29,9 +29,11 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     private static final int API_LIMIT = 100;
 
     private final RateLimiter rateLimiter;
+    private final ClientIpResolver clientIpResolver;
 
-    public RateLimitingFilter(RateLimiter rateLimiter) {
+    public RateLimitingFilter(RateLimiter rateLimiter, ClientIpResolver clientIpResolver) {
         this.rateLimiter = rateLimiter;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @Override
@@ -46,7 +48,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         }
 
         boolean isAuthEndpoint = isAuthEndpoint(requestURI);
-        String clientIp = request.getRemoteAddr();
+        String clientIp = clientIpResolver.resolve(request);
         String key = "ratelimit:" + (isAuthEndpoint ? "auth:" : "api:") + clientIp;
         int limit = isAuthEndpoint ? AUTH_LIMIT : API_LIMIT;
 

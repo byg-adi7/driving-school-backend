@@ -255,7 +255,7 @@ The backend now runs on Render (Docker web service + Render Postgres + Render Ke
 
 **Worth checking on the live account (from Render's docs, not something the repo can see):** free Render Postgres databases expire 30 days after creation with no backups; free Key Value instances lose all data on restart (so refresh-token revocations are forgotten); the Key Value maxmemory policy should be `noeviction` so a revocation entry can't be evicted.
 
-**Open:** the rate limiter still keys on `request.getRemoteAddr()`. Behind Render's proxy that is likely the proxy for every visitor, but Render's docs don't specify the forwarding-header hop count or whether client-supplied `X-Forwarded-For` values are stripped, so the correct rule is being settled empirically with a temporary echo endpoint (`GET /api/v1/diagnostics/client-ip`) rather than guessed - to be removed in the same follow-up that fixes the limiter.
+**Resolved (see "Rate Limiting Keyed to the Real Visitor" below):** the rate limiter's client-IP rule, settled empirically with the temporary echo endpoint, which has since been removed.
 
 ---
 
@@ -303,3 +303,11 @@ Instructors had no way to upload a PDF for their students: lesson-note attachmen
 - The frontend guide now tells the frontend to use the OS file picker (device storage plus the cloud storage apps it already exposes) and drag-and-drop, how to view/download with the token (fetch + object URL), and lists provider-specific pickers (Google Picker, Dropbox Chooser) as optional external integrations needing the owner's approval.
 
 **Verified:** 17 new unit/security tests; full unit suite green. Live against the built jar on a fresh Postgres + Redis (V17 applied): a 14-check run passed - students blocked from uploading/deleting, a spoofed non-PDF rejected, a real PDF uploaded, listed, downloaded byte-for-byte, served inline for viewing, blocked for another school's student and for anonymous callers, renamed, replaced (students get the new bytes), deleted - and no stored file left orphaned on disk.
+
+---
+
+## Rate Limiting Keyed to the Real Visitor (2026-09-29)
+
+Measured against the live Render service with the temporary echo endpoint: `request.getRemoteAddr()` - what `RateLimitingFilter` keyed on - is a Cloudflare edge server, a different one on almost every request, so six requests from one machine landed in several counters (`X-Rate-Limit-Remaining` 99, 98, 98, 97, 97, 99): strangers shared limits and one client's requests were spread across many. `X-Forwarded-For` keeps whatever the client sends and only appends the real IP (so its first entry is forgeable); `True-Client-IP` is overwritten with the real IP; `X-Real-IP` is stripped; and `CF-Connecting-IP` always carries the real IP - a request that tries to set it is rejected by Cloudflare itself (HTTP 403, error 1000).
+
+**Fixed:** new `ClientIpResolver` keys the limiter on a configured trusted header - `CF-Connecting-IP` in the prod profile (`RATE_LIMIT_CLIENT_IP_HEADER` to override) - falling back to the socket address when unset (local dev/CI, where any header could be forged). The temporary `GET /api/v1/diagnostics/client-ip` endpoint is removed. 5 new tests; full unit suite 768 green.
