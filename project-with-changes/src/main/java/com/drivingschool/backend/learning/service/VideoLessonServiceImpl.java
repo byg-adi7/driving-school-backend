@@ -98,6 +98,7 @@ public class VideoLessonServiceImpl implements VideoLessonService {
     public List<VideoLessonResponse> getByCourse(Long courseId, Long userId, String role) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", "id", courseId));
+        validator.validateCourseSchoolAccess(course);
         boolean canManage = validator.isCourseOwnerOrAdmin(course, userId, role);
 
         return videoLessonRepository.findByCourseIdOrderByLessonOrderAsc(courseId).stream()

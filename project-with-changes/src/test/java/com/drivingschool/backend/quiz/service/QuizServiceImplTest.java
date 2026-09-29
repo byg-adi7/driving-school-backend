@@ -22,6 +22,7 @@ import com.drivingschool.backend.quiz.dto.SubmitQuizRequest;
 import com.drivingschool.backend.quiz.validator.QuizValidator;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.user.entity.User;
@@ -51,6 +52,7 @@ import static org.mockito.Mockito.when;
 class QuizServiceImplTest {
 
     private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+    private final CallerSchoolScope callerSchoolScope = mock(CallerSchoolScope.class);
 
     @Mock private QuizRepository quizRepository;
     @Mock private QuizQuestionRepository quizQuestionRepository;
@@ -63,7 +65,7 @@ class QuizServiceImplTest {
     @Mock private GamificationService gamificationService;
     private final QuizMapper quizMapper = new QuizMapper();
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final QuizValidator validator = new QuizValidator(adminSchoolScope);
+    private final QuizValidator validator = new QuizValidator(adminSchoolScope, callerSchoolScope);
 
     private QuizServiceImpl quizService;
 
@@ -71,7 +73,16 @@ class QuizServiceImplTest {
     void setUp() {
         quizService = new QuizServiceImpl(quizRepository, quizQuestionRepository, quizSubmissionRepository,
                 courseRepository, studentProfileRepository, quizMapper, licenseWorkflowService,
-                licenseWorkflowRepository, objectMapper, validator, notificationService, gamificationService);
+                licenseWorkflowRepository, objectMapper, validator, notificationService, gamificationService,
+                new PublishedQuizCatalog(quizRepository, quizQuestionRepository, quizMapper));
+    }
+
+    // Every profile fixture shares one school (with a real id), as real same-school
+    // students and instructors do - cross-school checks compare school ids.
+    private School defaultSchool() {
+        School school = School.builder().active(true).build();
+        ReflectionTestUtils.setField(school, "id", 1L);
+        return school;
     }
 
     private User userWithId(Long id) {
@@ -81,7 +92,7 @@ class QuizServiceImplTest {
     }
 
     private Course courseFor(User instructorUser) {
-        InstructorProfile instructor = InstructorProfile.builder().user(instructorUser).active(true).school(School.builder().active(true).build()).build();
+        InstructorProfile instructor = InstructorProfile.builder().user(instructorUser).active(true).school(defaultSchool()).build();
         return Course.builder().title("Road Safety 101").instructor(instructor).build();
     }
 
@@ -93,7 +104,7 @@ class QuizServiceImplTest {
     }
 
     private StudentProfile studentProfile(Long profileId, User user) {
-        StudentProfile student = StudentProfile.builder().user(user).school(School.builder().active(true).build()).build();
+        StudentProfile student = StudentProfile.builder().user(user).school(defaultSchool()).build();
         ReflectionTestUtils.setField(student, "id", profileId);
         return student;
     }
@@ -239,6 +250,35 @@ class QuizServiceImplTest {
 
         assertThatThrownBy(() -> quizService.submit(10L, request, 999L, "ADMIN"))
                 .isInstanceOf(BadRequestException.class);
+        verify(quizSubmissionRepository, never()).save(any());
+    }
+
+    @Test
+    void getPublishedByCourse_courseOfAnotherSchool_isDeniedBeforeAnyQuizIsLoaded() {
+        Quiz quiz = quizFor(userWithId(1L), true);
+        when(courseRepository.findById(5L)).thenReturn(Optional.of(quiz.getCourse()));
+        doThrow(new BadRequestException("no access")).when(callerSchoolScope).requireSameSchool(any());
+
+        assertThatThrownBy(() -> quizService.getPublishedByCourse(5L)).isInstanceOf(BadRequestException.class);
+        verify(quizRepository, never()).findByCourseIdAndPublishedTrue(any());
+    }
+
+    @Test
+    void submit_quizOfAnotherSchool_isRejectedBeforeScoring() {
+        Quiz quiz = quizFor(userWithId(1L), true);
+        StudentProfile student = studentProfile(20L, userWithId(2L));
+        com.drivingschool.backend.school.entity.School otherSchool =
+                com.drivingschool.backend.school.entity.School.builder().active(true).build();
+        ReflectionTestUtils.setField(otherSchool, "id", 2L);
+        ReflectionTestUtils.setField(student, "school", otherSchool);
+        SubmitQuizRequest request = SubmitQuizRequest.builder().answers(Map.of(1L, "Stop")).build();
+
+        when(quizRepository.findById(10L)).thenReturn(Optional.of(quiz));
+        when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student));
+
+        assertThatThrownBy(() -> quizService.submit(10L, request, 2L, "STUDENT"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("another school");
         verify(quizSubmissionRepository, never()).save(any());
     }
 }

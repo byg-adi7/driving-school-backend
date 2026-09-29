@@ -14,6 +14,7 @@ import com.drivingschool.backend.learning.repository.CourseRepository;
 import com.drivingschool.backend.learning.validator.LearningValidator;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,17 +40,19 @@ import static org.mockito.Mockito.when;
 class CourseServiceImplTest {
 
     private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+    private final CallerSchoolScope callerSchoolScope = mock(CallerSchoolScope.class);
 
     @Mock private CourseRepository courseRepository;
     @Mock private InstructorProfileRepository instructorProfileRepository;
     private final LearningMapper mapper = new LearningMapper();
-    private final LearningValidator validator = new LearningValidator(adminSchoolScope);
+    private final LearningValidator validator = new LearningValidator(adminSchoolScope, callerSchoolScope);
 
     private CourseServiceImpl courseService;
 
     @BeforeEach
     void setUp() {
-        courseService = new CourseServiceImpl(courseRepository, instructorProfileRepository, mapper, validator);
+        courseService = new CourseServiceImpl(courseRepository, instructorProfileRepository, mapper, validator,
+                callerSchoolScope, new PublishedCourseCatalog(courseRepository, mapper));
     }
 
     private User userWithId(Long id) {
@@ -228,7 +231,7 @@ class CourseServiceImplTest {
     // --- getPublished / getMine ---
 
     @Test
-    void getPublished_returnsOnlyPublishedCourses() {
+    void getPublished_asBootstrapAdmin_returnsEverySchoolsPublishedCourses() {
         Course course = courseFor(instructorProfile(20L, userWithId(1L)), CourseStatus.PUBLISHED);
         when(courseRepository.findByStatus(CourseStatus.PUBLISHED)).thenReturn(List.of(course));
 
@@ -273,11 +276,24 @@ class CourseServiceImplTest {
     }
 
     @Test
-    void getById_publishedCourse_stillOpenToAdminOfAnotherSchool() {
+    void getById_publishedCourse_deniedToAnotherSchool() {
         Course course = courseFor(instructorProfile(20L, userWithId(1L)), CourseStatus.PUBLISHED);
         when(courseRepository.findById(5L)).thenReturn(Optional.of(course));
+        doThrow(new BadRequestException("no access")).when(callerSchoolScope).requireSameSchool(any());
 
-        assertThatCode(() -> courseService.getById(5L, 999L, "ADMIN")).doesNotThrowAnyException();
-        verify(adminSchoolScope, never()).requireAccess(any());
+        assertThatThrownBy(() -> courseService.getById(5L, 999L, "STUDENT"))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void getPublished_forAScopedCaller_returnsOnlyTheirSchoolsCourses() {
+        Course course = courseFor(instructorProfile(20L, userWithId(1L)), CourseStatus.PUBLISHED);
+        when(callerSchoolScope.callerSchoolId()).thenReturn(Optional.of(7L));
+        when(courseRepository.findByStatusAndInstructor_School_Id(CourseStatus.PUBLISHED, 7L)).thenReturn(List.of(course));
+
+        List<CourseResponse> result = courseService.getPublished();
+
+        assertThat(result).hasSize(1);
+        verify(courseRepository, never()).findByStatus(any());
     }
 }

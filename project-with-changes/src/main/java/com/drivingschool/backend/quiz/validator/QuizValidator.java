@@ -4,6 +4,7 @@ import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.learning.entity.Course;
 import com.drivingschool.backend.quiz.entity.Quiz;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import org.springframework.stereotype.Component;
 
@@ -11,9 +12,16 @@ import org.springframework.stereotype.Component;
 public class QuizValidator {
 
     private final AdminSchoolScope adminSchoolScope;
+    private final CallerSchoolScope callerSchoolScope;
 
-    public QuizValidator(AdminSchoolScope adminSchoolScope) {
+    public QuizValidator(AdminSchoolScope adminSchoolScope, CallerSchoolScope callerSchoolScope) {
         this.adminSchoolScope = adminSchoolScope;
+        this.callerSchoolScope = callerSchoolScope;
+    }
+
+    /** A course's quizzes are only visible within the course's own school (bootstrap admin: any). */
+    public void validateCourseSchoolAccess(Course course) {
+        callerSchoolScope.requireSameSchool(course.getInstructor().getSchool().getId());
     }
 
     /** An ADMIN submitting on a student's behalf must share that student's school. */
@@ -42,6 +50,7 @@ public class QuizValidator {
      * quizzes are only visible to the owning instructor or ADMIN.
      */
     public void validateQuizReadAccess(Quiz quiz, Long userId, String role) {
+        validateCourseSchoolAccess(quiz.getCourse());
         if (quiz.isPublished()) {
             return;
         }

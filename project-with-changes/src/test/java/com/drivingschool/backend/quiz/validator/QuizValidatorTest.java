@@ -6,6 +6,7 @@ import com.drivingschool.backend.learning.entity.Course;
 import com.drivingschool.backend.quiz.entity.Quiz;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.user.entity.User;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -19,8 +20,9 @@ import static org.mockito.Mockito.mock;
 class QuizValidatorTest {
 
     private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+    private final CallerSchoolScope callerSchoolScope = mock(CallerSchoolScope.class);
 
-    private final QuizValidator validator = new QuizValidator(adminSchoolScope);
+    private final QuizValidator validator = new QuizValidator(adminSchoolScope, callerSchoolScope);
 
     private User userWithId(Long id) {
         User user = User.builder().email("u" + id + "@example.com").password("x").enabled(true).emailVerified(true).build();
@@ -151,12 +153,12 @@ class QuizValidatorTest {
     }
 
     @Test
-    void validateQuizReadAccess_publishedQuiz_stillOpenToAdminOfAnotherSchool() {
-        // Published content is readable by every authenticated role in every school,
-        // so an admin is no more restricted than that school's own students.
+    void validateQuizReadAccess_publishedQuiz_deniedToAnotherSchool() {
+        // Published content is confined to its own school, like everything else.
         Quiz quiz = quizFor(userWithId(1L), true);
-        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+        doThrow(new BadRequestException("no access")).when(callerSchoolScope).requireSameSchool(any());
 
-        assertThatCode(() -> validator.validateQuizReadAccess(quiz, 999L, "ADMIN")).doesNotThrowAnyException();
+        assertThatThrownBy(() -> validator.validateQuizReadAccess(quiz, 999L, "STUDENT"))
+                .isInstanceOf(BadRequestException.class);
     }
 }

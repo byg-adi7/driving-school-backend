@@ -30,7 +30,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,6 +52,7 @@ public class QuizServiceImpl implements QuizService {
     private final QuizValidator validator;
     private final NotificationService notificationService;
     private final GamificationService gamificationService;
+    private final PublishedQuizCatalog publishedQuizCatalog;
 
     public QuizServiceImpl(QuizRepository quizRepository,
                            QuizQuestionRepository quizQuestionRepository,
@@ -65,7 +65,8 @@ public class QuizServiceImpl implements QuizService {
                            ObjectMapper objectMapper,
                            QuizValidator validator,
                            NotificationService notificationService,
-                           GamificationService gamificationService) {
+                           GamificationService gamificationService,
+                           PublishedQuizCatalog publishedQuizCatalog) {
         this.quizRepository = quizRepository;
         this.quizQuestionRepository = quizQuestionRepository;
         this.quizSubmissionRepository = quizSubmissionRepository;
@@ -78,6 +79,7 @@ public class QuizServiceImpl implements QuizService {
         this.validator = validator;
         this.notificationService = notificationService;
         this.gamificationService = gamificationService;
+        this.publishedQuizCatalog = publishedQuizCatalog;
     }
 
     // A brand-new quiz is always unpublished, so it can't actually appear in
@@ -158,23 +160,20 @@ public class QuizServiceImpl implements QuizService {
         return quizMapper.toResponse(quiz, questions, !forStudent);
     }
 
-    // Safe to cache uniformly - always published-only with includeAnswers fixed
-    // to false, identical response for every caller. getById is intentionally
-    // left uncached: its forStudent flag toggles whether the correct answers
-    // are included, and caching by quizId alone would risk serving a
-    // student a response that was actually built (and cached) for an
-    // instructor's forStudent=false call, leaking answers.
+    // The course's school is checked here on every call; only then is the cached,
+    // caller-independent list (published-only, answers always stripped) fetched from
+    // PublishedQuizCatalog - a cache hit can never skip the school check. getById
+    // is intentionally left uncached: its forStudent flag toggles whether the
+    // correct answers are included, and caching by quizId alone would risk serving
+    // a student a response that was built (and cached) for an instructor's
+    // forStudent=false call, leaking answers.
     @Override
-    @Cacheable(value = "quizzes-by-course", key = "#courseId")
     @Transactional(readOnly = true)
     public List<QuizResponse> getPublishedByCourse(Long courseId) {
-        return quizRepository.findByCourseIdAndPublishedTrue(courseId).stream()
-                .map(quiz -> {
-                    List<QuizQuestion> questions =
-                            quizQuestionRepository.findByQuizIdOrderByQuestionOrderAsc(quiz.getId());
-                    return quizMapper.toResponse(quiz, questions, false);
-                })
-                .toList();
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", "id", courseId));
+        validator.validateCourseSchoolAccess(course);
+        return publishedQuizCatalog.forCourse(courseId);
     }
 
     @Override
@@ -194,6 +193,9 @@ public class QuizServiceImpl implements QuizService {
                 : studentProfileRepository.findByUserId(userId)
                         .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for user ID: " + userId));
         validator.validateAdminSchoolAccess(student);
+        if (!student.getSchool().getId().equals(quiz.getCourse().getInstructor().getSchool().getId())) {
+            throw new BadRequestException("This quiz belongs to another school");
+        }
 
         long attempts = quizSubmissionRepository.countByQuizIdAndStudentId(quizId, student.getId());
         if (attempts >= quiz.getMaxAttempts()) {

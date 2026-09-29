@@ -2,6 +2,7 @@ package com.drivingschool.backend.integration;
 
 import com.drivingschool.backend.booking.dto.BookingResponse;
 import com.drivingschool.backend.booking.enums.BookingType;
+import com.drivingschool.backend.learning.dto.CourseResponse;
 import com.drivingschool.backend.lesson.note.dto.LessonNoteResponse;
 import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.role.enums.RoleName;
@@ -330,5 +331,32 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("response", "Every five to eight seconds."))))
                 .andExpect(status().isOk());
+
+        // Published course content is confined to its own school too.
+        MvcResult courseResult = mockMvc.perform(post("/api/v1/courses")
+                        .header("Authorization", bearer(instructorA.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("title", "School A Road Signs"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        Long courseId = parse(courseResult, CourseResponse.class).getId();
+        mockMvc.perform(put("/api/v1/courses/" + courseId + "/publish").header("Authorization", bearer(instructorA.token())))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/courses/" + courseId).header("Authorization", bearer(studentA.token())))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/courses/" + courseId).header("Authorization", bearer(studentB.token())))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/quizzes/course/" + courseId).header("Authorization", bearer(studentB.token())))
+                .andExpect(status().isBadRequest());
+
+        MvcResult studentACourses = mockMvc.perform(get("/api/v1/courses").header("Authorization", bearer(studentA.token())))
+                .andExpect(status().isOk())
+                .andReturn();
+        MvcResult studentBCourses = mockMvc.perform(get("/api/v1/courses").header("Authorization", bearer(studentB.token())))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertThat(studentACourses.getResponse().getContentAsString()).contains("School A Road Signs");
+        assertThat(studentBCourses.getResponse().getContentAsString()).doesNotContain("School A Road Signs");
     }
 }

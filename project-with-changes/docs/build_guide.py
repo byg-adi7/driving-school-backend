@@ -114,8 +114,9 @@ d.P("The ADMIN-only \"list everything\" endpoints (GET /lesson-notes, GET /lesso
     "and GET /lesson-questions/status/{status} for admins and instructors) don't reject a "
     "regular admin - they return only that admin's own school's rows. The bootstrap admin "
     "gets every school's.")
-d.P("Published courses, video lessons and quizzes are the one exception: they stay "
-    "readable by any authenticated user in any school.")
+d.P("This includes course content: courses, video lessons, resources and quizzes - "
+    "published or not - are only visible within the school of the instructor who owns "
+    "them.")
 
 # =====================================================================
 # AUTHENTICATION
@@ -507,14 +508,15 @@ ENDPOINT("PUT", "/courses/{courseId}/publish", "Publish a course.", access="ADMI
 ENDPOINT("PUT", "/courses/{courseId}/unpublish", "Unpublish a course back to draft.", access="ADMIN or the owning INSTRUCTOR")
 ENDPOINT("PUT", "/courses/{courseId}/archive", "Archive a course.", access="ADMIN or the owning INSTRUCTOR")
 
-ENDPOINT("GET", "/courses/{courseId}", "Get a course by ID.", access="ADMIN, INSTRUCTOR, or STUDENT",
-    notes=["A DRAFT course is only visible to its owning instructor or an admin — a student "
+ENDPOINT("GET", "/courses/{courseId}", "Get a course by ID.", access="ADMIN, INSTRUCTOR, or STUDENT of the course's school",
+    notes=["A course from another school gets 400, published or not.",
+           "A DRAFT course is only visible to its owning instructor or an admin — a student "
            "(or a different instructor) gets 400 Bad Request, not 404, if they try to view "
            "someone else's draft."])
 
-ENDPOINT("GET", "/courses", "List all published courses.", access="ADMIN, INSTRUCTOR, or STUDENT",
-    notes=["This is the main course catalog / browse screen — identical result for every "
-           "caller, drafts never appear here."])
+ENDPOINT("GET", "/courses", "List the published courses of the caller's own school.", access="ADMIN, INSTRUCTOR, or STUDENT",
+    notes=["This is the main course catalog / browse screen — only the caller's own "
+           "school's courses (the bootstrap admin gets every school's), drafts never appear here."])
 
 ENDPOINT("GET", "/courses/mine", "List the current instructor's own courses, including drafts.", access="INSTRUCTOR")
 
@@ -533,7 +535,7 @@ ENDPOINT("PUT", "/video-lessons/{lessonId}", "Update a video lesson.", access="A
 ENDPOINT("PUT", "/video-lessons/{lessonId}/publish", "Publish a video lesson.", access="ADMIN or owning INSTRUCTOR")
 ENDPOINT("PUT", "/video-lessons/{lessonId}/unpublish", "Unpublish a video lesson.", access="ADMIN or owning INSTRUCTOR")
 ENDPOINT("GET", "/video-lessons/{lessonId}", "Get a video lesson by ID.", access="ADMIN, INSTRUCTOR, or STUDENT")
-ENDPOINT("GET", "/video-lessons/course/{courseId}", "List lessons for a course.", access="ADMIN, INSTRUCTOR, or STUDENT",
+ENDPOINT("GET", "/video-lessons/course/{courseId}", "List lessons for a course.", access="ADMIN, INSTRUCTOR, or STUDENT of the course's school",
     notes=["A student (or non-owning instructor) only sees published lessons in this list; "
            "the owning instructor/admin sees drafts too."])
 
@@ -589,8 +591,9 @@ ENDPOINT("GET", "/quizzes/{quizId}", "Get a quiz by ID.", access="ADMIN, INSTRUC
            "an instructor/admin authoring screen. Getting this backwards leaks answers to "
            "students."])
 
-ENDPOINT("GET", "/quizzes/course/{courseId}", "List published quizzes for a course.", access="ADMIN, INSTRUCTOR, or STUDENT",
-    notes=["Always returns answers stripped, regardless of caller — use the single-quiz "
+ENDPOINT("GET", "/quizzes/course/{courseId}", "List published quizzes for a course.", access="ADMIN, INSTRUCTOR, or STUDENT of the course's school",
+    notes=["A course from another school gets 400; an unknown course ID gets 404.",
+           "Always returns answers stripped, regardless of caller — use the single-quiz "
            "endpoint above with forStudent=false for an authoring view of one quiz's answers."])
 
 ENDPOINT("POST", "/quizzes/{quizId}/submit", "Submit answers for grading.", access="ADMIN or STUDENT",

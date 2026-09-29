@@ -8,12 +8,14 @@ import com.drivingschool.backend.learning.dto.UpdateVideoLessonRequest;
 import com.drivingschool.backend.learning.dto.VideoLessonResponse;
 import com.drivingschool.backend.learning.entity.Course;
 import com.drivingschool.backend.learning.entity.VideoLesson;
+import com.drivingschool.backend.learning.enums.CourseStatus;
 import com.drivingschool.backend.learning.mapper.LearningMapper;
 import com.drivingschool.backend.learning.repository.CourseRepository;
 import com.drivingschool.backend.learning.repository.VideoLessonRepository;
 import com.drivingschool.backend.learning.validator.LearningValidator;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -38,11 +41,12 @@ import static org.mockito.Mockito.when;
 class VideoLessonServiceImplTest {
 
     private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+    private final CallerSchoolScope callerSchoolScope = mock(CallerSchoolScope.class);
 
     @Mock private VideoLessonRepository videoLessonRepository;
     @Mock private CourseRepository courseRepository;
     private final LearningMapper mapper = new LearningMapper();
-    private final LearningValidator validator = new LearningValidator(adminSchoolScope);
+    private final LearningValidator validator = new LearningValidator(adminSchoolScope, callerSchoolScope);
 
     private VideoLessonServiceImpl videoLessonService;
 
@@ -193,5 +197,19 @@ class VideoLessonServiceImplTest {
         List<VideoLessonResponse> result = videoLessonService.getByCourse(5L, 1L, "INSTRUCTOR");
 
         assertThat(result).hasSize(2);
+    }
+
+    @Test
+    void getByCourse_courseOfAnotherSchool_isDenied() {
+        Course course = Course.builder().title("Road Safety 101").status(CourseStatus.PUBLISHED)
+                .instructor(com.drivingschool.backend.instructor.entity.InstructorProfile.builder()
+                        .school(com.drivingschool.backend.school.entity.School.builder().active(true).build()).build())
+                .build();
+        when(courseRepository.findById(5L)).thenReturn(Optional.of(course));
+        doThrow(new BadRequestException("no access")).when(callerSchoolScope).requireSameSchool(any());
+
+        assertThatThrownBy(() -> videoLessonService.getByCourse(5L, 999L, "STUDENT"))
+                .isInstanceOf(BadRequestException.class);
+        verify(videoLessonRepository, never()).findByCourseIdOrderByLessonOrderAsc(any());
     }
 }
