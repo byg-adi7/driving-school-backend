@@ -66,4 +66,31 @@ class ResendEmailClientTest {
         assertThatThrownBy(() -> client.send("from@example.com", "to@example.com", "subject", "body"))
                 .isInstanceOf(RestClientException.class);
     }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void sendBatch_postsOneEmailObjectPerRecipientToTheBatchEndpoint() {
+        client.sendBatch("no-reply@drivingschool.local", java.util.List.of(
+                new ResendEmailClient.BatchEmail("a@example.com", "Subject A", "Body A"),
+                new ResendEmailClient.BatchEmail("b@example.com", "Subject B", "Body B")));
+
+        ArgumentCaptor<HttpEntity<java.util.List<Map<String, Object>>>> captor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForObject(eq("https://api.resend.com/emails/batch"), captor.capture(), eq(String.class));
+        java.util.List<Map<String, Object>> body = captor.getValue().getBody();
+        assertThat(body).hasSize(2);
+        assertThat(body.get(0)).containsEntry("from", "no-reply@drivingschool.local")
+                .containsEntry("to", "a@example.com").containsEntry("subject", "Subject A").containsEntry("text", "Body A");
+        assertThat(body.get(1)).containsEntry("to", "b@example.com");
+        assertThat(captor.getValue().getHeaders().getFirst(HttpHeaders.AUTHORIZATION)).isEqualTo("Bearer re_test_key");
+    }
+
+    @Test
+    void sendBatch_moreThanResendsMaximum_isRefusedWithoutCallingTheApi() {
+        java.util.List<ResendEmailClient.BatchEmail> tooMany = java.util.stream.IntStream.range(0, ResendEmailClient.MAX_BATCH_SIZE + 1)
+                .mapToObj(i -> new ResendEmailClient.BatchEmail(i + "@example.com", "s", "b")).toList();
+
+        assertThatThrownBy(() -> client.sendBatch("no-reply@drivingschool.local", tooMany))
+                .isInstanceOf(IllegalArgumentException.class);
+        org.mockito.Mockito.verifyNoInteractions(restTemplate);
+    }
 }
