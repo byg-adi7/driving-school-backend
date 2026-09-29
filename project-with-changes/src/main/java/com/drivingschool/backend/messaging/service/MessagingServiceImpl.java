@@ -23,7 +23,6 @@ import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.user.entity.User;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -42,7 +41,6 @@ import java.util.stream.Collectors;
  * a question to, so questions went out unassigned, reached no instructor's inbox, and
  * only surfaced in the admin-facing by-status listing.
  */
-@Slf4j
 @Service
 public class MessagingServiceImpl implements MessagingService {
 
@@ -269,16 +267,11 @@ public class MessagingServiceImpl implements MessagingService {
     private void notifyRecipient(User recipient, String senderName, String body, Long conversationId) {
         String preview = body.length() <= NOTIFICATION_PREVIEW_LENGTH
                 ? body : body.substring(0, NOTIFICATION_PREVIEW_LENGTH) + "...";
-        try {
-            notificationService.send(SendNotificationRequest.builder()
-                    .userId(recipient.getId())
-                    .subject("New message from " + senderName)
-                    .body(preview)
-                    .channel(NotificationChannel.IN_APP)
-                    .build());
-        } catch (Exception ex) {
-            log.warn("Failed to send new-message notification: conversationId={}, recipientId={}",
-                    conversationId, recipient.getId(), ex);
-        }
+        notificationService.sendAfterCommit(SendNotificationRequest.builder()
+                .userId(recipient.getId())
+                .subject("New message from " + senderName)
+                .body(preview)
+                .channel(NotificationChannel.IN_APP)
+                .build());
     }
 }

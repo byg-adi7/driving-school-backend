@@ -40,6 +40,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -254,13 +255,13 @@ class BookingServiceImplTest {
 
         bookingService.create(validRequestBuilder().build());
 
-        verify(notificationService).send(argThat(req ->
+        verify(notificationService).sendAfterCommit(argThat(req ->
                 req.getUserId().equals(student.getUser().getId())
                         && req.getChannel() == NotificationChannel.IN_APP));
     }
 
     @Test
-    void create_whenNotificationSendThrows_bookingStillSucceeds() {
+    void create_notifiesAfterCommit_soANotificationFailureCannotFailTheBooking() {
         StudentProfile student = studentWithId(1L);
         InstructorProfile instructor = instructorWithId(2L, true);
         Booking savedBooking = mock(Booking.class);
@@ -271,11 +272,12 @@ class BookingServiceImplTest {
         when(bookingRepository.existsInstructorConflict(eq(2L), any(), any(), any(), isNull())).thenReturn(false);
         when(bookingRepository.save(any(Booking.class))).thenReturn(savedBooking);
         when(bookingMapper.toResponse(savedBooking)).thenReturn(expectedResponse);
-        when(notificationService.send(any())).thenThrow(new RuntimeException("notification service down"));
-
         BookingResponse response = bookingService.create(validRequestBuilder().build());
 
+        // sendAfterCommit (never send) - its own tests prove a failure can't escape it.
         assertThat(response).isEqualTo(expectedResponse);
+        verify(notificationService, never()).send(any());
+        verify(notificationService, times(2)).sendAfterCommit(any());
     }
 
     // --- state transitions ---

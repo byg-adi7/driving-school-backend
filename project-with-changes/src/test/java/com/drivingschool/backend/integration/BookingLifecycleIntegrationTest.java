@@ -4,8 +4,6 @@ import com.drivingschool.backend.booking.dto.BookingResponse;
 import com.drivingschool.backend.booking.enums.BookingType;
 import com.drivingschool.backend.lesson.note.dto.AttachmentResponse;
 import com.drivingschool.backend.lesson.note.dto.LessonNoteResponse;
-import com.drivingschool.backend.notification.dto.NotificationResponse;
-import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.school.dto.SchoolResponse;
 import org.junit.jupiter.api.Test;
@@ -20,15 +18,13 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Exercises the full instructor-initiated booking workflow end to end through
  * real HTTP calls against a real Postgres + Redis stack: school/instructor/student
- * setup, booking creation and conflict rejection, the automatic student
- * notification, lesson-note authoring and ownership-gated access, and a
+ * setup, booking creation and conflict rejection, lesson-note authoring and ownership-gated access, and a
  * content-validated PDF attachment upload - tying together most of the fixes
  * made across this project's recent sessions in one realistic flow.
  */
@@ -79,25 +75,9 @@ class BookingLifecycleIntegrationTest extends AbstractIntegrationTest {
                                 scheduledAt.plusHours(3))))
                 .andExpect(status().isForbidden());
 
-        // the student was automatically notified of the new lesson
-        MvcResult notificationsResult = mockMvc.perform(get("/api/v1/notifications/me")
-                        .header("Authorization", bearer(student.token())))
-                .andExpect(status().isOk())
-                .andReturn();
-        Map<String, Object> notificationsPage = parseMap(notificationsResult);
-        var content = (java.util.List<Map<String, Object>>) notificationsPage.get("content");
-        assertThat(content).isNotEmpty();
-        Map<String, Object> notification = content.get(0);
-        assertThat(notification.get("channel")).isEqualTo(NotificationChannel.IN_APP.name());
-        assertThat(notification.get("readAt")).isNull();
-
-        Long notificationId = ((Number) notification.get("id")).longValue();
-        MvcResult markReadResult = mockMvc.perform(patch("/api/v1/notifications/" + notificationId + "/read")
-                        .header("Authorization", bearer(student.token())))
-                .andExpect(status().isOk())
-                .andReturn();
-        NotificationResponse markedRead = parse(markReadResult, NotificationResponse.class);
-        assertThat(markedRead.getReadAt()).isNotNull();
+        // The student's "lesson scheduled" notification is sent only after the booking
+        // commits, which never happens inside this harness's rolled-back transaction -
+        // NotificationDeliveryIntegrationTest covers it (and marking it read) on a real server.
 
         // instructor authors a lesson note for this student, linked to the booking
         String createNoteJson = objectMapper.writeValueAsString(Map.of(
@@ -166,11 +146,5 @@ class BookingLifecycleIntegrationTest extends AbstractIntegrationTest {
                 "durationMinutes", 60,
                 "bookingType", BookingType.ROAD_LESSON.name()
         ));
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> parseMap(MvcResult result) throws Exception {
-        Map<String, Object> body = objectMapper.readValue(result.getResponse().getContentAsString(), Map.class);
-        return (Map<String, Object>) body.get("data");
     }
 }

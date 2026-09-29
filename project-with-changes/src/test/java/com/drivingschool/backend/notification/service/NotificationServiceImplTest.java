@@ -50,6 +50,7 @@ class NotificationServiceImplTest {
     @Mock private CurrentUserService currentUserService;
     @Mock private CallerSchoolScope callerSchoolScope;
     @Mock private RealtimePublisher realtimePublisher;
+    @Mock private org.springframework.transaction.PlatformTransactionManager transactionManager;
     private final NotificationMapper notificationMapper = new NotificationMapper();
 
     private NotificationServiceImpl service;
@@ -78,7 +79,7 @@ class NotificationServiceImplTest {
         org.mockito.Mockito.lenient().when(smsSender.supports(NotificationChannel.EMAIL)).thenReturn(false);
         service = new NotificationServiceImpl(userRepository, notificationRepository,
                 List.of(emailSender, smsSender), notificationMapper, currentUserService, callerSchoolScope,
-                realtimePublisher);
+                realtimePublisher, transactionManager);
     }
 
     @Test
@@ -315,5 +316,58 @@ class NotificationServiceImplTest {
                 .channel(NotificationChannel.EMAIL).build());
 
         verify(realtimePublisher, times(1)).publishAfterCommit(eq(1L), eq(RealtimeEvent.NOTIFICATION_CREATED), any());
+    }
+
+    // --- sendAfterCommit: best-effort, after the caller's commit, never throws ---
+
+    private SendNotificationRequest inAppRequest() {
+        return SendNotificationRequest.builder().userId(1L).subject("Lesson booked").body("b")
+                .channel(NotificationChannel.IN_APP).build();
+    }
+
+    @Test
+    void sendAfterCommit_insideACallersTransaction_waitsForTheCommit_thenSendsInItsOwnTransaction() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(userWithId(1L, "student@example.com")));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.sendAfterCommit(inAppRequest());
+            verify(notificationRepository, never()).save(any());
+
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        verify(notificationRepository, org.mockito.Mockito.atLeastOnce()).save(any(Notification.class));
+        org.mockito.ArgumentCaptor<org.springframework.transaction.TransactionDefinition> definition =
+                org.mockito.ArgumentCaptor.forClass(org.springframework.transaction.TransactionDefinition.class);
+        verify(transactionManager).getTransaction(definition.capture());
+        assertThat(definition.getValue().getPropagationBehavior())
+                .isEqualTo(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
+
+    @Test
+    void sendAfterCommit_whenTheCallersTransactionRollsBack_sendsNothing() {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.sendAfterCommit(inAppRequest());
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(sync -> sync.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        verify(userRepository, never()).findById(any());
+        verify(notificationRepository, never()).save(any());
+    }
+
+    @Test
+    void sendAfterCommit_aFailingSend_isLoggedNeverThrown() {
+        when(userRepository.findById(1L)).thenReturn(Optional.empty());
+
+        org.assertj.core.api.Assertions.assertThatCode(() -> service.sendAfterCommit(inAppRequest()))
+                .doesNotThrowAnyException();
     }
 }

@@ -94,7 +94,7 @@ public class LessonNoteService {
                                     note.getLessonSummary()))
                     .channel(NotificationChannel.IN_APP)
                     .build();
-            notificationService.send(request);
+            notificationService.sendAfterCommit(request);
         } catch (Exception ex) {
             log.warn("Failed to send lesson note notification: noteId={}", note.getId(), ex);
         }

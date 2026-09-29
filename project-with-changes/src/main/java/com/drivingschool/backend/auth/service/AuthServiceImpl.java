@@ -393,16 +393,12 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private void sendWelcomeNotification(User user) {
-        try {
-            notificationService.send(SendNotificationRequest.builder()
-                    .userId(user.getId())
-                    .subject("Welcome to Aidly!")
-                    .body("Your account is ready. We're glad to have you on board - explore around and let us know if you need anything.")
-                    .channel(NotificationChannel.IN_APP)
-                    .build());
-        } catch (Exception ex) {
-            log.warn("Failed to send welcome notification: userId={}", user.getId(), ex);
-        }
+        notificationService.sendAfterCommit(SendNotificationRequest.builder()
+                .userId(user.getId())
+                .subject("Welcome to Aidly!")
+                .body("Your account is ready. We're glad to have you on board - explore around and let us know if you need anything.")
+                .channel(NotificationChannel.IN_APP)
+                .build());
     }
 
     // EMAIL, not IN_APP: this is a security signal the user should see even if
@@ -410,16 +406,12 @@ public class AuthServiceImpl implements AuthService {
     // (e.g. an attacker changed the password), and it should reach them
     // wherever they actually are, not just inside the app.
     private void sendPasswordChangedNotification(User user) {
-        try {
-            notificationService.send(SendNotificationRequest.builder()
-                    .userId(user.getId())
-                    .subject("Your Aidly password was changed")
-                    .body("Your password was just changed. If this wasn't you, please contact support immediately.")
-                    .channel(NotificationChannel.EMAIL)
-                    .build());
-        } catch (Exception ex) {
-            log.warn("Failed to send password-changed notification: userId={}", user.getId(), ex);
-        }
+        notificationService.sendAfterCommit(SendNotificationRequest.builder()
+                .userId(user.getId())
+                .subject("Your Aidly password was changed")
+                .body("Your password was just changed. If this wasn't you, please contact support immediately.")
+                .channel(NotificationChannel.EMAIL)
+                .build());
     }
 
 }

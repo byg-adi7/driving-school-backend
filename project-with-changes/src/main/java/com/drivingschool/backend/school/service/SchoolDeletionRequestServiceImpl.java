@@ -151,33 +151,25 @@ public class SchoolDeletionRequestServiceImpl implements SchoolDeletionRequestSe
 
     private void notifyBootstrapAdmin(SchoolDeletionRequest request) {
         userRepository.findByBootstrapAdminTrue().ifPresent(bootstrap -> {
-            try {
-                notificationService.send(SendNotificationRequest.builder()
-                        .userId(bootstrap.getId())
-                        .subject("Action required: school deletion request awaiting your approval")
-                        .body(("Admin %s has requested to permanently delete their school \"%s\" (school ID %d). " +
-                                "Approving this request will delete the school and the requesting admin's account " +
-                                "together, along with all of that school's students, instructors, bookings, and " +
-                                "other records. Please review it in the School Deletion Requests queue before approving.")
-                                .formatted(request.getRequestedByEmail(), request.getSchoolName(), request.getSchool().getId()))
-                        .channel(NotificationChannel.EMAIL)
-                        .build());
-            } catch (Exception ex) {
-                log.warn("Failed to send school deletion request EMAIL notification: requestId={}", request.getId(), ex);
-            }
-            try {
-                notificationService.send(SendNotificationRequest.builder()
-                        .userId(bootstrap.getId())
-                        .subject("School deletion request pending")
-                        .body(("%s has requested deletion of their school \"%s\". This is only a request - " +
-                                "nothing has been deleted yet. Review and approve or reject it from the School " +
-                                "Deletion Requests queue.")
-                                .formatted(request.getRequestedByEmail(), request.getSchoolName()))
-                        .channel(NotificationChannel.IN_APP)
-                        .build());
-            } catch (Exception ex) {
-                log.warn("Failed to send school deletion request IN_APP notification: requestId={}", request.getId(), ex);
-            }
+            notificationService.sendAfterCommit(SendNotificationRequest.builder()
+                    .userId(bootstrap.getId())
+                    .subject("Action required: school deletion request awaiting your approval")
+                    .body(("Admin %s has requested to permanently delete their school \"%s\" (school ID %d). " +
+                            "Approving this request will delete the school and the requesting admin's account " +
+                            "together, along with all of that school's students, instructors, bookings, and " +
+                            "other records. Please review it in the School Deletion Requests queue before approving.")
+                            .formatted(request.getRequestedByEmail(), request.getSchoolName(), request.getSchool().getId()))
+                    .channel(NotificationChannel.EMAIL)
+                    .build());
+            notificationService.sendAfterCommit(SendNotificationRequest.builder()
+                    .userId(bootstrap.getId())
+                    .subject("School deletion request pending")
+                    .body(("%s has requested deletion of their school \"%s\". This is only a request - " +
+                            "nothing has been deleted yet. Review and approve or reject it from the School " +
+                            "Deletion Requests queue.")
+                            .formatted(request.getRequestedByEmail(), request.getSchoolName()))
+                    .channel(NotificationChannel.IN_APP)
+                    .build());
         });
     }
 
@@ -192,25 +184,17 @@ public class SchoolDeletionRequestServiceImpl implements SchoolDeletionRequestSe
         String body = reviewNotes != null && !reviewNotes.isBlank()
                 ? "Your request to delete school \"%s\" was rejected. Reviewer notes: %s".formatted(request.getSchoolName(), reviewNotes)
                 : "Your request to delete school \"%s\" was rejected.".formatted(request.getSchoolName());
-        try {
-            notificationService.send(SendNotificationRequest.builder()
-                    .userId(requester.getId())
-                    .subject("School deletion request rejected")
-                    .body(body)
-                    .channel(NotificationChannel.IN_APP)
-                    .build());
-        } catch (Exception ex) {
-            log.warn("Failed to send deletion-rejected IN_APP notification: requestId={}", request.getId(), ex);
-        }
-        try {
-            notificationService.send(SendNotificationRequest.builder()
-                    .userId(requester.getId())
-                    .subject("School deletion request rejected")
-                    .body(body)
-                    .channel(NotificationChannel.EMAIL)
-                    .build());
-        } catch (Exception ex) {
-            log.warn("Failed to send deletion-rejected EMAIL notification: requestId={}", request.getId(), ex);
-        }
+        notificationService.sendAfterCommit(SendNotificationRequest.builder()
+                .userId(requester.getId())
+                .subject("School deletion request rejected")
+                .body(body)
+                .channel(NotificationChannel.IN_APP)
+                .build());
+        notificationService.sendAfterCommit(SendNotificationRequest.builder()
+                .userId(requester.getId())
+                .subject("School deletion request rejected")
+                .body(body)
+                .channel(NotificationChannel.EMAIL)
+                .build());
     }
 }

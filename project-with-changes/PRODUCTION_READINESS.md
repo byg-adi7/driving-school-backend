@@ -311,3 +311,19 @@ Instructors had no way to upload a PDF for their students: lesson-note attachmen
 Measured against the live Render service with the temporary echo endpoint: `request.getRemoteAddr()` - what `RateLimitingFilter` keyed on - is a Cloudflare edge server, a different one on almost every request, so six requests from one machine landed in several counters (`X-Rate-Limit-Remaining` 99, 98, 98, 97, 97, 99): strangers shared limits and one client's requests were spread across many. `X-Forwarded-For` keeps whatever the client sends and only appends the real IP (so its first entry is forgeable); `True-Client-IP` is overwritten with the real IP; `X-Real-IP` is stripped; and `CF-Connecting-IP` always carries the real IP - a request that tries to set it is rejected by Cloudflare itself (HTTP 403, error 1000).
 
 **Fixed:** new `ClientIpResolver` keys the limiter on a configured trusted header - `CF-Connecting-IP` in the prod profile (`RATE_LIMIT_CLIENT_IP_HEADER` to override) - falling back to the socket address when unset (local dev/CI, where any header could be forged). The temporary `GET /api/v1/diagnostics/client-ip` endpoint is removed. 5 new tests; full unit suite 768 green.
+
+## Notifications Can No Longer Fail the Action That Triggered Them (2026-09-29)
+
+**The bug:** every service that notifies as a side effect (bookings, messages, lesson questions, lesson notes, assessments, quizzes, registration, password changes, school creation, deletion requests) called `notificationService.send(...)` inside its own transaction, wrapped in a try/catch. That catch never worked - the trap recorded in item 8 of the booking section above. `send()` is `@Transactional` and joins the caller's transaction, so any exception inside it (a missing user, a constraint violation, an oversized subject...) marks the whole transaction rollback-only on the way out, and the caller's commit then throws `UnexpectedRollbackException`. The booking, message or account fails even though the exception was "caught". One concrete trigger: announcement notification subjects are built from user text (`"Announcement from <name>: <subject up to 200>"`) and could overflow the 300-character column.
+
+**Fix:**
+- New `NotificationService.sendAfterCommit`. It waits for the caller's transaction to commit (and sends nothing if it rolls back), then sends in a `REQUIRES_NEW` transaction of its own, and only logs a failure - it never throws.
+- A `REQUIRES_NEW` send *inside* the caller's transaction wouldn't work: it can't see the caller's uncommitted rows, such as the brand-new user a welcome notification is for.
+- All best-effort call sites use it. `POST /notifications/send` still uses `send()` directly, because there the notification *is* the request.
+- `Notification` subjects are trimmed to 200 characters with an ellipsis, so they can't overflow the column.
+
+**Tests:**
+- Unit tests prove delivery is deferred until commit and uses `REQUIRES_NEW`, that nothing is sent on rollback, and that a failing send never throws.
+- The booking and assessment "notification failure can't fail it" tests now assert the after-commit path.
+- The MockMvc harness never commits, so the IN_APP notification assertions moved out of `BookingLifecycleIntegrationTest` and `MessagingIntegrationTest`. They now live in the new real-server `NotificationDeliveryIntegrationTest`, which checks welcome, booking (including mark-as-read) and message notifications after real commits.
+- `AbstractRealServerIntegrationTest` is the shared base for real-server tests.

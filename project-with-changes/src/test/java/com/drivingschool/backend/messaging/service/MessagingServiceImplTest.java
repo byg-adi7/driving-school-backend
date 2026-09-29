@@ -230,7 +230,7 @@ class MessagingServiceImplTest {
         assertThat(conversation.getLastMessagePreview()).isEqualTo("Can we move Friday's lesson?");
         assertThat(conversation.getLastMessageAt()).isNotNull();
         ArgumentCaptor<SendNotificationRequest> notification = ArgumentCaptor.forClass(SendNotificationRequest.class);
-        verify(notificationService).send(notification.capture());
+        verify(notificationService).sendAfterCommit(notification.capture());
         assertThat(notification.getValue().getUserId()).isEqualTo(INSTRUCTOR_USER_ID);
         assertThat(notification.getValue().getChannel()).isEqualTo(NotificationChannel.IN_APP);
         assertThat(notification.getValue().getSubject()).isEqualTo("New message from Sam Student");
@@ -279,7 +279,7 @@ class MessagingServiceImplTest {
 
         assertThat(conversation.getLastMessagePreview()).hasSize(Conversation.PREVIEW_LENGTH);
         ArgumentCaptor<SendNotificationRequest> notification = ArgumentCaptor.forClass(SendNotificationRequest.class);
-        verify(notificationService).send(notification.capture());
+        verify(notificationService).sendAfterCommit(notification.capture());
         assertThat(notification.getValue().getUserId()).isEqualTo(STUDENT_USER_ID);
         assertThat(notification.getValue().getBody()).hasSize(103).endsWith("...");
     }

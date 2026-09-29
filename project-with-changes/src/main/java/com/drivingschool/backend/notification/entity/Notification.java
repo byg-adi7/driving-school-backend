@@ -65,7 +65,7 @@ public class Notification extends BaseEntity {
                         NotificationStatus status, String recipientAddress,
                         LocalDateTime sentAt, String failureReason, LocalDateTime readAt) {
         this.user = user;
-        this.subject = subject;
+        this.subject = fitSubject(subject);
         this.body = body;
         this.channel = channel;
         this.status = status;
@@ -87,5 +87,16 @@ public class Notification extends BaseEntity {
 
     public void markRead() {
         this.readAt = LocalDateTime.now();
+    }
+
+    public static final int MAX_SUBJECT_LENGTH = 200;
+
+    // Subjects are built from user-supplied text (e.g. "Announcement from <name>:
+    // <subject up to 200>"), which could exceed the column and fail the whole insert.
+    private static String fitSubject(String subject) {
+        if (subject == null || subject.length() <= MAX_SUBJECT_LENGTH) {
+            return subject;
+        }
+        return subject.substring(0, MAX_SUBJECT_LENGTH - 3) + "...";
     }
 }

@@ -39,6 +39,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -171,11 +172,11 @@ class DrivingAssessmentServiceImplTest {
 
         service.createAssessment(request, 1L);
 
-        verify(notificationService).send(any());
+        verify(notificationService).sendAfterCommit(any());
     }
 
     @Test
-    void createAssessment_whenNotificationThrows_assessmentStillSucceeds() {
+    void createAssessment_notifiesAfterCommit_soANotificationFailureCannotFailTheAssessment() {
         CreateDrivingAssessmentRequest request = validRequest(AssessmentResult.PASSED);
         InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
         StudentProfile student = studentProfile(60L, userWithId(2L));
@@ -183,9 +184,9 @@ class DrivingAssessmentServiceImplTest {
         when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
         when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(student));
         when(drivingAssessmentRepository.save(any(DrivingAssessment.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(notificationService.send(any())).thenThrow(new RuntimeException("notification service down"));
-
         assertThatCode(() -> service.createAssessment(request, 1L)).doesNotThrowAnyException();
+        verify(notificationService, never()).send(any());
+        verify(notificationService).sendAfterCommit(any());
     }
 
     @Test

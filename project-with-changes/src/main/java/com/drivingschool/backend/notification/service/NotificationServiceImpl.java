@@ -19,9 +19,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
 
@@ -36,6 +39,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final CurrentUserService currentUserService;
     private final CallerSchoolScope callerSchoolScope;
     private final RealtimePublisher realtimePublisher;
+    private final TransactionTemplate requiresNewTransaction;
 
     public NotificationServiceImpl(UserRepository userRepository,
                                    NotificationRepository notificationRepository,
@@ -43,7 +47,8 @@ public class NotificationServiceImpl implements NotificationService {
                                    NotificationMapper notificationMapper,
                                    CurrentUserService currentUserService,
                                    CallerSchoolScope callerSchoolScope,
-                                   RealtimePublisher realtimePublisher) {
+                                   RealtimePublisher realtimePublisher,
+                                   PlatformTransactionManager transactionManager) {
         this.userRepository = userRepository;
         this.notificationRepository = notificationRepository;
         this.notificationSenders = notificationSenders;
@@ -51,6 +56,38 @@ public class NotificationServiceImpl implements NotificationService {
         this.currentUserService = currentUserService;
         this.callerSchoolScope = callerSchoolScope;
         this.realtimePublisher = realtimePublisher;
+        this.requiresNewTransaction = new TransactionTemplate(transactionManager);
+        this.requiresNewTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
+
+    // Callers used to call send() inside their own transaction and catch any exception.
+    // That catch never helped: send() is @Transactional and JOINS the caller's
+    // transaction, so an exception leaving it marks the whole transaction rollback-only
+    // on the way out - the caller's commit then throws UnexpectedRollbackException, and
+    // the booking/message/account fails anyway. (A REQUIRES_NEW send() inside the
+    // caller's transaction isn't the answer either: it couldn't see the caller's
+    // uncommitted rows - e.g. the brand-new user a welcome notification is for.)
+    // So: wait for the caller's commit, then send in a fresh transaction.
+    @Override
+    public void sendAfterCommit(SendNotificationRequest request) {
+        Runnable deliver = () -> {
+            try {
+                requiresNewTransaction.executeWithoutResult(status -> send(request));
+            } catch (Exception ex) {
+                log.warn("Failed to deliver {} notification to user {} ({})",
+                        request.getChannel(), request.getUserId(), request.getSubject(), ex);
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    deliver.run();
+                }
+            });
+            return;
+        }
+        deliver.run();
     }
 
     @Override
