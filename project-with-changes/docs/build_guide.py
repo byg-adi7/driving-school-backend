@@ -38,7 +38,7 @@ d.P("This document is the reference a frontend developer needs to build a client
 d.SPACER()
 
 d.H(2, "Base URL")
-d.CODE("https://<your-railway-domain>.up.railway.app/api/v1")
+d.CODE("https://<your-service-name>.onrender.com/api/v1")
 d.P("Every path in this document is relative to that base (e.g. \"POST /auth/login\" "
     "means POST https://.../api/v1/auth/login). Every endpoint requires a Bearer JWT "
     "in the Authorization header EXCEPT: login, refresh-token, forgot-password, "

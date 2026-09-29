@@ -28,7 +28,7 @@ spring:
     schemas: public
 
 server:
-  # Cloud Run injects PORT; GKE/other targets fall back to 8080.
+  # Render injects PORT (10000 by default); anything else falls back to 8080.
   port: ${PORT:8080}
   compression:
     enabled: true
@@ -50,8 +50,8 @@ server:
     include-binding-errors: never
     include-stacktrace: never
     include-exception: false
-  # No server.ssl block: TLS terminates at the platform (Cloud Run, or GKE
-  # Ingress/managed cert) - the app always receives plain HTTP internally.
+  # No server.ssl block: TLS terminates at the platform (Render's edge) - the
+  # app always receives plain HTTP internally.
   # (http2.enabled was also removed: Tomcat's HTTP/2 support requires ALPN,
   # which requires TLS at this layer - it was a no-op without server.ssl.)
 

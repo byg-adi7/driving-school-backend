@@ -32,8 +32,9 @@ USER appuser
 
 EXPOSE 8080
 
-# Cloud Run/GKE use their own health-check mechanisms and ignore this; it's
-# primarily for docker-compose and plain `docker run` local usage.
+# Render uses its own health check (the service's Health Check Path setting -
+# see DEPLOYMENT.md) rather than this; it's primarily for docker-compose and
+# plain `docker run` local usage.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
     CMD curl -sf "http://localhost:${PORT:-8080}/actuator/health/liveness" || exit 1
 

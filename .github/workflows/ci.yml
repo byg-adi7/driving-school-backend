@@ -1,5 +1,10 @@
 name: CI
 
+# Deployment is not done here: Render deploys main itself through its GitHub
+# integration. With the service's Auto-Deploy set to "After CI Checks Pass",
+# Render waits for the jobs below to succeed on a push to main before
+# deploying, and skips the deploy if any of them fail.
+
 on:
   push:
     branches: [main]
@@ -75,37 +80,3 @@ jobs:
           tags: driving-school-backend:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  deploy:
-    name: Deploy to Railway
-    runs-on: ubuntu-latest
-    needs: [test, docker-build]
-    # Only deploy from main itself, never from a PR branch, and only once
-    # RAILWAY_TOKEN has actually been added as a repo secret (see
-    # project-with-changes/DEPLOYMENT.md) - until then this job is skipped
-    # rather than failing the whole workflow.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check RAILWAY_TOKEN is configured
-        id: check-token
-        run: |
-          if [ -z "${{ secrets.RAILWAY_TOKEN }}" ]; then
-            echo "RAILWAY_TOKEN secret not set - see project-with-changes/DEPLOYMENT.md. Skipping deploy."
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Install Railway CLI
-        if: steps.check-token.outputs.configured == 'true'
-        run: npm install -g @railway/cli
-
-      - name: Deploy
-        if: steps.check-token.outputs.configured == 'true'
-        working-directory: project-with-changes
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service="${{ vars.RAILWAY_SERVICE_NAME }}" --detach
