@@ -38,7 +38,10 @@ d.P("This document is the reference a frontend developer needs to build a client
 d.SPACER()
 
 d.H(2, "Base URL")
-d.CODE("https://<your-service-name>.onrender.com/api/v1")
+d.CODE("https://driving-school-backend-1hjt.onrender.com/api/v1")
+d.P("That's the live backend on Render. Locally it's http://localhost:8080/api/v1. When "
+    "the company gets its own domain the backend may move to e.g. https://api.<domain> - "
+    "keep the base URL in ONE frontend config value so that's a one-line change.")
 d.P("Every path in this document is relative to that base (e.g. \"POST /auth/login\" "
     "means POST https://.../api/v1/auth/login). Every endpoint requires a Bearer JWT "
     "in the Authorization header EXCEPT: login, refresh-token, forgot-password, "
@@ -1114,7 +1117,8 @@ d.P("While the app is open, keep one WebSocket connection per logged-in user and
     "backend pushes events to it the moment they happen - no polling. It speaks STOMP "
     "over a plain WebSocket; use a STOMP client library such as @stomp/stompjs.")
 d.BULLETS([
-    "URL: wss://<your-backend-host>/ws (ws://localhost:<PORT>/ws locally). The page's "
+    "URL: wss://driving-school-backend-1hjt.onrender.com/ws (ws://localhost:8080/ws "
+    "locally) - derive it from the same base-URL config value. The page's "
     "origin must be one of CORS_ALLOWED_ORIGINS.",
     "Authenticate in the STOMP CONNECT frame, not the URL: connectHeaders = { Authorization: "
     "\"Bearer <accessToken>\" }. A missing/expired/refresh token, or a disabled/deleted "
