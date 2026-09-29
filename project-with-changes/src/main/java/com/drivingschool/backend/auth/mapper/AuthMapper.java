@@ -33,6 +33,24 @@ public class AuthMapper {
                 .build();
     }
 
+    /**
+     * For an account created BY someone else (an admin or instructor): just the new
+     * user's identity, deliberately without tokens - handing the creator a working
+     * session for the account they just made let them act as that user for the
+     * refresh token's whole 7-day life. The new user logs in themselves.
+     */
+    public AuthResponse toRegisteredUserResponse(User user) {
+        return AuthResponse.builder()
+                .user(AuthResponse.UserInfo.builder()
+                        .id(user.getId())
+                        .email(user.getEmail())
+                        .roles(user.getRoles().stream()
+                                .map(role -> role.getName().name())
+                                .collect(Collectors.toSet()))
+                        .build())
+                .build();
+    }
+
     public AuthResponse toAuthResponse(UserPrincipal principal, String accessToken, String refreshToken) {
         return AuthResponse.builder()
                 .accessToken(accessToken)
