@@ -175,4 +175,20 @@ class QuestionValidatorTest {
         assertThatThrownBy(() -> validator.validateStatusUpdate(question, QuestionStatus.ANSWERED, 999L, "INSTRUCTOR"))
                 .isInstanceOf(BadRequestException.class);
     }
+
+    @Test
+    void validateReadAccess_unassignedQuestion_openToAnInstructorOfTheStudentsSchool() {
+        LessonQuestionSubmission question = questionAssignedTo(null, userWithId(2L), QuestionStatus.PENDING);
+
+        assertThatCode(() -> validator.validateReadAccess(question, 999L, "INSTRUCTOR")).doesNotThrowAnyException();
+    }
+
+    @Test
+    void validateReadAccess_unassignedQuestion_deniedToAnInstructorOfAnotherSchool() {
+        LessonQuestionSubmission question = questionAssignedTo(null, userWithId(2L), QuestionStatus.PENDING);
+        doThrow(new BadRequestException("no access")).when(callerSchoolScope).requireSameSchool(any());
+
+        assertThatThrownBy(() -> validator.validateReadAccess(question, 999L, "INSTRUCTOR"))
+                .isInstanceOf(BadRequestException.class);
+    }
 }

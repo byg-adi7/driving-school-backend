@@ -782,9 +782,12 @@ d.H(1, "Lesson Questions (student Q&A)")
 d.P("A student asks a question (optionally targeted at a specific instructor); an "
     "instructor responds; status moves through a small workflow with a full audit history. "
     "For back-and-forth conversation, use Messaging (below) instead.")
-d.P("Always send assignedInstructorId - pick it from GET /conversations/contacts. An "
-    "unassigned question notifies no instructor and appears in no instructor's "
-    "assigned/pending inbox; it only surfaces in GET /lesson-questions/status/{status}.")
+d.P("assignedInstructorId is optional - offer an instructor picker fed by GET "
+    "/conversations/contacts, plus an \"any instructor\" choice. An unassigned question "
+    "notifies every active instructor of the student's school and shows up in each of "
+    "their GET /lesson-questions/pending inboxes; the first instructor to answer it (or "
+    "change its status, e.g. to IN_PROGRESS) becomes its instructor, and it leaves everyone "
+    "else's inbox.")
 
 ENDPOINT("POST", "/lesson-questions", "Submit a question.", access="STUDENT only",
     request=[
@@ -802,7 +805,7 @@ ENDPOINT("GET", "/lesson-questions/my-questions", "Paginated: my own submitted q
 ENDPOINT("GET", "/lesson-questions/assigned", "Paginated: questions assigned to me.", access="INSTRUCTOR only")
 ENDPOINT("GET", "/lesson-questions/status/{status}", "Paginated: questions filtered by status, from the caller's own school only (bootstrap admin: every school).", access="INSTRUCTOR or ADMIN",
     params=[["status", "enum (path segment)", "yes", "PENDING, IN_PROGRESS, ANSWERED, or CLOSED"]])
-ENDPOINT("GET", "/lesson-questions/pending", "Paginated: my pending questions.", access="INSTRUCTOR only")
+ENDPOINT("GET", "/lesson-questions/pending", "Paginated: my pending questions, plus my school's unclaimed ones.", access="INSTRUCTOR only")
 ENDPOINT("GET", "/lesson-questions/{id}/history", "Full status-change audit history.", access="Any authenticated user with access")
 ENDPOINT("GET", "/lesson-questions/{id}/history/paginated", "Same as above, paginated.", access="Same as above")
 

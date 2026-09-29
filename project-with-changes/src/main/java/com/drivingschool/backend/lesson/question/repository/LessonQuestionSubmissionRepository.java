@@ -61,6 +61,23 @@ public interface LessonQuestionSubmissionRepository extends JpaRepository<Lesson
             Pageable pageable
     );
 
+    // An instructor's actionable inbox: questions assigned to them, plus questions
+    // no instructor has claimed yet from students of their own school.
+    @Query(value = "SELECT lqs FROM LessonQuestionSubmission lqs "
+            + "JOIN FETCH lqs.student st JOIN FETCH st.user "
+            + "LEFT JOIN FETCH lqs.instructor i LEFT JOIN FETCH i.user "
+            + "LEFT JOIN FETCH lqs.respondedBy rb LEFT JOIN FETCH rb.studentProfile LEFT JOIN FETCH rb.instructorProfile "
+            + "WHERE lqs.status = :status AND (i.id = :instructorId OR (i IS NULL AND st.school.id = :schoolId)) "
+            + "ORDER BY lqs.createdAt DESC",
+            countQuery = "SELECT COUNT(lqs) FROM LessonQuestionSubmission lqs LEFT JOIN lqs.instructor i JOIN lqs.student st "
+                    + "WHERE lqs.status = :status AND (i.id = :instructorId OR (i IS NULL AND st.school.id = :schoolId))")
+    Page<LessonQuestionSubmission> findInstructorInbox(
+            @Param("instructorId") Long instructorId,
+            @Param("schoolId") Long schoolId,
+            @Param("status") QuestionStatus status,
+            Pageable pageable
+    );
+
     @Query("SELECT COUNT(lqs) FROM LessonQuestionSubmission lqs WHERE lqs.instructor.id = :instructorId AND lqs.status IN (:statuses)")
     Long countPendingByInstructor(@Param("instructorId") Long instructorId, @Param("statuses") List<QuestionStatus> statuses);
 }
