@@ -150,7 +150,9 @@ public class SecurityConfig {
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/refresh-token",
                                 "/api/v1/auth/forgot-password",
-                                "/api/v1/auth/reset-password").permitAll()
+                                "/api/v1/auth/reset-password",
+                                "/api/v1/auth/verification/send",
+                                "/api/v1/auth/verification/confirm").permitAll()
                         
                         // WebSocket handshake: browsers can't send an Authorization header on
                         // it, so the access token is checked on the STOMP CONNECT frame instead

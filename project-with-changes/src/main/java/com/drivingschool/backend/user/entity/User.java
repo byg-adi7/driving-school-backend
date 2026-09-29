@@ -46,6 +46,10 @@ public class User extends BaseEntity {
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified;
 
+    // Confirmed a one-time code sent to the WhatsApp number on the user's profile.
+    @Column(name = "phone_verified", nullable = false)
+    private boolean phoneVerified;
+
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
 
@@ -96,6 +100,15 @@ public class User extends BaseEntity {
 
     public void verifyEmail() {
         this.emailVerified = true;
+    }
+
+    public void verifyPhone() {
+        this.phoneVerified = true;
+    }
+
+    /** Login requires this: a one-time code confirmed over email or WhatsApp. */
+    public boolean isAccountVerified() {
+        return emailVerified || phoneVerified;
     }
 
     public void setEnabled(boolean enabled) {

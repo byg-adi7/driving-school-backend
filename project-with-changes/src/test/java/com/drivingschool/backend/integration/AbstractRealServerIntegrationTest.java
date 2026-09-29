@@ -11,6 +11,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -44,6 +45,7 @@ abstract class AbstractRealServerIntegrationTest {
     @LocalServerPort protected int port;
     @Autowired protected TestRestTemplate rest;
     @Autowired private StringRedisTemplate redisTemplate;
+    @Autowired private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
     void flushRateLimitState() {
@@ -71,7 +73,9 @@ abstract class AbstractRealServerIntegrationTest {
         return exchange(HttpMethod.GET, path, token, null);
     }
 
+    // Accounts made by these tests are marked verified first - see AbstractIntegrationTest.loginFull.
     protected String login(String email, String password) {
+        jdbcTemplate.update("UPDATE users SET email_verified = TRUE WHERE email = ?", email);
         return (String) post("/auth/login", null, Map.of("email", email, "password", password)).get("accessToken");
     }
 

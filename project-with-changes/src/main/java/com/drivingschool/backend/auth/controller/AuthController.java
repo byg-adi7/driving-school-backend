@@ -2,12 +2,14 @@ package com.drivingschool.backend.auth.controller;
 
 import com.drivingschool.backend.auth.dto.AdminRegisterRequest;
 import com.drivingschool.backend.auth.dto.AuthResponse;
+import com.drivingschool.backend.auth.dto.ConfirmVerificationRequest;
 import com.drivingschool.backend.auth.dto.CurrentUserResponse;
 import com.drivingschool.backend.auth.dto.ForgotPasswordRequest;
 import com.drivingschool.backend.auth.dto.LoginRequest;
 import com.drivingschool.backend.auth.dto.RefreshTokenRequest;
 import com.drivingschool.backend.auth.dto.RegisterRequest;
 import com.drivingschool.backend.auth.dto.ResetPasswordRequest;
+import com.drivingschool.backend.auth.dto.SendVerificationCodeRequest;
 import com.drivingschool.backend.auth.service.AuthService;
 import com.drivingschool.backend.common.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,6 +41,25 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(ApiResponse.success("Login successful", response));
+    }
+
+    @PostMapping("/verification/send")
+    @Operation(summary = "Send a one-time verification code for an unverified account",
+            description = "Uses the challengeId from a login response with verificationRequired=true. " +
+                    "Channel EMAIL or WHATSAPP (only when listed in that response's channels). " +
+                    "A new code replaces the previous one; one send per 60 seconds (429 otherwise).")
+    public ResponseEntity<ApiResponse<Void>> sendVerificationCode(@Valid @RequestBody SendVerificationCodeRequest request) {
+        authService.sendVerificationCode(request);
+        return ResponseEntity.ok(ApiResponse.success("Verification code sent", null));
+    }
+
+    @PostMapping("/verification/confirm")
+    @Operation(summary = "Confirm the one-time code: verifies the account and logs in",
+            description = "Codes are 6 digits, valid for 10 minutes, 5 attempts each. " +
+                    "Returns the same tokens as a normal login.")
+    public ResponseEntity<ApiResponse<AuthResponse>> confirmVerification(@Valid @RequestBody ConfirmVerificationRequest request) {
+        AuthResponse response = authService.confirmVerification(request);
+        return ResponseEntity.ok(ApiResponse.success("Account verified", response));
     }
 
     @PostMapping("/register")

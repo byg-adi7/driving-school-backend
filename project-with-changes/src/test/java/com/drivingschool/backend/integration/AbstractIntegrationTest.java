@@ -9,6 +9,7 @@ import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.school.dto.CreateSchoolWithAdminRequest;
 import com.drivingschool.backend.school.dto.SchoolResponse;
 import com.drivingschool.backend.school.dto.SchoolWithAdminResponse;
+import com.drivingschool.backend.user.repository.UserRepository;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -64,6 +65,7 @@ public abstract class AbstractIntegrationTest {
     @Autowired protected MockMvc mockMvc;
     @Autowired protected ObjectMapper objectMapper;
     @Autowired private StringRedisTemplate redisTemplate;
+    @Autowired private UserRepository userRepository;
     @PersistenceContext private EntityManager entityManager;
 
     /**
@@ -99,7 +101,14 @@ public abstract class AbstractIntegrationTest {
         return loginFull(email, password).getAccessToken();
     }
 
+    /**
+     * Logs in with tokens. Accounts created by a test would get a verification challenge
+     * instead (login requires a verified account), and almost no test is about that - so
+     * this marks the account verified first. AccountVerificationIntegrationTest drives the
+     * real one-time-code flow.
+     */
     protected AuthResponse loginFull(String email, String password) throws Exception {
+        markVerified(email);
         LoginRequest request = LoginRequest.builder().email(email).password(password).build();
 
         MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
@@ -109,6 +118,13 @@ public abstract class AbstractIntegrationTest {
                 .andReturn();
 
         return parse(result, AuthResponse.class);
+    }
+
+    protected void markVerified(String email) {
+        userRepository.findByEmail(email).filter(user -> !user.isAccountVerified()).ifPresent(user -> {
+            user.verifyEmail();
+            userRepository.saveAndFlush(user);
+        });
     }
 
     /**

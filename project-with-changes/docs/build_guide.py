@@ -157,7 +157,74 @@ ENDPOINT("POST", "/auth/login", "Authenticate and receive tokens.",
     ],
     example_resp='{\n  "success": true,\n  "message": "Login successful",\n  "data": {\n    "accessToken": "eyJhbGciOi...",\n    "refreshToken": "eyJhbGciOi...",\n    "tokenType": "Bearer",\n    "expiresIn": 900,\n    "user": { "id": 12, "email": "instructor.smith@example.com", "roles": ["INSTRUCTOR"] }\n  }\n}',
     notes=["Immediately after login, call GET /auth/me (below) — the login response does "
-           "not include the instructor/student profile ID you'll need for most other calls."])
+           "not include the instructor/student profile ID you'll need for most other calls.",
+           "A NEW account's first login returns NO tokens: instead \"verificationRequired\": "
+           "true and a \"verification\" object. Always check for this before looking for "
+           "accessToken - see \"Account verification\" right below."])
+
+d.H(2, "Account verification (one-time code at first login)")
+d.P("Every account created from now on must be verified before it can log in: at its "
+    "first login, the user proves they own the email address (or the WhatsApp number on "
+    "their profile) by entering a 6-digit code. Accounts that existed before this "
+    "feature, and the bootstrap admin, are already verified and never see this. Once "
+    "verified, an account logs in normally forever after.")
+d.P("The flow to build:", bold=True)
+d.BULLETS([
+    "1. POST /auth/login with the right password answers 200 with verificationRequired=true, "
+    "NO accessToken/refreshToken, and verification = { challengeId, expiresInSeconds, "
+    "channels, maskedEmail, maskedPhone }. (A wrong password is still a plain 401 - no "
+    "challenge.)",
+    "2. Show a \"Verify your account\" screen. If channels contains both EMAIL and "
+    "WHATSAPP, let the user choose, showing maskedEmail (e.g. s***@example.com) / "
+    "maskedPhone (e.g. +********4567) so they know where the code goes. WHATSAPP is only "
+    "listed when the user's profile has a phone number in international format (+233...) "
+    "and the backend has WhatsApp set up - so collect phone numbers with the country code.",
+    "3. POST /auth/verification/send { challengeId, channel } sends the code.",
+    "4. Show a 6-digit code input. POST /auth/verification/confirm { challengeId, code } "
+    "returns exactly what a normal login returns (accessToken, refreshToken, ...). Carry "
+    "on as after any login (GET /auth/me, etc.).",
+    "Keep challengeId in memory only (not localStorage). It expires after 15 minutes "
+    "(expiresInSeconds) - after that, or on any \"please log in again\" message, send the "
+    "user back to the login form.",
+])
+d.P("Rules the UI should reflect:", bold=True)
+d.BULLETS([
+    "A code is valid for 10 minutes and allows 5 attempts. A wrong code answers 400 with a "
+    "message like \"Incorrect code - 4 attempts left\"; after the 5th wrong try the code is "
+    "dead (\"request a new one\") - offer a Resend button.",
+    "Resend = call /auth/verification/send again (either channel). The new code replaces "
+    "the old one. At most one send per 60 seconds: an earlier resend answers 429 with a "
+    "Retry-After header (seconds) - disable the Resend button with a countdown.",
+    "503 from send means the email/WhatsApp provider failed or isn't configured - show the "
+    "message and let the user retry or pick the other channel.",
+    "These endpoints share the auth rate limit (10 requests per minute per IP with login, "
+    "register, refresh, forgot/reset password) - another reason to disable buttons while a "
+    "request is in flight.",
+])
+
+ENDPOINT("POST", "/auth/verification/send", "Send a one-time code for an unverified account.",
+    access="Public (the challengeId from login is the credential)",
+    request=[
+        ["challengeId", "string", "yes", "from the login response's verification object"],
+        ["channel", "enum", "yes", "EMAIL or WHATSAPP - only one listed in verification.channels"],
+    ],
+    example_req='{\n  "challengeId": "q4Jd0...Xw",\n  "channel": "EMAIL"\n}',
+    example_resp='{\n  "success": true,\n  "message": "Verification code sent",\n  "data": null\n}',
+    notes=["400: unknown/expired challenge (\"please log in again\") or WHATSAPP not available.",
+           "429 + Retry-After: a code was sent less than 60 seconds ago.",
+           "503: the email or WhatsApp provider failed - nothing was sent, retry right away."])
+
+ENDPOINT("POST", "/auth/verification/confirm", "Confirm the code: verifies the account and logs in.",
+    access="Public (the challengeId from login is the credential)",
+    request=[
+        ["challengeId", "string", "yes", "same as for /send"],
+        ["code", "string", "yes", "exactly 6 digits"],
+    ],
+    example_req='{\n  "challengeId": "q4Jd0...Xw",\n  "code": "482913"\n}',
+    response=[["Same shape as /auth/login's normal response", "", "accessToken, refreshToken, tokenType, expiresIn, user"]],
+    notes=["400 with a human-readable message for a wrong code (with attempts left), a dead "
+           "code (request a new one), or an expired challenge (log in again).",
+           "The challenge is single-use: after success, a new session needs a normal login."])
 
 ENDPOINT("GET", "/auth/me", "Get the current user's identity and profile IDs.",
     access="Any authenticated user",
@@ -170,7 +237,8 @@ ENDPOINT("GET", "/auth/me", "Get the current user's identity and profile IDs.",
          "(null for the bootstrap admin, who owns none)"],
         ["bootstrapAdmin", "boolean", "true only for the one permanent super-admin — decides which "
          "admin dashboard to render, see the Roles section above"],
-        ["enabled / emailVerified", "boolean", ""],
+        ["enabled / emailVerified", "boolean", "emailVerified is true once the account verified by email "
+         "(false if it verified by WhatsApp instead) - you never need it for the login flow"],
     ],
     example_resp='{\n  "success": true,\n  "message": "Operation successful",\n  "data": {\n    "userId": 12,\n    "email": "instructor.smith@example.com",\n    "roles": ["INSTRUCTOR"],\n    "studentProfileId": null,\n    "instructorProfileId": 4,\n    "schoolId": 2,\n    "bootstrapAdmin": false,\n    "enabled": true,\n    "emailVerified": false\n  }\n}',
     notes=["This is critical: booking, lesson-note, lesson-route, and license-workflow "
@@ -187,7 +255,8 @@ ENDPOINT("POST", "/auth/register", "Create a STUDENT or INSTRUCTOR account.",
         ["email", "string", "yes", ""],
         ["password", "string", "yes", "8-100 chars"],
         ["firstName / lastName", "string", "yes", ""],
-        ["phone", "string", "no", ""],
+        ["phone", "string", "no", "max 20 chars. Collect it WITH the country code (+233...) - only "
+         "then can the user receive their verification code on WhatsApp"],
         ["dateOfBirth", "date (YYYY-MM-DD)", "no", ""],
         ["schoolId", "number", "yes", "instructor callers can only use their own schoolId"],
         ["role", "enum", "yes", "STUDENT or INSTRUCTOR — instructor callers may only create STUDENT"],
@@ -196,7 +265,7 @@ ENDPOINT("POST", "/auth/register", "Create a STUDENT or INSTRUCTOR account.",
         ["yearsExperience", "number", "no", "instructor only"],
     ],
     example_req='{\n  "email": "student.jones@example.com",\n  "password": "SecurePass123!",\n  "firstName": "Jamie",\n  "lastName": "Jones",\n  "schoolId": 2,\n  "role": "STUDENT",\n  "licenseNumber": "LIC-2026-0031"\n}',
-    response=[["user.id / user.email / user.roles", "", "the NEW user's identity only - no accessToken/refreshToken/tokenType/expiresIn. The account's creator never receives a session for it; the new user logs in themselves with the password they were given"]],
+    response=[["user.id / user.email / user.roles", "", "the NEW user's identity only - no accessToken/refreshToken/tokenType/expiresIn. The account's creator never receives a session for it; the new user logs in themselves with the password they were given, and verifies the account with a one-time code at that first login"]],
     example_resp='{\n  "success": true,\n  "message": "Registration successful",\n  "data": {\n    "user": { "id": 31, "email": "student.jones@example.com", "roles": ["STUDENT"] }\n  }\n}',
     notes=["An INSTRUCTOR or regular ADMIN caller creating an account in a DIFFERENT school than their own is rejected with 400.",
            "licenseNumber is required when role=INSTRUCTOR (a common mistake — don't forget it on an \"add instructor\" form)."])

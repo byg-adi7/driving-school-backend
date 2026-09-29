@@ -18,9 +18,22 @@ public class TwilioConfig {
     /** The Twilio phone number messages are sent from, read from TWILIO_FROM_NUMBER. */
     private String fromNumber;
 
+    /**
+     * The Twilio Verify service (VA...) that sends and checks WhatsApp verification
+     * codes, read from TWILIO_VERIFY_SERVICE_SID. Verify sends from the WhatsApp
+     * sender configured on that service, so it doesn't need fromNumber.
+     */
+    private String verifyServiceSid;
+
     public boolean isConfigured() {
         return accountSid != null && !accountSid.isBlank()
                 && authToken != null && !authToken.isBlank()
                 && fromNumber != null && !fromNumber.isBlank();
+    }
+
+    public boolean isVerifyConfigured() {
+        return accountSid != null && !accountSid.isBlank()
+                && authToken != null && !authToken.isBlank()
+                && verifyServiceSid != null && !verifyServiceSid.isBlank();
     }
 }
