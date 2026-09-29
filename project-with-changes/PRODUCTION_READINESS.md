@@ -256,3 +256,19 @@ The backend now runs on Render (Docker web service + Render Postgres + Render Ke
 **Worth checking on the live account (from Render's docs, not something the repo can see):** free Render Postgres databases expire 30 days after creation with no backups; free Key Value instances lose all data on restart (so refresh-token revocations are forgotten); the Key Value maxmemory policy should be `noeviction` so a revocation entry can't be evicted.
 
 **Open:** the rate limiter still keys on `request.getRemoteAddr()`. Behind Render's proxy that is likely the proxy for every visitor, but Render's docs don't specify the forwarding-header hop count or whether client-supplied `X-Forwarded-For` values are stripped, so the correct rule is being settled empirically with a temporary echo endpoint (`GET /api/v1/diagnostics/client-ip`) rather than guessed - to be removed in the same follow-up that fixes the limiter.
+
+---
+
+## Student-Instructor Messaging and Announcements (2026-09-29)
+
+**The problem:** students' messages to instructors ended up with the admin. The only student-to-instructor channel was lesson questions, and students had no way to list their school's instructors (`GET /instructors/school/{id}` is admin-only) - so questions went out without `assignedInstructorId`, notified no instructor, appeared in no instructor's assigned/pending inbox, and only surfaced in `GET /lesson-questions/status/{status}`, the admin-facing listing. A question is also one question and one answer, not a conversation, and instructors had no way to reach all their school's students at once.
+
+**Built (new `messaging` module, migration V16):**
+- **Conversations** - one private thread per student-instructor pair of the same school, either side can open it (`POST /conversations`, idempotent), any number of messages both ways, an inbox with unread counts and last-message preview, newest-first paginated threads, mark-as-read, and an IN_APP notification to the recipient per message. `GET /conversations/contacts` lists who the caller can message (a student: their school's active instructors; an instructor: their school's students) - which also finally gives students an instructor picker for lesson questions. Admins can't use or read conversations. Deleted accounts and inactive instructors can't be messaged.
+- **Announcements** - `POST /announcements` (instructors) reaches every student of the instructor's school in-app immediately and by email; one-way by design (students reply through a conversation). `GET /announcements` lists the caller's school's (bootstrap admin: all).
+- **Announcement email goes through Resend's batch endpoint** (up to 100 per request, sent sequentially after commit) instead of one request per student - Resend's documented default rate limit is 10 requests/second per team, which per-student sends would exceed at a normal school size. Each student still gets their own EMAIL delivery record, marked SENT/FAILED per batch.
+- All new foreign keys `ON DELETE CASCADE`, so the bootstrap admin's school/admin cascade-delete keeps working.
+
+**Verified:** 30 new unit/security tests plus `MessagingIntegrationTest` (runs in CI); full unit suite 725 green. Live: V16 applied on a fresh Postgres 16 and passed `ddl-auto=validate`, and a 24-check HTTP smoke run passed - including the announcement's email batch reaching Resend's real `/emails/batch` endpoint after commit (rejected there only for the missing local API key, and both delivery records settled to FAILED rather than staying PENDING).
+
+**Not built (needs a product/infrastructure decision - raised with the owner, not assumed):** realtime delivery. Clients poll; see the options discussed for WebSockets or an external realtime/push provider.

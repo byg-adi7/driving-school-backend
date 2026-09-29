@@ -8,6 +8,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -23,6 +24,14 @@ import java.util.Map;
 public class ResendEmailClient {
 
     private static final String RESEND_API_URL = "https://api.resend.com/emails";
+    private static final String RESEND_BATCH_API_URL = "https://api.resend.com/emails/batch";
+
+    /** Resend's documented maximum number of emails per batch request. */
+    public static final int MAX_BATCH_SIZE = 100;
+
+    /** One email in a batch - each goes to exactly one recipient, so nobody sees the others' addresses. */
+    public record BatchEmail(String toAddress, String subject, String textBody) {
+    }
 
     private final ResendConfig config;
     private final RestTemplate restTemplate;
@@ -45,5 +54,30 @@ public class ResendEmailClient {
                 "text", textBody);
 
         restTemplate.postForObject(RESEND_API_URL, new HttpEntity<>(body, headers), String.class);
+    }
+
+    /**
+     * Sends up to {@link #MAX_BATCH_SIZE} emails in ONE request (POST /emails/batch).
+     * For fan-out like school announcements: Resend's default rate limit is 10 requests
+     * per second per team, so one request per recipient would start failing with 429 at
+     * a normal school size. Throws on failure, same contract as {@link #send}.
+     */
+    public void sendBatch(String fromAddress, List<BatchEmail> emails) {
+        if (emails.size() > MAX_BATCH_SIZE) {
+            throw new IllegalArgumentException("Resend accepts at most " + MAX_BATCH_SIZE + " emails per batch, got " + emails.size());
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(config.getApiKey());
+
+        List<Map<String, Object>> body = emails.stream()
+                .map(email -> Map.<String, Object>of(
+                        "from", fromAddress,
+                        "to", email.toAddress(),
+                        "subject", email.subject(),
+                        "text", email.textBody()))
+                .toList();
+
+        restTemplate.postForObject(RESEND_BATCH_API_URL, new HttpEntity<>(body, headers), String.class);
     }
 }
