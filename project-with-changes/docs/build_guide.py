@@ -932,10 +932,9 @@ d.H(1, "Messaging & Announcements")
 d.P("Private one-to-one conversations between a student and an instructor of the SAME "
     "school, plus one-way announcements from an instructor to every student of their "
     "school. Admins don't take part in conversations and can't read them.")
-d.P("There is no push/realtime channel: poll GET /conversations (and GET /notifications/me) "
-    "while the messaging screen is open, e.g. every 10-30 seconds, and refresh the open "
-    "thread when its unreadCount or lastMessageAt changes. Each new message also creates "
-    "an IN_APP notification for the recipient (\"New message from <name>\").")
+d.P("New messages, read receipts and announcements are pushed instantly over the "
+    "realtime WebSocket (see \"Realtime updates\" below). Each new message also creates an "
+    "IN_APP notification for the recipient (\"New message from <name>\").")
 
 d.H(2, "Conversations")
 ENDPOINT("GET", "/conversations/contacts", "Who I can message.", access="STUDENT or INSTRUCTOR",
@@ -974,6 +973,38 @@ ENDPOINT("POST", "/announcements", "Announce something to every student of my sc
            "respond messages the instructor through a conversation."])
 ENDPOINT("GET", "/announcements", "My school's announcements, newest first (paginated).", access="STUDENT, INSTRUCTOR, or ADMIN",
     notes=["The bootstrap admin sees every school's."])
+
+# =====================================================================
+# REALTIME
+# =====================================================================
+d.H(1, "Realtime updates (WebSocket)")
+d.P("While the app is open, keep one WebSocket connection per logged-in user and the "
+    "backend pushes events to it the moment they happen - no polling. It speaks STOMP "
+    "over a plain WebSocket; use a STOMP client library such as @stomp/stompjs.")
+d.BULLETS([
+    "URL: wss://<your-backend-host>/ws (ws://localhost:<PORT>/ws locally). The page's "
+    "origin must be one of CORS_ALLOWED_ORIGINS.",
+    "Authenticate in the STOMP CONNECT frame, not the URL: connectHeaders = { Authorization: "
+    "\"Bearer <accessToken>\" }. A missing/expired/refresh token, or a disabled/deleted "
+    "account, gets a STOMP ERROR frame and the connection closes.",
+    "Subscribe to exactly one destination: /user/queue/events - it's private to the "
+    "logged-in user. Subscribing to anything else is rejected; sending anything is rejected.",
+    "Heartbeats: set 10000/10000 (the server's value) so dead connections are noticed.",
+    "Reconnect automatically with backoff: the server drops every connection on each deploy "
+    "or restart. After reconnecting, refetch GET /conversations and GET /notifications/me - "
+    "events that happened while disconnected are not replayed.",
+    "When the access token is refreshed, reconnect with the new one (the server checks it on "
+    "CONNECT only).",
+])
+d.P("Every event arrives as { \"type\": ..., \"payload\": ... }:", bold=True)
+d.T(["type", "payload", "When"], [
+    ["MESSAGE_CREATED", "a message (same shape as GET /conversations/{id}/messages items; mine is from the receiver's point of view)", "a message is sent in one of my conversations - including by me on another tab/device"],
+    ["CONVERSATION_READ", "{ conversationId, readByUserId, readAt }", "the other participant read my messages"],
+    ["NOTIFICATION_CREATED", "a notification (same shape as GET /notifications/me items)", "any new IN_APP notification for me"],
+    ["ANNOUNCEMENT_CREATED", "an announcement (same shape as GET /announcements items)", "an instructor of my school posted an announcement"],
+])
+d.P("The REST endpoints stay the source of truth - events are a signal to update the UI "
+    "without waiting, not a replacement for fetching.")
 
 # =====================================================================
 # NOTIFICATIONS
@@ -1192,8 +1223,8 @@ d.BULLETS([
     "Student and instructor both need an inbox (GET /conversations), a thread view "
     "(GET /conversations/{id}/messages, newest first) and a \"new conversation\" picker "
     "fed by GET /conversations/contacts.",
-    "Poll while the inbox/thread is open - there's no realtime push - and call POST "
-    "/conversations/{id}/read when a thread is opened.",
+    "Update the inbox/thread from the realtime WebSocket events (see \"Realtime updates\"), "
+    "and call POST /conversations/{id}/read when a thread is opened.",
     "Instructors also need an \"announce to all my students\" form (POST /announcements); "
     "everyone gets an announcements list (GET /announcements).",
 ])
