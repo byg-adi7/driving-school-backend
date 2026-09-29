@@ -157,7 +157,9 @@ public class LessonNoteService {
 
     @Transactional(readOnly = true)
     public Page<LessonNoteResponse> getAllNotes(Pageable pageable) {
-        Page<LessonNote> notes = lessonNoteRepository.findAllNotes(pageable);
+        Page<LessonNote> notes = validator.adminSchoolFilter()
+                .map(schoolId -> lessonNoteRepository.findAllNotesBySchoolId(schoolId, pageable))
+                .orElseGet(() -> lessonNoteRepository.findAllNotes(pageable));
         return notes.map(this::mapToResponse);
     }
 

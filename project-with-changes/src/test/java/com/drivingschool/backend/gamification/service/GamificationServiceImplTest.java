@@ -14,6 +14,7 @@ import com.drivingschool.backend.gamification.validator.GamificationValidator;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.user.entity.User;
@@ -34,6 +35,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -41,13 +44,15 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class GamificationServiceImplTest {
 
+    private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+
     @Mock private StudentGameStatsRepository statsRepository;
     @Mock private PointsTransactionRepository pointsTransactionRepository;
     @Mock private BadgeAwardRepository badgeAwardRepository;
     @Mock private StudentProfileRepository studentProfileRepository;
     @Mock private InstructorProfileRepository instructorProfileRepository;
     private final GamificationMapper mapper = new GamificationMapper();
-    private final GamificationValidator validator = new GamificationValidator();
+    private final GamificationValidator validator = new GamificationValidator(adminSchoolScope);
 
     private GamificationServiceImpl service;
 
@@ -230,7 +235,7 @@ class GamificationServiceImplTest {
     }
 
     @Test
-    void getStudentSummary_asAdmin_returnsAnyStudent() {
+    void getStudentSummary_asAdminOfStudentsSchool_returnsSummary() {
         StudentProfile student = studentProfile(60L, schoolWithId(1L));
         when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(student));
         when(statsRepository.findByStudent_Id(60L)).thenReturn(Optional.empty());
@@ -245,5 +250,23 @@ class GamificationServiceImplTest {
 
     private BadgeAward argThatBadge(BadgeType badgeType) {
         return org.mockito.ArgumentMatchers.argThat(award -> award != null && award.getBadge() == badgeType);
+    }
+
+    @Test
+    void getStudentSummary_asAdminOfAnotherSchool_throwsBadRequestException() {
+        StudentProfile student = studentProfile(60L, schoolWithId(1L));
+        when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(student));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(1L);
+
+        assertThatThrownBy(() -> service.getStudentSummary(60L, 999L, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void getSchoolLeaderboard_asAdminOfAnotherSchool_throwsBadRequestException() {
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(1L);
+
+        assertThatThrownBy(() -> service.getSchoolLeaderboard(1L, Pageable.unpaged(), 999L, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
     }
 }

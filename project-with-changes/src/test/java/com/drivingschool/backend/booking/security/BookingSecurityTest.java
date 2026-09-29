@@ -3,9 +3,11 @@ package com.drivingschool.backend.booking.security;
 import com.drivingschool.backend.booking.entity.Booking;
 import com.drivingschool.backend.booking.enums.BookingType;
 import com.drivingschool.backend.booking.repository.BookingRepository;
+import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
@@ -21,7 +23,12 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,13 +40,14 @@ class BookingSecurityTest {
     @Mock private StudentProfileRepository studentProfileRepository;
     @Mock private InstructorProfileRepository instructorProfileRepository;
     @Mock private CurrentUserService currentUserService;
+    @Mock private AdminSchoolScope adminSchoolScope;
 
     private BookingSecurity bookingSecurity;
 
     @BeforeEach
     void setUp() {
         bookingSecurity = new BookingSecurity(bookingRepository, studentProfileRepository,
-                instructorProfileRepository, currentUserService);
+                instructorProfileRepository, currentUserService, adminSchoolScope);
         lenient().when(currentUserService.requireUserId()).thenReturn(CURRENT_USER_ID);
     }
 
@@ -183,5 +191,42 @@ class BookingSecurityTest {
         when(instructorProfileRepository.findByUserId(CURRENT_USER_ID)).thenReturn(Optional.empty());
 
         assertThat(bookingSecurity.hasTaughtStudent(5L)).isFalse();
+    }
+
+    // --- isAdminFor* (regular admin confined to their own school) ---
+
+    @Test
+    void isAdminForBooking_delegatesToTheBookingsSchool() {
+        Booking booking = bookingBetween(userWithId(1L), userWithId(2L));
+        when(bookingRepository.findById(1L)).thenReturn(Optional.of(booking));
+        when(adminSchoolScope.canAccess(booking.getSchool().getId())).thenReturn(false);
+
+        assertThat(bookingSecurity.isAdminForBooking(1L)).isFalse();
+    }
+
+    @Test
+    void isAdminForBooking_whenBookingDoesNotExist_returnsTrueToDeferTo404() {
+        when(bookingRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertThat(bookingSecurity.isAdminForBooking(1L)).isTrue();
+    }
+
+    @Test
+    void isAdminForStudent_delegatesToTheStudentsSchool() {
+        StudentProfile student = StudentProfile.builder().user(userWithId(1L)).school(School.builder().active(true).build()).build();
+        when(studentProfileRepository.findById(5L)).thenReturn(Optional.of(student));
+        when(adminSchoolScope.canAccess(student.getSchool().getId())).thenReturn(true);
+
+        assertThat(bookingSecurity.isAdminForStudent(5L)).isTrue();
+    }
+
+    @Test
+    void isAdminForInstructor_delegatesToTheInstructorsSchool() {
+        InstructorProfile instructor = InstructorProfile.builder().user(userWithId(2L)).active(true)
+                .school(School.builder().active(true).build()).build();
+        when(instructorProfileRepository.findById(2L)).thenReturn(Optional.of(instructor));
+        when(adminSchoolScope.canAccess(instructor.getSchool().getId())).thenReturn(false);
+
+        assertThat(bookingSecurity.isAdminForInstructor(2L)).isFalse();
     }
 }

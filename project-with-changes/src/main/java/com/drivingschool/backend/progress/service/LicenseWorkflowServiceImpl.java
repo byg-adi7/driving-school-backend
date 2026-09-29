@@ -52,12 +52,13 @@ public class LicenseWorkflowServiceImpl implements LicenseWorkflowService {
     @Override
     @Transactional
     public LicenseWorkflowResponse initializeForStudent(Long studentId) {
+        StudentProfile student = studentProfileRepository.findById(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "id", studentId));
+        validator.validateAdminSchoolAccess(student);
+
         if (licenseWorkflowRepository.existsByStudentId(studentId)) {
             throw new BadRequestException("License workflow already exists for student");
         }
-
-        StudentProfile student = studentProfileRepository.findById(studentId)
-                .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "id", studentId));
 
         LicenseWorkflow workflow = LicenseWorkflow.builder()
                 .student(student)
@@ -85,6 +86,7 @@ public class LicenseWorkflowServiceImpl implements LicenseWorkflowService {
     @Transactional
     public LicenseWorkflowResponse markQuizPassed(Long studentId) {
         LicenseWorkflow workflow = findByStudentId(studentId);
+        validator.validateAdminSchoolAccess(workflow.getStudent());
         workflow.markQuizPassed();
         return licenseWorkflowMapper.toResponse(licenseWorkflowRepository.save(workflow));
     }

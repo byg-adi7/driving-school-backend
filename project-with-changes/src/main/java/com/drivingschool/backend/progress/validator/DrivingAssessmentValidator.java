@@ -5,10 +5,17 @@ import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.progress.dto.CreateDrivingAssessmentRequest;
 import com.drivingschool.backend.progress.entity.DrivingAssessment;
 import com.drivingschool.backend.student.entity.StudentProfile;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import org.springframework.stereotype.Component;
 
 @Component
 public class DrivingAssessmentValidator {
+
+    private final AdminSchoolScope adminSchoolScope;
+
+    public DrivingAssessmentValidator(AdminSchoolScope adminSchoolScope) {
+        this.adminSchoolScope = adminSchoolScope;
+    }
 
     public void validateCreateRequest(CreateDrivingAssessmentRequest request) {
         if (request.getStudentId() == null || request.getStudentId() <= 0) {
@@ -24,6 +31,7 @@ public class DrivingAssessmentValidator {
 
     public void validateReadAccess(DrivingAssessment assessment, Long userId, String role) {
         if ("ADMIN".equals(role)) {
+            adminSchoolScope.requireAccess(assessment.getStudent().getSchool().getId());
             return;
         }
         if ("INSTRUCTOR".equals(role) && assessment.getInstructor().getUser().getId().equals(userId)) {
@@ -44,6 +52,7 @@ public class DrivingAssessmentValidator {
      */
     public void validateStudentAssessmentsAccess(StudentProfile student, Long userId, String role, boolean hasTaughtStudent) {
         if ("ADMIN".equals(role)) {
+            adminSchoolScope.requireAccess(student.getSchool().getId());
             return;
         }
         if ("STUDENT".equals(role) && student.getUser().getId().equals(userId)) {
@@ -57,6 +66,7 @@ public class DrivingAssessmentValidator {
 
     public void validateInstructorAssessmentsAccess(InstructorProfile instructor, Long userId, String role) {
         if ("ADMIN".equals(role)) {
+            adminSchoolScope.requireAccess(instructor.getSchool().getId());
             return;
         }
         if ("INSTRUCTOR".equals(role) && instructor.getUser().getId().equals(userId)) {

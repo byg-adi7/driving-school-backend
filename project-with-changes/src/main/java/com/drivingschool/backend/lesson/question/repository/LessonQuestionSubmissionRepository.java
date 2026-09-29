@@ -45,6 +45,15 @@ public interface LessonQuestionSubmissionRepository extends JpaRepository<Lesson
             + "JOIN FETCH lqs.student st JOIN FETCH st.user "
             + "LEFT JOIN FETCH lqs.instructor i LEFT JOIN FETCH i.user "
             + "LEFT JOIN FETCH lqs.respondedBy rb LEFT JOIN FETCH rb.studentProfile LEFT JOIN FETCH rb.instructorProfile "
+            + "WHERE lqs.status = :status AND st.school.id = :schoolId ORDER BY lqs.createdAt DESC")
+    Page<LessonQuestionSubmission> findByStatusAndSchoolId(@Param("status") QuestionStatus status,
+                                                          @Param("schoolId") Long schoolId,
+                                                          Pageable pageable);
+
+    @Query("SELECT lqs FROM LessonQuestionSubmission lqs "
+            + "JOIN FETCH lqs.student st JOIN FETCH st.user "
+            + "LEFT JOIN FETCH lqs.instructor i LEFT JOIN FETCH i.user "
+            + "LEFT JOIN FETCH lqs.respondedBy rb LEFT JOIN FETCH rb.studentProfile LEFT JOIN FETCH rb.instructorProfile "
             + "WHERE lqs.instructor.id = :instructorId AND lqs.status = :status ORDER BY lqs.createdAt DESC")
     Page<LessonQuestionSubmission> findByInstructorAndStatus(
             @Param("instructorId") Long instructorId,

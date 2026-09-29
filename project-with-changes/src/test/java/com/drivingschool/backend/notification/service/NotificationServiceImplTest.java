@@ -8,6 +8,7 @@ import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.notification.enums.NotificationStatus;
 import com.drivingschool.backend.notification.mapper.NotificationMapper;
 import com.drivingschool.backend.notification.repository.NotificationRepository;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.user.entity.User;
@@ -28,6 +29,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -41,6 +43,7 @@ class NotificationServiceImplTest {
     @Mock private NotificationSender emailSender;
     @Mock private NotificationSender smsSender;
     @Mock private CurrentUserService currentUserService;
+    @Mock private AdminSchoolScope adminSchoolScope;
     private final NotificationMapper notificationMapper = new NotificationMapper();
 
     private NotificationServiceImpl service;
@@ -68,7 +71,7 @@ class NotificationServiceImplTest {
         org.mockito.Mockito.lenient().when(emailSender.supports(NotificationChannel.EMAIL)).thenReturn(true);
         org.mockito.Mockito.lenient().when(smsSender.supports(NotificationChannel.EMAIL)).thenReturn(false);
         service = new NotificationServiceImpl(userRepository, notificationRepository,
-                List.of(emailSender, smsSender), notificationMapper, currentUserService);
+                List.of(emailSender, smsSender), notificationMapper, currentUserService, adminSchoolScope);
     }
 
     @Test
@@ -222,5 +225,15 @@ class NotificationServiceImplTest {
 
         assertThatThrownBy(() -> service.markAsRead(99L))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void sendAsCaller_recipientOutsideCallersSchool_isRejectedBeforeAnythingIsSaved() {
+        SendNotificationRequest request = SendNotificationRequest.builder()
+                .userId(1L).subject("x").body("y").channel(NotificationChannel.EMAIL).build();
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccessToUser(1L);
+
+        assertThatThrownBy(() -> service.sendAsCaller(request)).isInstanceOf(BadRequestException.class);
+        verify(notificationRepository, never()).save(any());
     }
 }

@@ -9,6 +9,7 @@ import com.drivingschool.backend.school.enums.SchoolDeletionRequestStatus;
 import com.drivingschool.backend.school.repository.SchoolDeletionRequestRepository;
 import com.drivingschool.backend.school.repository.SchoolRepository;
 import com.drivingschool.backend.school.service.SchoolAdminCascadeDeletionService;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +24,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -35,12 +37,14 @@ class UserServiceImplTest {
     @Mock private SchoolRepository schoolRepository;
     @Mock private SchoolDeletionRequestRepository schoolDeletionRequestRepository;
     @Mock private SchoolAdminCascadeDeletionService cascadeDeletionService;
+    @Mock private AdminSchoolScope adminSchoolScope;
 
     private UserServiceImpl userService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserServiceImpl(userRepository, schoolRepository, schoolDeletionRequestRepository, cascadeDeletionService);
+        userService = new UserServiceImpl(userRepository, schoolRepository, schoolDeletionRequestRepository, cascadeDeletionService,
+                adminSchoolScope);
     }
 
     private User existingUser(Long id) {
@@ -150,5 +154,17 @@ class UserServiceImplTest {
         userService.deleteUserAccount(3L, 1L);
 
         verify(cascadeDeletionService).execute(7L);
+    }
+
+    @Test
+    void deleteUserAccount_targetIsStudentInAnotherSchool_isRejectedWithoutDeleting() {
+        User target = existingUser(10L);
+        when(userRepository.findById(10L)).thenReturn(Optional.of(target));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccessToUser(10L);
+
+        assertThatThrownBy(() -> userService.deleteUserAccount(10L, 1L))
+                .isInstanceOf(BadRequestException.class);
+        assertThat(target.isDeleted()).isFalse();
+        verify(userRepository, never()).save(any());
     }
 }

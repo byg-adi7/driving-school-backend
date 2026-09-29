@@ -147,8 +147,10 @@ public class CourseServiceImpl implements CourseService {
             if (requestedInstructorId == null) {
                 throw new BadRequestException("Instructor ID is required when creating a course as ADMIN");
             }
-            return instructorProfileRepository.findById(requestedInstructorId)
+            InstructorProfile instructor = instructorProfileRepository.findById(requestedInstructorId)
                     .orElseThrow(() -> new ResourceNotFoundException("InstructorProfile", "id", requestedInstructorId));
+            validator.validateAdminSchoolAccess(instructor);
+            return instructor;
         }
 
         return instructorProfileRepository.findByUserId(userId)

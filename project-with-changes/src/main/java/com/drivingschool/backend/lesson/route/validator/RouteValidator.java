@@ -4,10 +4,19 @@ import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.lesson.route.dto.GenerateRouteRequest;
 import com.drivingschool.backend.lesson.route.entity.PracticalLessonRoute;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import org.springframework.stereotype.Component;
+
+import java.util.Optional;
 
 @Component
 public class RouteValidator {
+
+    private final AdminSchoolScope adminSchoolScope;
+
+    public RouteValidator(AdminSchoolScope adminSchoolScope) {
+        this.adminSchoolScope = adminSchoolScope;
+    }
 
     private static final double MIN_LAT = -90.0;
     private static final double MAX_LAT = 90.0;
@@ -45,8 +54,17 @@ public class RouteValidator {
         }
     }
 
+    /**
+     * @return the one school an ADMIN-only listing must be filtered to for a regular
+     *         admin, or empty for the bootstrap admin (every school).
+     */
+    public Optional<Long> adminSchoolFilter() {
+        return adminSchoolScope.restrictedSchoolId();
+    }
+
     public void validateReadAccess(PracticalLessonRoute route, Long userId, String role) {
         if ("ADMIN".equals(role)) {
+            adminSchoolScope.requireAccess(route.getInstructor().getSchool().getId());
             return;
         }
         if ("INSTRUCTOR".equals(role) && route.getInstructor().getUser().getId().equals(userId)) {
@@ -63,6 +81,7 @@ public class RouteValidator {
 
     public void validateInstructorRoutesAccess(InstructorProfile instructor, Long userId, String role) {
         if ("ADMIN".equals(role)) {
+            adminSchoolScope.requireAccess(instructor.getSchool().getId());
             return;
         }
         if ("INSTRUCTOR".equals(role) && instructor.getUser().getId().equals(userId)) {

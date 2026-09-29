@@ -1,13 +1,26 @@
 package com.drivingschool.backend.learning.validator;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.learning.entity.Course;
 import com.drivingschool.backend.learning.entity.VideoLesson;
 import com.drivingschool.backend.learning.enums.CourseStatus;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import org.springframework.stereotype.Component;
 
 @Component
 public class LearningValidator {
+
+    private final AdminSchoolScope adminSchoolScope;
+
+    public LearningValidator(AdminSchoolScope adminSchoolScope) {
+        this.adminSchoolScope = adminSchoolScope;
+    }
+
+    /** An ADMIN creating content under an instructor must share that instructor's school. */
+    public void validateAdminSchoolAccess(InstructorProfile instructor) {
+        adminSchoolScope.requireAccess(instructor.getSchool().getId());
+    }
 
     public void validateCourseOwnership(Course course, Long userId, String role) {
         if (!isCourseOwnerOrAdmin(course, userId, role)) {
@@ -17,7 +30,7 @@ public class LearningValidator {
 
     public boolean isCourseOwnerOrAdmin(Course course, Long userId, String role) {
         if ("ADMIN".equals(role)) {
-            return true;
+            return adminSchoolScope.canAccess(course.getInstructor().getSchool().getId());
         }
         return "INSTRUCTOR".equals(role) && course.getInstructor().getUser().getId().equals(userId);
     }
@@ -27,10 +40,11 @@ public class LearningValidator {
      * courses are only visible to the owning instructor or ADMIN.
      */
     public void validateCourseReadAccess(Course course, Long userId, String role) {
-        if ("ADMIN".equals(role)) {
+        if (course.getStatus() == CourseStatus.PUBLISHED) {
             return;
         }
-        if (course.getStatus() == CourseStatus.PUBLISHED) {
+        if ("ADMIN".equals(role)) {
+            adminSchoolScope.requireAccess(course.getInstructor().getSchool().getId());
             return;
         }
         if ("INSTRUCTOR".equals(role) && course.getInstructor().getUser().getId().equals(userId)) {
@@ -49,10 +63,11 @@ public class LearningValidator {
      * owning instructor or ADMIN.
      */
     public void validateLessonReadAccess(VideoLesson lesson, Long userId, String role) {
-        if ("ADMIN".equals(role)) {
+        if (lesson.isPublished()) {
             return;
         }
-        if (lesson.isPublished()) {
+        if ("ADMIN".equals(role)) {
+            adminSchoolScope.requireAccess(lesson.getCourse().getInstructor().getSchool().getId());
             return;
         }
         if ("INSTRUCTOR".equals(role) && lesson.getCourse().getInstructor().getUser().getId().equals(userId)) {

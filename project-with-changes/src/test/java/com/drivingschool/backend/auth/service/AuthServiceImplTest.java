@@ -22,6 +22,7 @@ import com.drivingschool.backend.role.repository.RoleRepository;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.repository.SchoolRepository;
 import com.drivingschool.backend.school.service.SchoolDeletionRequestService;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.security.RefreshTokenRevocationService;
 import com.drivingschool.backend.security.UserPrincipal;
@@ -51,6 +52,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -77,6 +79,7 @@ class AuthServiceImplTest {
     @Mock private RefreshTokenRevocationService refreshTokenRevocationService;
     @Mock private SchoolDeletionRequestService schoolDeletionRequestService;
     @Mock private NotificationService notificationService;
+    @Mock private AdminSchoolScope adminSchoolScope;
 
     private AuthServiceImpl authService;
 
@@ -98,7 +101,7 @@ class AuthServiceImplTest {
                 schoolRepository, studentProfileRepository, instructorProfileRepository,
                 passwordEncoder, jwtTokenProvider, authMapper, currentUserMapper, currentUserService,
                 passwordResetTokenRepository, emailService, userService, refreshTokenRevocationService,
-                schoolDeletionRequestService, notificationService, 3_600_000L);
+                schoolDeletionRequestService, notificationService, adminSchoolScope, 3_600_000L);
     }
 
     // --- login ---
@@ -521,5 +524,16 @@ class AuthServiceImplTest {
 
         verify(userService, never()).softDelete(any());
         verify(schoolDeletionRequestService, never()).requestOwnSchoolDeletion(any());
+    }
+
+    @Test
+    void register_asAdminIntoAnotherSchool_isRejectedBeforeAnyAccountIsCreated() {
+        when(currentUserService.hasRole(RoleName.ADMIN)).thenReturn(true);
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(1L);
+
+        assertThatThrownBy(() -> authService.register(validStudentRequest().build()))
+                .isInstanceOf(BadRequestException.class);
+        verify(userRepository, never()).save(any());
+        verify(studentProfileRepository, never()).save(any());
     }
 }

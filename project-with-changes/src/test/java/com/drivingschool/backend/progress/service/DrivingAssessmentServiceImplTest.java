@@ -18,6 +18,7 @@ import com.drivingschool.backend.progress.mapper.DrivingAssessmentMapper;
 import com.drivingschool.backend.progress.repository.DrivingAssessmentRepository;
 import com.drivingschool.backend.progress.validator.DrivingAssessmentValidator;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.user.entity.User;
@@ -35,12 +36,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class DrivingAssessmentServiceImplTest {
+
+    private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
 
     @Mock private DrivingAssessmentRepository drivingAssessmentRepository;
     @Mock private StudentProfileRepository studentProfileRepository;
@@ -49,7 +53,7 @@ class DrivingAssessmentServiceImplTest {
     @Mock private NotificationService notificationService;
     @Mock private GamificationService gamificationService;
     private final DrivingAssessmentMapper mapper = new DrivingAssessmentMapper();
-    private final DrivingAssessmentValidator validator = new DrivingAssessmentValidator();
+    private final DrivingAssessmentValidator validator = new DrivingAssessmentValidator(adminSchoolScope);
 
     private DrivingAssessmentServiceImpl service;
 

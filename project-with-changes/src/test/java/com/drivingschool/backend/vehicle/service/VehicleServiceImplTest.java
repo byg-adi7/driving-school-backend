@@ -4,6 +4,7 @@ import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.repository.SchoolRepository;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.vehicle.dto.CreateVehicleRequest;
 import com.drivingschool.backend.vehicle.dto.UpdateVehicleRequest;
 import com.drivingschool.backend.vehicle.dto.UpdateVehicleStatusRequest;
@@ -25,6 +26,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -34,13 +36,14 @@ class VehicleServiceImplTest {
 
     @Mock private VehicleRepository vehicleRepository;
     @Mock private SchoolRepository schoolRepository;
+    @Mock private AdminSchoolScope adminSchoolScope;
     private final VehicleMapper vehicleMapper = new VehicleMapper();
 
     private VehicleServiceImpl vehicleService;
 
     @BeforeEach
     void setUp() {
-        vehicleService = new VehicleServiceImpl(vehicleRepository, schoolRepository, vehicleMapper);
+        vehicleService = new VehicleServiceImpl(vehicleRepository, schoolRepository, vehicleMapper, adminSchoolScope);
     }
 
     private School schoolWithId(Long id) {
@@ -181,5 +184,40 @@ class VehicleServiceImplTest {
         VehicleResponse response = vehicleService.updateStatus(5L, request);
 
         assertThat(response.getStatus()).isEqualTo(VehicleStatus.MAINTENANCE);
+    }
+
+    @Test
+    void create_asAdminOfAnotherSchool_throwsBadRequestException() {
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(1L);
+
+        assertThatThrownBy(() -> vehicleService.create(validCreateRequest().build()))
+                .isInstanceOf(BadRequestException.class);
+        verify(vehicleRepository, never()).save(any());
+    }
+
+    @Test
+    void update_asAdminOfAnotherSchool_throwsBadRequestException() {
+        Vehicle vehicle = vehicleWithId(5L, schoolWithId(2L), VehicleStatus.AVAILABLE);
+        when(vehicleRepository.findById(5L)).thenReturn(Optional.of(vehicle));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(2L);
+        UpdateVehicleRequest request = UpdateVehicleRequest.builder()
+                .make("Honda").model("Civic").modelYear(2023).color("Black").build();
+
+        assertThatThrownBy(() -> vehicleService.update(5L, request))
+                .isInstanceOf(BadRequestException.class);
+        verify(vehicleRepository, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_asAdminOfAnotherSchool_throwsBadRequestException() {
+        Vehicle vehicle = vehicleWithId(5L, schoolWithId(2L), VehicleStatus.AVAILABLE);
+        when(vehicleRepository.findById(5L)).thenReturn(Optional.of(vehicle));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(2L);
+        UpdateVehicleStatusRequest request = UpdateVehicleStatusRequest.builder()
+                .status(VehicleStatus.MAINTENANCE).build();
+
+        assertThatThrownBy(() -> vehicleService.updateStatus(5L, request))
+                .isInstanceOf(BadRequestException.class);
+        verify(vehicleRepository, never()).save(any());
     }
 }

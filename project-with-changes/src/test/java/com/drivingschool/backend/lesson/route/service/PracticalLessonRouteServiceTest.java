@@ -13,6 +13,7 @@ import com.drivingschool.backend.lesson.route.entity.PracticalLessonRoute;
 import com.drivingschool.backend.lesson.route.repository.PracticalLessonRouteRepository;
 import com.drivingschool.backend.lesson.route.validator.RouteValidator;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
@@ -34,6 +35,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -41,12 +44,14 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class PracticalLessonRouteServiceTest {
 
+    private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+
     @Mock private PracticalLessonRouteRepository routeRepository;
     @Mock private UserRepository userRepository;
     @Mock private InstructorProfileRepository instructorProfileRepository;
     @Mock private BookingRepository bookingRepository;
     @Mock private OpenRouteServiceIntegration openRouteService;
-    private final RouteValidator validator = new RouteValidator();
+    private final RouteValidator validator = new RouteValidator(adminSchoolScope);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private PracticalLessonRouteService routeService;
@@ -160,5 +165,26 @@ class PracticalLessonRouteServiceTest {
 
         assertThatThrownBy(() -> routeService.getInstructorRoutes(50L, Pageable.unpaged(), 1L, "ADMIN"))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getAllRoutes_asRegularAdmin_isFilteredToTheirSchool() {
+        when(adminSchoolScope.restrictedSchoolId()).thenReturn(Optional.of(7L));
+        when(routeRepository.findAllRoutesBySchoolId(7L, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of()));
+
+        routeService.getAllRoutes(Pageable.unpaged());
+
+        verify(routeRepository).findAllRoutesBySchoolId(7L, Pageable.unpaged());
+        verify(routeRepository, never()).findAllRoutes(any());
+    }
+
+    @Test
+    void getAllRoutes_asBootstrapAdmin_isUnfiltered() {
+        when(adminSchoolScope.restrictedSchoolId()).thenReturn(Optional.empty());
+        when(routeRepository.findAllRoutes(Pageable.unpaged())).thenReturn(new PageImpl<>(List.of()));
+
+        routeService.getAllRoutes(Pageable.unpaged());
+
+        verify(routeRepository, never()).findAllRoutesBySchoolId(any(), any());
     }
 }

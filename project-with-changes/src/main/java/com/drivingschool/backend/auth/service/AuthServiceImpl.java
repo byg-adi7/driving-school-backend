@@ -27,6 +27,7 @@ import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.role.repository.RoleRepository;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.repository.SchoolRepository;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.school.service.SchoolDeletionRequestService;
 import com.drivingschool.backend.security.UserPrincipal;
 import com.drivingschool.backend.security.jwt.JwtTokenProvider;
@@ -70,6 +71,7 @@ public class AuthServiceImpl implements AuthService {
     private final RefreshTokenRevocationService refreshTokenRevocationService;
     private final SchoolDeletionRequestService schoolDeletionRequestService;
     private final NotificationService notificationService;
+    private final AdminSchoolScope adminSchoolScope;
     private final long passwordResetTokenExpirationMs;
 
     public AuthServiceImpl(AuthenticationManager authenticationManager,
@@ -89,6 +91,7 @@ public class AuthServiceImpl implements AuthService {
                            RefreshTokenRevocationService refreshTokenRevocationService,
                            SchoolDeletionRequestService schoolDeletionRequestService,
                            NotificationService notificationService,
+                           AdminSchoolScope adminSchoolScope,
                            @Value("${app.password-reset.token-expiration-ms}") long passwordResetTokenExpirationMs) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
@@ -107,6 +110,7 @@ public class AuthServiceImpl implements AuthService {
         this.refreshTokenRevocationService = refreshTokenRevocationService;
         this.schoolDeletionRequestService = schoolDeletionRequestService;
         this.notificationService = notificationService;
+        this.adminSchoolScope = adminSchoolScope;
         this.passwordResetTokenExpirationMs = passwordResetTokenExpirationMs;
     }
 
@@ -315,9 +319,11 @@ public class AuthServiceImpl implements AuthService {
     // Called from register(), which is only reachable via AuthController#register
     // (@PreAuthorize hasAnyRole ADMIN/INSTRUCTOR) or indirectly via registerByAdmin
     // (@PreAuthorize hasRole ADMIN) - so the caller is always one of those two roles.
-    // An instructor may only create student accounts, and only within their own school.
+    // An instructor may only create student accounts, and only within their own school;
+    // a regular admin may create either, but also only within their own school.
     private void validateCallerCanCreate(RegisterRequest request) {
         if (currentUserService.hasRole(RoleName.ADMIN)) {
+            adminSchoolScope.requireAccess(request.getSchoolId());
             return;
         }
 

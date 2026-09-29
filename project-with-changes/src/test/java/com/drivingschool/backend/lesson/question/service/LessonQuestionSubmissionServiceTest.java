@@ -15,6 +15,7 @@ import com.drivingschool.backend.lesson.question.repository.LessonQuestionSubmis
 import com.drivingschool.backend.lesson.question.validator.QuestionValidator;
 import com.drivingschool.backend.notification.service.NotificationService;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.user.entity.User;
@@ -36,6 +37,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -44,6 +47,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class LessonQuestionSubmissionServiceTest {
 
+    private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+
     @Mock private LessonQuestionSubmissionRepository questionRepository;
     @Mock private LessonQuestionStatusHistoryRepository statusHistoryRepository;
     @Mock private UserRepository userRepository;
@@ -51,7 +56,7 @@ class LessonQuestionSubmissionServiceTest {
     @Mock private InstructorProfileRepository instructorProfileRepository;
     @Mock private LessonQuestionStatusHistoryService statusHistoryService;
     @Mock private NotificationService notificationService;
-    private final QuestionValidator validator = new QuestionValidator();
+    private final QuestionValidator validator = new QuestionValidator(adminSchoolScope);
 
     private LessonQuestionSubmissionService service;
 
@@ -350,7 +355,7 @@ class LessonQuestionSubmissionServiceTest {
     }
 
     @Test
-    void getQuestionsByStatus_delegatesDirectlyToRepository() {
+    void getQuestionsByStatus_unrestrictedCaller_delegatesDirectlyToRepository() {
         Pageable pageable = Pageable.unpaged();
         when(questionRepository.findByStatus(eq(QuestionStatus.PENDING), any())).thenReturn(new PageImpl<>(java.util.List.of()));
 
@@ -381,5 +386,16 @@ class LessonQuestionSubmissionServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
 
         verify(questionRepository, never()).findByInstructorAndStatus(any(), any(), any());
+    }
+
+    @Test
+    void getQuestionsByStatus_asRegularAdmin_isFilteredToTheirSchool() {
+        when(adminSchoolScope.restrictedSchoolId()).thenReturn(Optional.of(7L));
+        when(questionRepository.findByStatusAndSchoolId(eq(QuestionStatus.PENDING), eq(7L), any()))
+                .thenReturn(new PageImpl<>(java.util.List.of()));
+
+        service.getQuestionsByStatus(QuestionStatus.PENDING, Pageable.unpaged());
+
+        verify(questionRepository, never()).findByStatus(any(), any());
     }
 }

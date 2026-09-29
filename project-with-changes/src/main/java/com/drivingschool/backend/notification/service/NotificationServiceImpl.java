@@ -9,6 +9,7 @@ import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.notification.enums.NotificationStatus;
 import com.drivingschool.backend.notification.mapper.NotificationMapper;
 import com.drivingschool.backend.notification.repository.NotificationRepository;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
@@ -29,17 +30,20 @@ public class NotificationServiceImpl implements NotificationService {
     private final List<NotificationSender> notificationSenders;
     private final NotificationMapper notificationMapper;
     private final CurrentUserService currentUserService;
+    private final AdminSchoolScope adminSchoolScope;
 
     public NotificationServiceImpl(UserRepository userRepository,
                                    NotificationRepository notificationRepository,
                                    List<NotificationSender> notificationSenders,
                                    NotificationMapper notificationMapper,
-                                   CurrentUserService currentUserService) {
+                                   CurrentUserService currentUserService,
+                                   AdminSchoolScope adminSchoolScope) {
         this.userRepository = userRepository;
         this.notificationRepository = notificationRepository;
         this.notificationSenders = notificationSenders;
         this.notificationMapper = notificationMapper;
         this.currentUserService = currentUserService;
+        this.adminSchoolScope = adminSchoolScope;
     }
 
     @Override
@@ -74,6 +78,13 @@ public class NotificationServiceImpl implements NotificationService {
 
         return notificationMapper.toResponse(
                 notificationRepository.findById(saved.getId()).orElse(saved));
+    }
+
+    @Override
+    @Transactional
+    public NotificationResponse sendAsCaller(SendNotificationRequest request) {
+        adminSchoolScope.requireAccessToUser(request.getUserId());
+        return send(request);
     }
 
     // SMS has no use for a user's email, and email/in-app have no use for a

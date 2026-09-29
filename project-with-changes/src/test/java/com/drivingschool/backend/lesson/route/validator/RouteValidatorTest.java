@@ -4,16 +4,22 @@ import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.lesson.route.entity.PracticalLessonRoute;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.user.entity.User;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 
 class RouteValidatorTest {
 
-    private final RouteValidator validator = new RouteValidator();
+    private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+
+    private final RouteValidator validator = new RouteValidator(adminSchoolScope);
 
     private User userWithId(Long id) {
         User user = User.builder().email("u" + id + "@example.com").password("x").enabled(true).emailVerified(true).build();
@@ -32,7 +38,7 @@ class RouteValidatorTest {
     // --- validateReadAccess ---
 
     @Test
-    void validateReadAccess_admin_alwaysAllowed() {
+    void validateReadAccess_adminOfSameSchool_allowed() {
         PracticalLessonRoute route = routeFor(userWithId(1L));
 
         assertThatCode(() -> validator.validateReadAccess(route, 999L, "ADMIN")).doesNotThrowAnyException();
@@ -89,10 +95,28 @@ class RouteValidatorTest {
     }
 
     @Test
-    void validateInstructorRoutesAccess_admin_alwaysAllowed() {
+    void validateInstructorRoutesAccess_adminOfSameSchool_allowed() {
         InstructorProfile instructor = instructorFor(userWithId(1L));
 
         assertThatCode(() -> validator.validateInstructorRoutesAccess(instructor, 999L, "ADMIN"))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    void validateReadAccess_adminOfAnotherSchool_denied() {
+        PracticalLessonRoute route = routeFor(userWithId(1L));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+
+        assertThatThrownBy(() -> validator.validateReadAccess(route, 999L, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void validateInstructorRoutesAccess_adminOfAnotherSchool_denied() {
+        InstructorProfile instructor = instructorFor(userWithId(1L));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+
+        assertThatThrownBy(() -> validator.validateInstructorRoutesAccess(instructor, 999L, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
     }
 }

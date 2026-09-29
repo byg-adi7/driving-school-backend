@@ -170,7 +170,9 @@ public class LessonQuestionSubmissionService {
 
     @Transactional(readOnly = true)
     public Page<QuestionResponse> getQuestionsByStatus(QuestionStatus status, Pageable pageable) {
-        Page<LessonQuestionSubmission> questions = questionRepository.findByStatus(status, pageable);
+        Page<LessonQuestionSubmission> questions = validator.adminSchoolFilter()
+                .map(schoolId -> questionRepository.findByStatusAndSchoolId(status, schoolId, pageable))
+                .orElseGet(() -> questionRepository.findByStatus(status, pageable));
         return questions.map(this::mapToResponse);
     }
 

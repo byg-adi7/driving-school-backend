@@ -1,5 +1,6 @@
 package com.drivingschool.backend.instructor.service;
 
+import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.dto.InstructorProfileResponse;
 import com.drivingschool.backend.instructor.dto.UpdateInstructorActiveStatusRequest;
@@ -8,6 +9,7 @@ import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.mapper.InstructorProfileMapper;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +25,9 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,6 +35,7 @@ class InstructorProfileServiceImplTest {
 
     @Mock private InstructorProfileRepository instructorProfileRepository;
     @Mock private CurrentUserService currentUserService;
+    @Mock private AdminSchoolScope adminSchoolScope;
     private final InstructorProfileMapper instructorProfileMapper = new InstructorProfileMapper();
 
     private InstructorProfileServiceImpl instructorProfileService;
@@ -37,7 +43,7 @@ class InstructorProfileServiceImplTest {
     @BeforeEach
     void setUp() {
         instructorProfileService = new InstructorProfileServiceImpl(
-                instructorProfileRepository, instructorProfileMapper, currentUserService);
+                instructorProfileRepository, instructorProfileMapper, currentUserService, adminSchoolScope);
     }
 
     private User userWithId(Long id) {
@@ -139,5 +145,26 @@ class InstructorProfileServiceImplTest {
         InstructorProfileResponse response = instructorProfileService.updateActiveStatus(10L, request);
 
         assertThat(response.isActive()).isFalse();
+    }
+
+    @Test
+    void getBySchool_asAdminOfAnotherSchool_throwsBadRequestException() {
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(2L);
+
+        assertThatThrownBy(() -> instructorProfileService.getBySchool(2L))
+                .isInstanceOf(BadRequestException.class);
+        verify(instructorProfileRepository, never()).findBySchoolIdExcludingDeletedUsers(any());
+    }
+
+    @Test
+    void updateActiveStatus_asAdminOfAnotherSchool_throwsBadRequestException() {
+        InstructorProfile profile = profileWithId(10L, userWithId(1L), schoolWithId(2L));
+        when(instructorProfileRepository.findById(10L)).thenReturn(Optional.of(profile));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(2L);
+        UpdateInstructorActiveStatusRequest request = UpdateInstructorActiveStatusRequest.builder().active(false).build();
+
+        assertThatThrownBy(() -> instructorProfileService.updateActiveStatus(10L, request))
+                .isInstanceOf(BadRequestException.class);
+        verify(instructorProfileRepository, never()).save(any());
     }
 }

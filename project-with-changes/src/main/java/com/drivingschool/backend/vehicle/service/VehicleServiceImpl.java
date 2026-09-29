@@ -4,6 +4,7 @@ import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.repository.SchoolRepository;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.vehicle.dto.CreateVehicleRequest;
 import com.drivingschool.backend.vehicle.dto.UpdateVehicleRequest;
 import com.drivingschool.backend.vehicle.dto.UpdateVehicleStatusRequest;
@@ -25,17 +26,20 @@ public class VehicleServiceImpl implements VehicleService {
     private final VehicleRepository vehicleRepository;
     private final SchoolRepository schoolRepository;
     private final VehicleMapper vehicleMapper;
+    private final AdminSchoolScope adminSchoolScope;
 
     public VehicleServiceImpl(VehicleRepository vehicleRepository, SchoolRepository schoolRepository,
-                               VehicleMapper vehicleMapper) {
+                               VehicleMapper vehicleMapper, AdminSchoolScope adminSchoolScope) {
         this.vehicleRepository = vehicleRepository;
         this.schoolRepository = schoolRepository;
         this.vehicleMapper = vehicleMapper;
+        this.adminSchoolScope = adminSchoolScope;
     }
 
     @Override
     @Transactional
     public VehicleResponse create(CreateVehicleRequest request) {
+        adminSchoolScope.requireAccess(request.getSchoolId());
         if (vehicleRepository.existsByRegistrationNumber(request.getRegistrationNumber())) {
             throw new BadRequestException("Registration number is already in use");
         }
@@ -80,6 +84,7 @@ public class VehicleServiceImpl implements VehicleService {
     public VehicleResponse update(Long id, UpdateVehicleRequest request) {
         Vehicle vehicle = vehicleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Vehicle", "id", id));
+        adminSchoolScope.requireAccess(vehicle.getSchool().getId());
 
         vehicle.updateDetails(request.getMake(), request.getModel(), request.getModelYear(),
                 request.getColor(), request.getGpsDeviceId());
@@ -94,6 +99,7 @@ public class VehicleServiceImpl implements VehicleService {
     public VehicleResponse updateStatus(Long id, UpdateVehicleStatusRequest request) {
         Vehicle vehicle = vehicleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Vehicle", "id", id));
+        adminSchoolScope.requireAccess(vehicle.getSchool().getId());
 
         vehicle.updateStatus(request.getStatus());
 

@@ -38,7 +38,7 @@ public class BookingController {
 
     @PostMapping
     @Operation(summary = "Create a new booking", description = "Instructor-initiated only: instructors schedule lessons for their own students")
-    @PreAuthorize("hasRole('ADMIN') " +
+    @PreAuthorize("(hasRole('ADMIN') and @bookingSecurity.isAdminForStudent(#request.studentId)) " +
             "or (hasRole('INSTRUCTOR') and @bookingSecurity.isSelfInstructor(#request.instructorId))")
     public ResponseEntity<ApiResponse<BookingResponse>> create(@Valid @RequestBody CreateBookingRequest request) {
         BookingResponse response = bookingService.create(request);
@@ -48,14 +48,14 @@ public class BookingController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get booking by ID")
-    @PreAuthorize("hasRole('ADMIN') or @bookingSecurity.isParticipant(#id)")
+    @PreAuthorize("(hasRole('ADMIN') and @bookingSecurity.isAdminForBooking(#id)) or @bookingSecurity.isParticipant(#id)")
     public ResponseEntity<ApiResponse<BookingResponse>> getById(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(bookingService.getById(id)));
     }
 
     @PutMapping("/{id}/confirm")
     @Operation(summary = "Confirm a pending booking")
-    @PreAuthorize("hasRole('ADMIN') " +
+    @PreAuthorize("(hasRole('ADMIN') and @bookingSecurity.isAdminForBooking(#id)) " +
             "or (hasRole('INSTRUCTOR') and @bookingSecurity.isAssignedInstructor(#id))")
     public ResponseEntity<ApiResponse<BookingResponse>> confirm(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success("Booking confirmed", bookingService.confirm(id)));
@@ -63,14 +63,14 @@ public class BookingController {
 
     @PutMapping("/{id}/cancel")
     @Operation(summary = "Cancel a booking")
-    @PreAuthorize("hasRole('ADMIN') or @bookingSecurity.isParticipant(#id)")
+    @PreAuthorize("(hasRole('ADMIN') and @bookingSecurity.isAdminForBooking(#id)) or @bookingSecurity.isParticipant(#id)")
     public ResponseEntity<ApiResponse<BookingResponse>> cancel(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success("Booking cancelled", bookingService.cancel(id)));
     }
 
     @PutMapping("/{id}/complete")
     @Operation(summary = "Mark booking as completed")
-    @PreAuthorize("hasRole('ADMIN') " +
+    @PreAuthorize("(hasRole('ADMIN') and @bookingSecurity.isAdminForBooking(#id)) " +
             "or (hasRole('INSTRUCTOR') and @bookingSecurity.isAssignedInstructor(#id))")
     public ResponseEntity<ApiResponse<BookingResponse>> complete(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success("Booking completed", bookingService.complete(id)));
@@ -78,7 +78,7 @@ public class BookingController {
 
     @GetMapping("/student/{studentId}")
     @Operation(summary = "List bookings for a student")
-    @PreAuthorize("hasRole('ADMIN') " +
+    @PreAuthorize("(hasRole('ADMIN') and @bookingSecurity.isAdminForStudent(#studentId)) " +
             "or (hasRole('STUDENT') and @bookingSecurity.isSelfStudent(#studentId)) " +
             "or (hasRole('INSTRUCTOR') and @bookingSecurity.hasTaughtStudent(#studentId))")
     public ResponseEntity<ApiResponse<List<BookingResponse>>> getByStudent(@PathVariable Long studentId) {
@@ -87,7 +87,7 @@ public class BookingController {
 
     @GetMapping("/instructor/{instructorId}")
     @Operation(summary = "List instructor schedule in date range")
-    @PreAuthorize("hasRole('ADMIN') " +
+    @PreAuthorize("(hasRole('ADMIN') and @bookingSecurity.isAdminForInstructor(#instructorId)) " +
             "or (hasRole('INSTRUCTOR') and @bookingSecurity.isSelfInstructor(#instructorId))")
     public ResponseEntity<ApiResponse<List<BookingResponse>>> getByInstructor(
             @PathVariable Long instructorId,

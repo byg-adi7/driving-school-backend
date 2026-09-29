@@ -151,6 +151,13 @@ public class LiveSessionServiceImpl implements LiveSessionService {
                 : studentProfileRepository.findByUserId(userId)
                         .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for user ID: " + userId));
 
+        // A regular admin may only manage their own school's sessions, and nobody -
+        // admin or student - may register a student into another school's session.
+        validator.validateSchoolAccess(session.getSchool().getId(), student.getSchool().getId(), role);
+        if (!session.getSchool().getId().equals(student.getSchool().getId())) {
+            throw new BadRequestException("Student does not belong to this session's school");
+        }
+
         if (attendanceRepository.existsBySessionIdAndStudentId(sessionId, student.getId())) {
             throw new BadRequestException("Student already registered for this session");
         }

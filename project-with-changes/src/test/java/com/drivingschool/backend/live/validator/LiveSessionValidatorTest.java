@@ -5,16 +5,22 @@ import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.live.entity.LiveSession;
 import com.drivingschool.backend.live.enums.SessionStatus;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.user.entity.User;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 
 class LiveSessionValidatorTest {
 
-    private final LiveSessionValidator validator = new LiveSessionValidator();
+    private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+
+    private final LiveSessionValidator validator = new LiveSessionValidator(adminSchoolScope);
 
     private User userWithId(Long id) {
         User user = User.builder().email("u" + id + "@example.com").password("x").enabled(true).emailVerified(true).build();
@@ -55,7 +61,7 @@ class LiveSessionValidatorTest {
     }
 
     @Test
-    void validateInstructorSelf_admin_alwaysAllowed() {
+    void validateInstructorSelf_adminOfSameSchool_allowed() {
         InstructorProfile instructor = instructorFor(userWithId(1L));
 
         assertThatCode(() -> validator.validateInstructorSelf(instructor, 999L, "ADMIN")).doesNotThrowAnyException();
@@ -81,7 +87,7 @@ class LiveSessionValidatorTest {
     }
 
     @Test
-    void validateSchoolAccess_admin_alwaysAllowed() {
+    void validateSchoolAccess_adminOfSameSchool_allowed() {
         assertThatCode(() -> validator.validateSchoolAccess(5L, 999L, "ADMIN")).doesNotThrowAnyException();
     }
 
@@ -103,9 +109,35 @@ class LiveSessionValidatorTest {
     }
 
     @Test
-    void validateInstructorOwnership_admin_alwaysAllowed() {
+    void validateInstructorOwnership_adminOfSameSchool_allowed() {
         LiveSession session = sessionFor(userWithId(1L), schoolWithId(5L));
 
         assertThatCode(() -> validator.validateInstructorOwnership(session, 999L, "ADMIN")).doesNotThrowAnyException();
+    }
+
+    @Test
+    void validateInstructorSelf_adminOfAnotherSchool_denied() {
+        InstructorProfile instructor = instructorFor(userWithId(1L));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+
+        assertThatThrownBy(() -> validator.validateInstructorSelf(instructor, 999L, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void validateSchoolAccess_adminOfAnotherSchool_denied() {
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+
+        assertThatThrownBy(() -> validator.validateSchoolAccess(5L, null, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void validateInstructorOwnership_adminOfAnotherSchool_denied() {
+        LiveSession session = sessionFor(userWithId(1L), schoolWithId(5L));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+
+        assertThatThrownBy(() -> validator.validateInstructorOwnership(session, 999L, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
     }
 }
