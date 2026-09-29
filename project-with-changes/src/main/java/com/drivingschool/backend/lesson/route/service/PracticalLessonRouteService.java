@@ -110,7 +110,9 @@ public class PracticalLessonRouteService {
 
     @Transactional(readOnly = true)
     public Page<RouteResponse> getAllRoutes(Pageable pageable) {
-        Page<PracticalLessonRoute> routes = routeRepository.findAllRoutes(pageable);
+        Page<PracticalLessonRoute> routes = validator.adminSchoolFilter()
+                .map(schoolId -> routeRepository.findAllRoutesBySchoolId(schoolId, pageable))
+                .orElseGet(() -> routeRepository.findAllRoutes(pageable));
         return routes.map(route -> {
             List<RouteCoordinateDTO> coordinates = parseRouteGeometry(route.getRouteGeometry());
             return mapToResponse(route, coordinates);

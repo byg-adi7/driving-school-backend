@@ -14,6 +14,7 @@ import com.drivingschool.backend.learning.repository.ResourceRepository;
 import com.drivingschool.backend.learning.repository.VideoLessonRepository;
 import com.drivingschool.backend.learning.validator.LearningValidator;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,10 +38,12 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ResourceServiceImplTest {
 
+    private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+
     @Mock private ResourceRepository resourceRepository;
     @Mock private VideoLessonRepository videoLessonRepository;
     private final LearningMapper mapper = new LearningMapper();
-    private final LearningValidator validator = new LearningValidator();
+    private final LearningValidator validator = new LearningValidator(adminSchoolScope);
 
     private ResourceServiceImpl resourceService;
 

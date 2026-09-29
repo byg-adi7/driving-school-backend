@@ -6,6 +6,7 @@ import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
 import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.student.dto.StudentProfileResponse;
 import com.drivingschool.backend.student.dto.UpdateStudentProfileRequest;
@@ -29,6 +30,9 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,6 +41,7 @@ class StudentProfileServiceImplTest {
     @Mock private StudentProfileRepository studentProfileRepository;
     @Mock private CurrentUserService currentUserService;
     @Mock private InstructorProfileRepository instructorProfileRepository;
+    @Mock private AdminSchoolScope adminSchoolScope;
     private final StudentProfileMapper studentProfileMapper = new StudentProfileMapper();
 
     private StudentProfileServiceImpl studentProfileService;
@@ -44,7 +49,8 @@ class StudentProfileServiceImplTest {
     @BeforeEach
     void setUp() {
         studentProfileService = new StudentProfileServiceImpl(
-                studentProfileRepository, studentProfileMapper, currentUserService, instructorProfileRepository);
+                studentProfileRepository, studentProfileMapper, currentUserService, instructorProfileRepository,
+                adminSchoolScope);
     }
 
     private InstructorProfile instructorProfile(Long profileId, User user, School school) {
@@ -199,5 +205,27 @@ class StudentProfileServiceImplTest {
         StudentProfileResponse response = studentProfileService.updateStatus(10L, request);
 
         assertThat(response.getStatus()).isEqualTo(StudentStatus.GRADUATED);
+    }
+
+    @Test
+    void getBySchool_asAdminOfAnotherSchool_throwsBadRequestException() {
+        when(currentUserService.hasRole(RoleName.ADMIN)).thenReturn(true);
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(2L);
+
+        assertThatThrownBy(() -> studentProfileService.getBySchool(2L))
+                .isInstanceOf(BadRequestException.class);
+        verify(studentProfileRepository, never()).findBySchoolIdExcludingDeletedUsers(any());
+    }
+
+    @Test
+    void updateStatus_asAdminOfAnotherSchool_throwsBadRequestException() {
+        StudentProfile profile = profileWithId(10L, userWithId(1L), schoolWithId(2L));
+        when(studentProfileRepository.findById(10L)).thenReturn(Optional.of(profile));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(2L);
+        UpdateStudentStatusRequest request = UpdateStudentStatusRequest.builder().status(StudentStatus.SUSPENDED).build();
+
+        assertThatThrownBy(() -> studentProfileService.updateStatus(10L, request))
+                .isInstanceOf(BadRequestException.class);
+        verify(studentProfileRepository, never()).save(any());
     }
 }

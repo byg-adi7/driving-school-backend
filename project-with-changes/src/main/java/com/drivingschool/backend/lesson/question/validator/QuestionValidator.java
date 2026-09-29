@@ -5,10 +5,19 @@ import com.drivingschool.backend.lesson.question.dto.RespondToQuestionRequest;
 import com.drivingschool.backend.lesson.question.dto.SubmitQuestionRequest;
 import com.drivingschool.backend.lesson.question.entity.LessonQuestionSubmission;
 import com.drivingschool.backend.lesson.question.enums.QuestionStatus;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import org.springframework.stereotype.Component;
+
+import java.util.Optional;
 
 @Component
 public class QuestionValidator {
+
+    private final AdminSchoolScope adminSchoolScope;
+
+    public QuestionValidator(AdminSchoolScope adminSchoolScope) {
+        this.adminSchoolScope = adminSchoolScope;
+    }
 
     public void validateSubmitRequest(SubmitQuestionRequest request) {
         if (request.getSubject() == null || request.getSubject().trim().isEmpty()) {
@@ -41,13 +50,26 @@ public class QuestionValidator {
             throw new BadRequestException("You are not assigned to this question");
         }
 
+        if ("ADMIN".equals(role)) {
+            adminSchoolScope.requireAccess(question.getStudent().getSchool().getId());
+        }
+
         if (question.getStatus() == QuestionStatus.CLOSED) {
             throw new BadRequestException("Cannot change status of a closed question");
         }
     }
 
+    /**
+     * @return the one school an ADMIN-only listing must be filtered to for a regular
+     *         admin, or empty for the bootstrap admin (every school).
+     */
+    public Optional<Long> adminSchoolFilter() {
+        return adminSchoolScope.restrictedSchoolId();
+    }
+
     public void validateReadAccess(LessonQuestionSubmission question, Long userId, String role) {
         if ("ADMIN".equals(role)) {
+            adminSchoolScope.requireAccess(question.getStudent().getSchool().getId());
             return;
         }
         if ("INSTRUCTOR".equals(role) && question.getInstructor() != null && question.getInstructor().getUser().getId().equals(userId)) {

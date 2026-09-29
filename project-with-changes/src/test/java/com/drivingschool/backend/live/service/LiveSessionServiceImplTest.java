@@ -14,6 +14,7 @@ import com.drivingschool.backend.live.repository.LiveSessionRepository;
 import com.drivingschool.backend.live.validator.LiveSessionValidator;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.repository.SchoolRepository;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.user.entity.User;
@@ -32,6 +33,8 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,13 +42,15 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class LiveSessionServiceImplTest {
 
+    private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+
     @Mock private LiveSessionRepository liveSessionRepository;
     @Mock private AttendanceRepository attendanceRepository;
     @Mock private InstructorProfileRepository instructorProfileRepository;
     @Mock private SchoolRepository schoolRepository;
     @Mock private StudentProfileRepository studentProfileRepository;
     private final LiveSessionMapper liveSessionMapper = new LiveSessionMapper();
-    private final LiveSessionValidator validator = new LiveSessionValidator();
+    private final LiveSessionValidator validator = new LiveSessionValidator(adminSchoolScope);
 
     private LiveSessionServiceImpl service;
 
@@ -191,5 +196,51 @@ class LiveSessionServiceImplTest {
 
         assertThatThrownBy(() -> service.getAttendance(30L, 999L, "INSTRUCTOR"))
                 .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void register_asAdminOfAnotherSchool_isDenied() {
+        School school = schoolWithId(5L);
+        LiveSession session = sessionFor(instructorProfile(50L, userWithId(1L), school), school);
+        RegisterAttendanceRequest request = RegisterAttendanceRequest.builder().studentId(60L).build();
+
+        when(liveSessionRepository.findById(30L)).thenReturn(Optional.of(session));
+        when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(studentProfile(60L, userWithId(6L), school)));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(5L);
+
+        assertThatThrownBy(() -> service.register(30L, request, 999L, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
+        verify(attendanceRepository, never()).save(any());
+    }
+
+    @Test
+    void register_asAdmin_studentFromAnotherSchool_isDenied() {
+        School sessionSchool = schoolWithId(5L);
+        LiveSession session = sessionFor(instructorProfile(50L, userWithId(1L), sessionSchool), sessionSchool);
+        RegisterAttendanceRequest request = RegisterAttendanceRequest.builder().studentId(60L).build();
+
+        when(liveSessionRepository.findById(30L)).thenReturn(Optional.of(session));
+        when(studentProfileRepository.findById(60L))
+                .thenReturn(Optional.of(studentProfile(60L, userWithId(6L), schoolWithId(6L))));
+
+        assertThatThrownBy(() -> service.register(30L, request, 999L, "ADMIN"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("does not belong to this session's school");
+        verify(attendanceRepository, never()).save(any());
+    }
+
+    @Test
+    void register_asStudentOfAnotherSchool_isDenied() {
+        School sessionSchool = schoolWithId(5L);
+        LiveSession session = sessionFor(instructorProfile(50L, userWithId(1L), sessionSchool), sessionSchool);
+        RegisterAttendanceRequest request = RegisterAttendanceRequest.builder().build();
+
+        when(liveSessionRepository.findById(30L)).thenReturn(Optional.of(session));
+        when(studentProfileRepository.findByUserId(2L))
+                .thenReturn(Optional.of(studentProfile(20L, userWithId(2L), schoolWithId(6L))));
+
+        assertThatThrownBy(() -> service.register(30L, request, 2L, "STUDENT"))
+                .isInstanceOf(BadRequestException.class);
+        verify(attendanceRepository, never()).save(any());
     }
 }

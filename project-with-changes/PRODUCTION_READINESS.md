@@ -190,3 +190,27 @@ Before this, "test coverage" meant unit tests (mocked dependencies) and `@WebMvc
 **Confirmed in CI:** ran for real against genuine Docker on the first push, no fix-up round needed this time - full suite at 458 tests, green.
 
 **Integration coverage now spans:** auth lifecycle, the booking/notification/lesson-note/upload chain, quizzes, the dedicated uploads lifecycle, and license-workflow progress - the five flow areas originally scoped for this pass.
+
+---
+
+## Admin School Scoping (2026-09-29)
+
+The school/admin ownership model (one owning admin per school, plus the unrestricted bootstrap admin) was only ever enforced inside the school module itself (`SchoolServiceImpl`/`SchoolAccessValidator`). Every other module's access checks still short-circuited on `role == ADMIN`, from before ownership existed - so a regular admin of school A could read and mutate school B's records just by passing B's IDs: create or soft-delete B's students/instructors, list B's rosters, suspend B's students, deactivate B's instructors, add/edit B's vehicles, create/view/confirm/cancel/complete B's bookings, send notifications to B's users, read B's lesson notes/questions/routes/assessments/license workflows/gamification, manage B's instructors' courses and quizzes, and see every school's data in the ADMIN-only "list everything" endpoints.
+
+**Fix:** a single `AdminSchoolScope` component (`school/validator`) that every former ADMIN short-circuit now goes through:
+- The bootstrap admin stays unrestricted; a regular admin is confined to the school they own (looked up on the `School.owningAdmin` FK side, same as the rest of the ownership code); a regular admin with no owned school is rejected rather than falling back to unrestricted.
+- It's a no-op for non-ADMIN callers, whose existing per-module rules are unchanged - deliberately, since some shared service methods (e.g. `LicenseWorkflowService.markQuizPassed`, called from inside a student's own `QuizService.submit`) run in a STUDENT's request context.
+- Single-record and write endpoints reject a cross-school request (400 from validators/services, matching the existing validator convention; 403 for bookings, whose checks live in `@PreAuthorize` via new `BookingSecurity.isAdminFor*` methods).
+- The ADMIN-only listings (`GET /lesson-notes`, `GET /lesson-routes`, `GET /lesson-questions/status/{status}`) are filtered to the admin's school instead of rejected, via new school-filtered repository queries.
+- `POST /notifications/send` checks the recipient's school through a new `NotificationService.sendAsCaller`; `send()` itself stays unchecked because it's also the internal system path (e.g. a regular admin's deletion request notifying the bootstrap admin, who is outside that admin's school).
+- Published courses/quizzes/lessons stay readable by an admin of any school, since they're already readable by every authenticated role in every school - only drafts and management actions are scoped.
+
+**Also fixed while in there:** `LiveSessionService.register` never checked that the student belongs to the session's school - for students too, not just admins. It now does. `LicenseWorkflowService.initializeForStudent` now checks school access before revealing whether a workflow already exists.
+
+**Verified:** 65 new unit/security tests (a direct `AdminSchoolScopeTest`, an other-school rejection case beside every existing admin case, and the list-filter paths); the existing `admin_alwaysAllowed` tests were renamed to `adminOfSameSchool_allowed`, since "always" is no longer true. Full unit suite: 652 tests, green. New `AdminSchoolScopingIntegrationTest` drives the whole thing through real HTTP with two real schools and admins - school A's admin is rejected across accounts, profiles, vehicles, bookings, notifications and lesson notes, while school B's own admin and the bootstrap admin keep full access.
+
+**Not changed (separate, pre-existing cross-school gaps for non-admin roles, worth their own pass):** `POST /notifications/send` still lets an INSTRUCTOR message any user in any school; `GET /lesson-questions/status/{status}` still returns every school's questions to an INSTRUCTOR; the license-workflow endpoints still leave INSTRUCTOR unrestricted by design (documented in `LicenseWorkflowValidator`), which also means across schools; and `GET /vehicles/school/{id}` / `GET /vehicles/{id}` are readable by any authenticated user for any school.
+
+**Live-verified** against a freshly migrated Postgres 16 + Redis 7 (throwaway containers, the app booted from the built jar - all 15 migrations applied, `ddl-auto=validate` passed, and the new school-filtered JPQL parsed at startup): a 25-check HTTP smoke run mirroring the integration test passed in full. (`AdminSchoolScopingIntegrationTest` itself can't run on this machine for the same Testcontainers/Docker Engine API quirk documented above - CI is its real verification.)
+
+**Found while verifying, not fixed (unrelated, pre-existing):** the `@Async` `SmsNotificationSender` (and likely the email sender, same pattern) runs before the caller's transaction commits, so when a booking-created SMS is dispatched it tries to update a `Notification` row that isn't committed yet and fails with `ObjectOptimisticLockingFailureException` - the SMS delivery record is left at `PENDING`. Only surfaces once real async dispatch races a still-open transaction; fix is to dispatch after commit (e.g. `@TransactionalEventListener(phase = AFTER_COMMIT)`).

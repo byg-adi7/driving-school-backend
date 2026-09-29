@@ -5,11 +5,20 @@ import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.lesson.note.dto.CreateLessonNoteRequest;
 import com.drivingschool.backend.lesson.note.entity.LessonNote;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import org.springframework.stereotype.Component;
 
+import java.util.Optional;
+
 @Component
 public class LessonNoteValidator {
+
+    private final AdminSchoolScope adminSchoolScope;
+
+    public LessonNoteValidator(AdminSchoolScope adminSchoolScope) {
+        this.adminSchoolScope = adminSchoolScope;
+    }
 
     public void validateCreateRequest(CreateLessonNoteRequest request) {
         if (request.getStudentId() == null || request.getStudentId() <= 0) {
@@ -24,8 +33,24 @@ public class LessonNoteValidator {
         }
     }
 
+    /**
+     * @return the one school an ADMIN-only listing must be filtered to for a regular
+     *         admin, or empty for the bootstrap admin (every school).
+     */
+    public Optional<Long> adminSchoolFilter() {
+        return adminSchoolScope.restrictedSchoolId();
+    }
+
+    /** Confines an ADMIN caller to the note's school; a no-op for every other role. */
+    public void validateAdminSchoolAccess(LessonNote note, String role) {
+        if ("ADMIN".equals(role)) {
+            adminSchoolScope.requireAccess(note.getStudent().getSchool().getId());
+        }
+    }
+
     public void validateReadAccess(LessonNote note, Long userId, String role) {
         if ("ADMIN".equals(role)) {
+            adminSchoolScope.requireAccess(note.getStudent().getSchool().getId());
             return;
         }
         if ("INSTRUCTOR".equals(role) && note.getInstructor().getUser().getId().equals(userId)) {
@@ -46,6 +71,7 @@ public class LessonNoteValidator {
      */
     public void validateStudentNotesAccess(StudentProfile student, Long userId, String role, boolean hasTaughtStudent) {
         if ("ADMIN".equals(role)) {
+            adminSchoolScope.requireAccess(student.getSchool().getId());
             return;
         }
         if ("STUDENT".equals(role) && student.getUser().getId().equals(userId)) {
@@ -59,6 +85,7 @@ public class LessonNoteValidator {
 
     public void validateInstructorNotesAccess(InstructorProfile instructor, Long userId, String role) {
         if ("ADMIN".equals(role)) {
+            adminSchoolScope.requireAccess(instructor.getSchool().getId());
             return;
         }
         if ("INSTRUCTOR".equals(role) && instructor.getUser().getId().equals(userId)) {

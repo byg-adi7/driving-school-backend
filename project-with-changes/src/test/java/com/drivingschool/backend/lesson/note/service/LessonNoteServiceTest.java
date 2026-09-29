@@ -31,6 +31,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -312,5 +313,26 @@ class LessonNoteServiceTest {
 
         assertThatThrownBy(() -> lessonNoteService.getInstructorNotes(50L, Pageable.unpaged(), 999L, "ADMIN"))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getAllNotes_asRegularAdmin_isFilteredToTheirSchool() {
+        when(validator.adminSchoolFilter()).thenReturn(Optional.of(7L));
+        when(lessonNoteRepository.findAllNotesBySchoolId(7L, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of()));
+
+        lessonNoteService.getAllNotes(Pageable.unpaged());
+
+        verify(lessonNoteRepository).findAllNotesBySchoolId(7L, Pageable.unpaged());
+        verify(lessonNoteRepository, never()).findAllNotes(any());
+    }
+
+    @Test
+    void getAllNotes_asBootstrapAdmin_isUnfiltered() {
+        when(validator.adminSchoolFilter()).thenReturn(Optional.empty());
+        when(lessonNoteRepository.findAllNotes(Pageable.unpaged())).thenReturn(new PageImpl<>(List.of()));
+
+        lessonNoteService.getAllNotes(Pageable.unpaged());
+
+        verify(lessonNoteRepository, never()).findAllNotesBySchoolId(any(), any());
     }
 }

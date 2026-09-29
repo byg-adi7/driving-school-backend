@@ -7,6 +7,7 @@ import com.drivingschool.backend.instructor.dto.UpdateInstructorProfileRequest;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.mapper.InstructorProfileMapper;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,13 +22,16 @@ public class InstructorProfileServiceImpl implements InstructorProfileService {
     private final InstructorProfileRepository instructorProfileRepository;
     private final InstructorProfileMapper instructorProfileMapper;
     private final CurrentUserService currentUserService;
+    private final AdminSchoolScope adminSchoolScope;
 
     public InstructorProfileServiceImpl(InstructorProfileRepository instructorProfileRepository,
                                          InstructorProfileMapper instructorProfileMapper,
-                                         CurrentUserService currentUserService) {
+                                         CurrentUserService currentUserService,
+                                         AdminSchoolScope adminSchoolScope) {
         this.instructorProfileRepository = instructorProfileRepository;
         this.instructorProfileMapper = instructorProfileMapper;
         this.currentUserService = currentUserService;
+        this.adminSchoolScope = adminSchoolScope;
     }
 
     @Override
@@ -53,6 +57,7 @@ public class InstructorProfileServiceImpl implements InstructorProfileService {
     @Override
     @Transactional(readOnly = true)
     public List<InstructorProfileResponse> getBySchool(Long schoolId) {
+        adminSchoolScope.requireAccess(schoolId);
         return instructorProfileRepository.findBySchoolIdExcludingDeletedUsers(schoolId).stream()
                 .map(instructorProfileMapper::toResponse)
                 .toList();
@@ -63,6 +68,7 @@ public class InstructorProfileServiceImpl implements InstructorProfileService {
     public InstructorProfileResponse updateActiveStatus(Long id, UpdateInstructorActiveStatusRequest request) {
         InstructorProfile profile = instructorProfileRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("InstructorProfile", "id", id));
+        adminSchoolScope.requireAccess(profile.getSchool().getId());
 
         profile.setActive(request.getActive());
 

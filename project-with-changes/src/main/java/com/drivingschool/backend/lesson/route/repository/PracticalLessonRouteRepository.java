@@ -21,4 +21,7 @@ public interface PracticalLessonRouteRepository extends JpaRepository<PracticalL
 
     @Query("SELECT plr FROM PracticalLessonRoute plr ORDER BY plr.createdAt DESC")
     Page<PracticalLessonRoute> findAllRoutes(Pageable pageable);
+
+    @Query("SELECT plr FROM PracticalLessonRoute plr WHERE plr.instructor.school.id = :schoolId ORDER BY plr.createdAt DESC")
+    Page<PracticalLessonRoute> findAllRoutesBySchoolId(@Param("schoolId") Long schoolId, Pageable pageable);
 }

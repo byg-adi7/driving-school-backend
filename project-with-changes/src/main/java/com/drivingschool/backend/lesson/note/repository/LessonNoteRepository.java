@@ -45,5 +45,11 @@ public interface LessonNoteRepository extends JpaRepository<LessonNote, Long> {
             + "ORDER BY ln.createdAt DESC")
     Page<LessonNote> findAllNotes(Pageable pageable);
 
+    @Query("SELECT ln FROM LessonNote ln JOIN FETCH ln.instructor i JOIN FETCH i.user "
+            + "JOIN FETCH ln.student st JOIN FETCH st.user "
+            + "LEFT JOIN FETCH ln.updatedBy ub LEFT JOIN FETCH ub.studentProfile LEFT JOIN FETCH ub.instructorProfile "
+            + "WHERE st.school.id = :schoolId ORDER BY ln.createdAt DESC")
+    Page<LessonNote> findAllNotesBySchoolId(@Param("schoolId") Long schoolId, Pageable pageable);
+
     boolean existsByStudent_IdAndInstructor_Id(Long studentId, Long instructorId);
 }

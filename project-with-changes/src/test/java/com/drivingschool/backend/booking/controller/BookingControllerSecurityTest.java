@@ -82,11 +82,68 @@ class BookingControllerSecurityTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
-    void getById_asAdmin_bypassesOwnershipCheck() throws Exception {
+    void getById_asAdminOfBookingsSchool_bypassesOwnershipCheck() throws Exception {
+        when(bookingSecurity.isAdminForBooking(1L)).thenReturn(true);
         when(bookingService.getById(1L)).thenReturn(BookingResponse.builder().id(1L).build());
 
         mockMvc.perform(get("/api/v1/bookings/1"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void getById_asAdminOfAnotherSchool_isForbidden() throws Exception {
+        when(bookingSecurity.isAdminForBooking(1L)).thenReturn(false);
+
+        mockMvc.perform(get("/api/v1/bookings/1"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void cancel_asAdminOfAnotherSchool_isForbidden() throws Exception {
+        when(bookingSecurity.isAdminForBooking(1L)).thenReturn(false);
+
+        mockMvc.perform(put("/api/v1/bookings/1/cancel").with(csrf()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void confirm_asAdminOfAnotherSchool_isForbidden() throws Exception {
+        when(bookingSecurity.isAdminForBooking(1L)).thenReturn(false);
+
+        mockMvc.perform(put("/api/v1/bookings/1/confirm").with(csrf()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void complete_asAdminOfAnotherSchool_isForbidden() throws Exception {
+        when(bookingSecurity.isAdminForBooking(1L)).thenReturn(false);
+
+        mockMvc.perform(put("/api/v1/bookings/1/complete").with(csrf()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void getByStudent_asAdminOfAnotherSchool_isForbidden() throws Exception {
+        when(bookingSecurity.isAdminForStudent(5L)).thenReturn(false);
+
+        mockMvc.perform(get("/api/v1/bookings/student/5"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void getByInstructor_asAdminOfAnotherSchool_isForbidden() throws Exception {
+        when(bookingSecurity.isAdminForInstructor(2L)).thenReturn(false);
+
+        mockMvc.perform(get("/api/v1/bookings/instructor/2")
+                        .param("from", "2026-01-01T00:00:00")
+                        .param("to", "2026-12-31T00:00:00"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -182,7 +239,8 @@ class BookingControllerSecurityTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
-    void create_asAdmin_isCreated() throws Exception {
+    void create_asAdminOfStudentsSchool_isCreated() throws Exception {
+        when(bookingSecurity.isAdminForStudent(1L)).thenReturn(true);
         when(bookingService.create(org.mockito.ArgumentMatchers.any()))
                 .thenReturn(BookingResponse.builder().id(1L).build());
 
@@ -191,5 +249,17 @@ class BookingControllerSecurityTest {
                         .contentType("application/json")
                         .content(objectMapper.writeValueAsString(createRequestBuilder().build())))
                 .andExpect(status().isCreated());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void create_asAdminOfAnotherSchool_isForbidden() throws Exception {
+        when(bookingSecurity.isAdminForStudent(1L)).thenReturn(false);
+
+        mockMvc.perform(post("/api/v1/bookings")
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(createRequestBuilder().build())))
+                .andExpect(status().isForbidden());
     }
 }

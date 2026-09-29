@@ -5,6 +5,7 @@ import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.progress.entity.DrivingAssessment;
 import com.drivingschool.backend.progress.enums.AssessmentResult;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.user.entity.User;
 import org.junit.jupiter.api.Test;
@@ -14,10 +15,15 @@ import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 
 class DrivingAssessmentValidatorTest {
 
-    private final DrivingAssessmentValidator validator = new DrivingAssessmentValidator();
+    private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+
+    private final DrivingAssessmentValidator validator = new DrivingAssessmentValidator(adminSchoolScope);
 
     private User userWithId(Long id) {
         User user = User.builder().email("u" + id + "@example.com").password("x").enabled(true).emailVerified(true).build();
@@ -52,7 +58,7 @@ class DrivingAssessmentValidatorTest {
     // --- validateReadAccess ---
 
     @Test
-    void validateReadAccess_admin_alwaysAllowed() {
+    void validateReadAccess_adminOfSameSchool_allowed() {
         DrivingAssessment assessment = assessmentFor(userWithId(1L), userWithId(2L));
 
         assertThatNoException().isThrownBy(() -> validator.validateReadAccess(assessment, 999L, "ADMIN"));
@@ -134,6 +140,33 @@ class DrivingAssessmentValidatorTest {
         InstructorProfile instructor = InstructorProfile.builder().user(userWithId(1L)).active(true).school(School.builder().active(true).build()).build();
 
         assertThatThrownBy(() -> validator.validateInstructorAssessmentsAccess(instructor, 999L, "INSTRUCTOR"))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void validateReadAccess_adminOfAnotherSchool_denied() {
+        DrivingAssessment assessment = assessmentFor(userWithId(1L), userWithId(2L));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+
+        assertThatThrownBy(() -> validator.validateReadAccess(assessment, 999L, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void validateStudentAssessmentsAccess_adminOfAnotherSchool_denied() {
+        DrivingAssessment assessment = assessmentFor(userWithId(1L), userWithId(2L));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+
+        assertThatThrownBy(() -> validator.validateStudentAssessmentsAccess(assessment.getStudent(), 999L, "ADMIN", false))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void validateInstructorAssessmentsAccess_adminOfAnotherSchool_denied() {
+        DrivingAssessment assessment = assessmentFor(userWithId(1L), userWithId(2L));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+
+        assertThatThrownBy(() -> validator.validateInstructorAssessmentsAccess(assessment.getInstructor(), 999L, "ADMIN"))
                 .isInstanceOf(BadRequestException.class);
     }
 }

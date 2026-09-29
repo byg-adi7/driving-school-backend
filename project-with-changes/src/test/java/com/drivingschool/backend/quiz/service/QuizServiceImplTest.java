@@ -21,6 +21,7 @@ import com.drivingschool.backend.quiz.repository.QuizSubmissionRepository;
 import com.drivingschool.backend.quiz.dto.SubmitQuizRequest;
 import com.drivingschool.backend.quiz.validator.QuizValidator;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.user.entity.User;
@@ -40,12 +41,16 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class QuizServiceImplTest {
+
+    private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
 
     @Mock private QuizRepository quizRepository;
     @Mock private QuizQuestionRepository quizQuestionRepository;
@@ -58,7 +63,7 @@ class QuizServiceImplTest {
     @Mock private GamificationService gamificationService;
     private final QuizMapper quizMapper = new QuizMapper();
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final QuizValidator validator = new QuizValidator();
+    private final QuizValidator validator = new QuizValidator(adminSchoolScope);
 
     private QuizServiceImpl quizService;
 
@@ -221,5 +226,19 @@ class QuizServiceImplTest {
 
         assertThatThrownBy(() -> quizService.submit(10L, request, 2L, "STUDENT"))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void submit_asAdminOfAnotherSchool_isDeniedBeforeScoring() {
+        Quiz quiz = quizFor(userWithId(1L), true);
+        SubmitQuizRequest request = SubmitQuizRequest.builder().studentId(60L).answers(Map.of(1L, "Stop")).build();
+
+        when(quizRepository.findById(10L)).thenReturn(Optional.of(quiz));
+        when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(studentProfile(60L, userWithId(6L))));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+
+        assertThatThrownBy(() -> quizService.submit(10L, request, 999L, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
+        verify(quizSubmissionRepository, never()).save(any());
     }
 }

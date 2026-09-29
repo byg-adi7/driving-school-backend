@@ -13,6 +13,7 @@ import com.drivingschool.backend.learning.mapper.LearningMapper;
 import com.drivingschool.backend.learning.repository.CourseRepository;
 import com.drivingschool.backend.learning.validator.LearningValidator;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -35,10 +38,12 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class CourseServiceImplTest {
 
+    private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+
     @Mock private CourseRepository courseRepository;
     @Mock private InstructorProfileRepository instructorProfileRepository;
     private final LearningMapper mapper = new LearningMapper();
-    private final LearningValidator validator = new LearningValidator();
+    private final LearningValidator validator = new LearningValidator(adminSchoolScope);
 
     private CourseServiceImpl courseService;
 
@@ -171,14 +176,26 @@ class CourseServiceImplTest {
     }
 
     @Test
-    void archive_asAdmin_isAllowedRegardlessOfOwnership() {
+    void archive_asAdminOfCoursesSchool_isAllowedRegardlessOfOwnership() {
         Course course = courseFor(instructorProfile(20L, userWithId(1L)), CourseStatus.PUBLISHED);
         when(courseRepository.findById(5L)).thenReturn(Optional.of(course));
         when(courseRepository.save(any(Course.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(adminSchoolScope.canAccess(any())).thenReturn(true);
 
         CourseResponse response = courseService.archive(5L, 999L, "ADMIN");
 
         assertThat(response.getStatus()).isEqualTo(CourseStatus.ARCHIVED);
+    }
+
+    @Test
+    void archive_asAdminOfAnotherSchool_isRejected() {
+        Course course = courseFor(instructorProfile(20L, userWithId(1L)), CourseStatus.PUBLISHED);
+        when(courseRepository.findById(5L)).thenReturn(Optional.of(course));
+        when(adminSchoolScope.canAccess(any())).thenReturn(false);
+
+        assertThatThrownBy(() -> courseService.archive(5L, 999L, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
+        verify(courseRepository, never()).save(any());
     }
 
     // --- getById: read access ---
@@ -231,5 +248,36 @@ class CourseServiceImplTest {
         List<CourseResponse> result = courseService.getMine(1L);
 
         assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void create_asAdminTargetingAnotherSchoolsInstructor_isDenied() {
+        CreateCourseRequest request = CreateCourseRequest.builder()
+                .title("Road Safety 101").instructorId(30L).build();
+        when(instructorProfileRepository.findById(30L)).thenReturn(Optional.of(instructorProfile(30L, userWithId(3L))));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+
+        assertThatThrownBy(() -> courseService.create(request, 999L, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
+        verify(courseRepository, never()).save(any());
+    }
+
+    @Test
+    void getById_draftCourse_deniedToAdminOfAnotherSchool() {
+        Course course = courseFor(instructorProfile(20L, userWithId(1L)), CourseStatus.DRAFT);
+        when(courseRepository.findById(5L)).thenReturn(Optional.of(course));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+
+        assertThatThrownBy(() -> courseService.getById(5L, 999L, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void getById_publishedCourse_stillOpenToAdminOfAnotherSchool() {
+        Course course = courseFor(instructorProfile(20L, userWithId(1L)), CourseStatus.PUBLISHED);
+        when(courseRepository.findById(5L)).thenReturn(Optional.of(course));
+
+        assertThatCode(() -> courseService.getById(5L, 999L, "ADMIN")).doesNotThrowAnyException();
+        verify(adminSchoolScope, never()).requireAccess(any());
     }
 }

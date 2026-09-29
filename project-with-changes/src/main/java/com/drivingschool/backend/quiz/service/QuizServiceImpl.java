@@ -193,6 +193,7 @@ public class QuizServiceImpl implements QuizService {
                         .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "id", request.getStudentId()))
                 : studentProfileRepository.findByUserId(userId)
                         .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for user ID: " + userId));
+        validator.validateAdminSchoolAccess(student);
 
         long attempts = quizSubmissionRepository.countByQuizIdAndStudentId(quizId, student.getId());
         if (attempts >= quiz.getMaxAttempts()) {

@@ -2,6 +2,7 @@ package com.drivingschool.backend.booking.security;
 
 import com.drivingschool.backend.booking.repository.BookingRepository;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import org.springframework.stereotype.Component;
@@ -39,15 +40,39 @@ public class BookingSecurity {
     private final StudentProfileRepository studentProfileRepository;
     private final InstructorProfileRepository instructorProfileRepository;
     private final CurrentUserService currentUserService;
+    private final AdminSchoolScope adminSchoolScope;
 
     public BookingSecurity(BookingRepository bookingRepository,
                            StudentProfileRepository studentProfileRepository,
                            InstructorProfileRepository instructorProfileRepository,
-                           CurrentUserService currentUserService) {
+                           CurrentUserService currentUserService,
+                           AdminSchoolScope adminSchoolScope) {
         this.bookingRepository = bookingRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.instructorProfileRepository = instructorProfileRepository;
         this.currentUserService = currentUserService;
+        this.adminSchoolScope = adminSchoolScope;
+    }
+
+    /** Caller is an ADMIN allowed to act on this booking's school (see AdminSchoolScope). */
+    public boolean isAdminForBooking(Long bookingId) {
+        return bookingRepository.findById(bookingId)
+                .map(b -> adminSchoolScope.canAccess(b.getSchool().getId()))
+                .orElse(true);
+    }
+
+    /** Caller is an ADMIN allowed to act on this student's school (see AdminSchoolScope). */
+    public boolean isAdminForStudent(Long studentId) {
+        return studentProfileRepository.findById(studentId)
+                .map(s -> adminSchoolScope.canAccess(s.getSchool().getId()))
+                .orElse(true);
+    }
+
+    /** Caller is an ADMIN allowed to act on this instructor's school (see AdminSchoolScope). */
+    public boolean isAdminForInstructor(Long instructorId) {
+        return instructorProfileRepository.findById(instructorId)
+                .map(i -> adminSchoolScope.canAccess(i.getSchool().getId()))
+                .orElse(true);
     }
 
     /** Caller is either the student or the instructor on this booking. */

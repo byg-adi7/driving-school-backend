@@ -8,6 +8,7 @@ import com.drivingschool.backend.progress.mapper.LicenseWorkflowMapper;
 import com.drivingschool.backend.progress.repository.LicenseWorkflowRepository;
 import com.drivingschool.backend.progress.validator.LicenseWorkflowValidator;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.user.entity.User;
@@ -24,6 +25,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,11 +34,13 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class LicenseWorkflowServiceImplTest {
 
+    private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+
     @Mock private LicenseWorkflowRepository licenseWorkflowRepository;
     @Mock private StudentProfileRepository studentProfileRepository;
     @Mock private InstructorProfileRepository instructorProfileRepository;
     private final LicenseWorkflowMapper licenseWorkflowMapper = new LicenseWorkflowMapper();
-    private final LicenseWorkflowValidator validator = new LicenseWorkflowValidator();
+    private final LicenseWorkflowValidator validator = new LicenseWorkflowValidator(adminSchoolScope);
 
     private LicenseWorkflowServiceImpl service;
 
@@ -119,4 +124,28 @@ class LicenseWorkflowServiceImplTest {
     // still callable with any studentId, because QuizServiceImpl.submit() invokes it
     // directly (in-process, not through the controller) after it has already resolved
     // and verified the correct student. No change needed/tested at the service level.
+
+    @Test
+    void initializeForStudent_asAdminOfAnotherSchool_isDeniedBeforeRevealingWorkflowState() {
+        LicenseWorkflow existing = workflowFor(userWithId(1L));
+        when(studentProfileRepository.findById(20L)).thenReturn(Optional.of(existing.getStudent()));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+
+        assertThatThrownBy(() -> service.initializeForStudent(20L))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("no access");
+        verify(licenseWorkflowRepository, never()).existsByStudentId(any());
+        verify(licenseWorkflowRepository, never()).save(any());
+    }
+
+    @Test
+    void markQuizPassed_asAdminOfAnotherSchool_isDenied() {
+        LicenseWorkflow workflow = workflowFor(userWithId(1L));
+        when(licenseWorkflowRepository.findByStudentId(20L)).thenReturn(Optional.of(workflow));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+
+        assertThatThrownBy(() -> service.markQuizPassed(20L))
+                .isInstanceOf(BadRequestException.class);
+        verify(licenseWorkflowRepository, never()).save(any());
+    }
 }

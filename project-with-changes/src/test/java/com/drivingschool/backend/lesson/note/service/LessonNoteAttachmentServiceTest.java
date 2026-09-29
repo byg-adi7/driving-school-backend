@@ -10,6 +10,7 @@ import com.drivingschool.backend.lesson.note.validator.LessonNoteValidator;
 import com.drivingschool.backend.role.entity.Role;
 import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.security.UserPrincipal;
 import com.drivingschool.backend.storage.StorageService;
 import com.drivingschool.backend.student.entity.StudentProfile;
@@ -29,10 +30,13 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class LessonNoteAttachmentServiceTest {
+
+    private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
 
     @Mock private LessonNoteAttachmentRepository attachmentRepository;
     @Mock private LessonNoteRepository lessonNoteRepository;
@@ -44,7 +48,7 @@ class LessonNoteAttachmentServiceTest {
     @BeforeEach
     void setUp() {
         attachmentService = new LessonNoteAttachmentService(attachmentRepository, lessonNoteRepository,
-                userRepository, storageService, new LessonNoteValidator());
+                userRepository, storageService, new LessonNoteValidator(adminSchoolScope));
     }
 
     @AfterEach

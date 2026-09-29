@@ -4,6 +4,7 @@ import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.lesson.note.entity.LessonNote;
 import com.drivingschool.backend.school.entity.School;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.user.entity.User;
 import org.junit.jupiter.api.Test;
@@ -12,10 +13,15 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 
 class LessonNoteValidatorTest {
 
-    private final LessonNoteValidator validator = new LessonNoteValidator();
+    private final AdminSchoolScope adminSchoolScope = mock(AdminSchoolScope.class);
+
+    private final LessonNoteValidator validator = new LessonNoteValidator(adminSchoolScope);
 
     private User userWithId(Long id) {
         User user = User.builder().email("u" + id + "@example.com").password("x").enabled(true).emailVerified(true).build();
@@ -49,7 +55,7 @@ class LessonNoteValidatorTest {
     // --- validateReadAccess ---
 
     @Test
-    void validateReadAccess_admin_alwaysAllowed() {
+    void validateReadAccess_adminOfSameSchool_allowed() {
         LessonNote note = noteFor(userWithId(1L), userWithId(2L));
 
         assertThatNoException().isThrownBy(() -> validator.validateReadAccess(note, 999L, "ADMIN"));
@@ -118,7 +124,7 @@ class LessonNoteValidatorTest {
     }
 
     @Test
-    void validateStudentNotesAccess_admin_alwaysAllowed() {
+    void validateStudentNotesAccess_adminOfSameSchool_allowed() {
         StudentProfile student = StudentProfile.builder().user(userWithId(2L)).school(School.builder().active(true).build()).build();
 
         assertThatNoException().isThrownBy(() -> validator.validateStudentNotesAccess(student, 999L, "ADMIN", false));
@@ -142,9 +148,27 @@ class LessonNoteValidatorTest {
     }
 
     @Test
-    void validateInstructorNotesAccess_admin_alwaysAllowed() {
+    void validateInstructorNotesAccess_adminOfSameSchool_allowed() {
         InstructorProfile instructor = InstructorProfile.builder().user(userWithId(1L)).active(true).school(School.builder().active(true).build()).build();
 
         assertThatNoException().isThrownBy(() -> validator.validateInstructorNotesAccess(instructor, 999L, "ADMIN"));
+    }
+
+    @Test
+    void validateReadAccess_adminOfAnotherSchool_denied() {
+        LessonNote note = noteFor(userWithId(1L), userWithId(2L));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+
+        assertThatThrownBy(() -> validator.validateReadAccess(note, 999L, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void validateAdminSchoolAccess_adminOfAnotherSchool_denied() {
+        LessonNote note = noteFor(userWithId(1L), userWithId(2L));
+        doThrow(new BadRequestException("no access")).when(adminSchoolScope).requireAccess(any());
+
+        assertThatThrownBy(() -> validator.validateAdminSchoolAccess(note, "ADMIN"))
+                .isInstanceOf(BadRequestException.class);
     }
 }

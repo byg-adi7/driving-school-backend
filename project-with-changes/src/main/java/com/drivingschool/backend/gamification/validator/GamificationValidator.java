@@ -2,6 +2,7 @@ package com.drivingschool.backend.gamification.validator;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.student.entity.StudentProfile;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,8 +14,15 @@ import org.springframework.stereotype.Component;
 @Component
 public class GamificationValidator {
 
+    private final AdminSchoolScope adminSchoolScope;
+
+    public GamificationValidator(AdminSchoolScope adminSchoolScope) {
+        this.adminSchoolScope = adminSchoolScope;
+    }
+
     public void validateStudentSummaryAccess(StudentProfile student, Long userId, String role, Long callerSchoolId) {
         if ("ADMIN".equals(role)) {
+            adminSchoolScope.requireAccess(student.getSchool().getId());
             return;
         }
         if ("STUDENT".equals(role) && student.getUser().getId().equals(userId)) {
@@ -28,6 +36,7 @@ public class GamificationValidator {
 
     public void validateLeaderboardAccess(Long schoolId, String role, Long callerSchoolId) {
         if ("ADMIN".equals(role)) {
+            adminSchoolScope.requireAccess(schoolId);
             return;
         }
         if (callerSchoolId != null && callerSchoolId.equals(schoolId)) {

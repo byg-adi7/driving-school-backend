@@ -5,6 +5,7 @@ import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
 import com.drivingschool.backend.role.enums.RoleName;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.student.dto.StudentProfileResponse;
 import com.drivingschool.backend.student.dto.UpdateStudentProfileRequest;
@@ -26,15 +27,18 @@ public class StudentProfileServiceImpl implements StudentProfileService {
     private final StudentProfileMapper studentProfileMapper;
     private final CurrentUserService currentUserService;
     private final InstructorProfileRepository instructorProfileRepository;
+    private final AdminSchoolScope adminSchoolScope;
 
     public StudentProfileServiceImpl(StudentProfileRepository studentProfileRepository,
                                       StudentProfileMapper studentProfileMapper,
                                       CurrentUserService currentUserService,
-                                      InstructorProfileRepository instructorProfileRepository) {
+                                      InstructorProfileRepository instructorProfileRepository,
+                                      AdminSchoolScope adminSchoolScope) {
         this.studentProfileRepository = studentProfileRepository;
         this.studentProfileMapper = studentProfileMapper;
         this.currentUserService = currentUserService;
         this.instructorProfileRepository = instructorProfileRepository;
+        this.adminSchoolScope = adminSchoolScope;
     }
 
     @Override
@@ -68,9 +72,10 @@ public class StudentProfileServiceImpl implements StudentProfileService {
     }
 
     // Same pattern as AuthServiceImpl.validateCallerCanCreate() - an instructor may
-    // only view students in their own school; admin is unrestricted.
+    // only view students in their own school, and so may a regular admin.
     private void validateCallerCanViewSchool(Long schoolId) {
         if (currentUserService.hasRole(RoleName.ADMIN)) {
+            adminSchoolScope.requireAccess(schoolId);
             return;
         }
 
@@ -88,6 +93,7 @@ public class StudentProfileServiceImpl implements StudentProfileService {
     public StudentProfileResponse updateStatus(Long id, UpdateStudentStatusRequest request) {
         StudentProfile profile = studentProfileRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "id", id));
+        adminSchoolScope.requireAccess(profile.getSchool().getId());
 
         profile.updateStatus(request.getStatus());
 

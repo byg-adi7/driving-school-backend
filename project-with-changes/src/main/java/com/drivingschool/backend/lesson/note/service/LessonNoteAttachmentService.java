@@ -303,7 +303,8 @@ public class LessonNoteAttachmentService {
         String role = SecurityUtils.getCurrentUserRole();
 
         if ("ADMIN".equals(role)) {
-            return;  // Admin can always upload
+            validator.validateAdminSchoolAccess(lessonNote, role);
+            return;  // Admin can upload within their own school
         }
 
         if ("INSTRUCTOR".equals(role) && lessonNote.getInstructor().getUser().getId().equals(userId)) {
@@ -323,11 +324,12 @@ public class LessonNoteAttachmentService {
         Long currentUserId = SecurityUtils.getCurrentUserId();
         String role = SecurityUtils.getCurrentUserRole();
 
-        if ("ADMIN".equals(role)) {
-            return;  // Admin can always download
-        }
-
         LessonNote lessonNote = attachment.getLessonNote();
+
+        if ("ADMIN".equals(role)) {
+            validator.validateAdminSchoolAccess(lessonNote, role);
+            return;  // Admin can download within their own school
+        }
 
         // Lecturer can download
         if ("INSTRUCTOR".equals(role) && lessonNote.getInstructor().getUser().getId().equals(currentUserId)) {
@@ -353,7 +355,8 @@ public class LessonNoteAttachmentService {
         String role = SecurityUtils.getCurrentUserRole();
 
         if ("ADMIN".equals(role)) {
-            return;  // Admin can always delete
+            validator.validateAdminSchoolAccess(attachment.getLessonNote(), role);
+            return;  // Admin can delete within their own school
         }
 
         if (attachment.getUploadedBy().getId().equals(currentUserId)) {

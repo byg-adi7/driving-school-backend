@@ -7,6 +7,7 @@ import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.enums.SchoolDeletionRequestStatus;
 import com.drivingschool.backend.school.repository.SchoolDeletionRequestRepository;
 import com.drivingschool.backend.school.repository.SchoolRepository;
+import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.school.service.SchoolAdminCascadeDeletionService;
 import com.drivingschool.backend.user.entity.User;
 import com.drivingschool.backend.user.repository.UserRepository;
@@ -22,15 +23,18 @@ public class UserServiceImpl implements UserService {
     private final SchoolRepository schoolRepository;
     private final SchoolDeletionRequestRepository schoolDeletionRequestRepository;
     private final SchoolAdminCascadeDeletionService cascadeDeletionService;
+    private final AdminSchoolScope adminSchoolScope;
 
     public UserServiceImpl(UserRepository userRepository,
                            SchoolRepository schoolRepository,
                            SchoolDeletionRequestRepository schoolDeletionRequestRepository,
-                           SchoolAdminCascadeDeletionService cascadeDeletionService) {
+                           SchoolAdminCascadeDeletionService cascadeDeletionService,
+                           AdminSchoolScope adminSchoolScope) {
         this.userRepository = userRepository;
         this.schoolRepository = schoolRepository;
         this.schoolDeletionRequestRepository = schoolDeletionRequestRepository;
         this.cascadeDeletionService = cascadeDeletionService;
+        this.adminSchoolScope = adminSchoolScope;
     }
 
     @Override
@@ -56,6 +60,8 @@ public class UserServiceImpl implements UserService {
 
         boolean targetIsAdmin = target.getRoles().stream().anyMatch(r -> r.getName() == RoleName.ADMIN);
         if (!targetIsAdmin) {
+            // A regular admin may only remove accounts belonging to their own school.
+            adminSchoolScope.requireAccessToUser(targetUserId);
             softDelete(targetUserId);
             return;
         }

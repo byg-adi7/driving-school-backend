@@ -38,7 +38,7 @@ public class NotificationController {
     @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
     public ResponseEntity<ApiResponse<NotificationResponse>> send(
             @Valid @RequestBody SendNotificationRequest request) {
-        NotificationResponse response = notificationService.send(request);
+        NotificationResponse response = notificationService.sendAsCaller(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Notification sent", response));
     }
