@@ -1,46 +1,72 @@
 # Deployment
 
-This app deploys to [Railway](https://railway.com). CI builds and tests on every push; a
-deploy step in `.github/workflows/ci.yml` then ships `main` to Railway automatically once
-it's green. Until the one-time setup below is done, that deploy step detects the missing
-config and skips itself rather than failing the build.
+This app runs on [Render](https://render.com) as a Docker web service, with a Render
+Postgres database and a Render Key Value (Redis-compatible) instance. Deploys are done by
+Render itself through its GitHub integration - there is no deploy step in
+`.github/workflows/ci.yml`. With the service's **Auto-Deploy** set to **After CI Checks
+Pass** (step 5), every push to `main` deploys automatically, but only once the GitHub
+Actions checks (`Build & test`, `Docker image builds`) have succeeded; if any fail, nothing
+deploys and the current live version keeps running.
 
 ## One-time setup
 
-### 1. Create the Railway project
+### 1. Create the Postgres database and Key Value instance
 
-1. In the Railway dashboard, create a new project from this GitHub repo.
-2. Railway will detect `project-with-changes/Dockerfile` automatically (via
-   `project-with-changes/railway.json`, which also sets the healthcheck path and restart
-   policy). If it asks for a root directory, set it to `project-with-changes`.
-3. Add a **Postgres** plugin to the same project (one click, "New" → "Database" →
-   "PostgreSQL"). This creates a second service in the project alongside the app.
-4. Add a **Redis** plugin the same way ("New" → "Database" → "Redis"). Used as the
-   refresh-token revocation store (logout / soft-delete both need to invalidate an
-   already-issued refresh token, and Redis's key TTL support means revocation entries
-   expire themselves in step with the token they revoke - no cleanup job needed).
+Create both in the **same region** as the web service - internal connections (below) only
+work between services in the same account and region.
 
-### 2. Configure the app service's environment variables
+- **Postgres** ("New" → "Postgres"). Its **Info** page (or the **Connect** menu) lists the
+  hostname, port, database, username and password, plus assembled internal and external
+  URLs. Use the **internal** hostname - Render's docs recommend internal connections
+  wherever possible (private network, lower latency).
+- **Key Value** ("New" → "Key Value"). Its internal URL looks like `redis://<host>:<port>`
+  - take the host and port from it. Internal connections are unauthenticated by default,
+  so `REDIS_PASSWORD` stays unset unless you enable authentication on the instance.
+  Redis holds refresh-token revocations (logout, password reset), the rate-limit counters
+  and the read caches. Set its **maxmemory policy** to `noeviction`: under an eviction
+  policy such as `allkeys-lru` (Render's suggestion for pure caches), a full instance
+  could silently evict a revocation entry and bring an already-revoked refresh token back
+  to life.
 
-In the app service's "Variables" tab, set:
+> **Free-tier warnings (from Render's docs):** a free Render Postgres database **expires
+> 30 days after creation** and supports **no backups**; a free Key Value instance **loses
+> all its data on every restart** (so every logout/password-reset revocation is forgotten
+> until those tokens expire on their own); and a free web service spins down after 15
+> minutes without traffic, taking about a minute to wake on the next request. None of
+> those are acceptable for real users - use paid instances for production.
+
+### 2. Create the web service
+
+"New" → "Web Service" → connect this GitHub repo, branch `main`, then:
+
+| Setting | Value | Why |
+|---|---|---|
+| Runtime | Docker | The app ships its own multi-stage `Dockerfile`. |
+| Root Directory | `project-with-changes` | Everything the build needs lives there. Render builds and runs relative to it, and only auto-deploys on changes under it. |
+| Dockerfile Path | `./Dockerfile` | Relative to the root directory. |
+| Health Check Path | `/actuator/health/readiness` | Public (see `SecurityConfig`), and only reports UP once the app can take traffic. |
+
+### 3. Configure the web service's environment variables
+
+In the web service's **Environment** tab, set:
 
 | Variable | Value | Notes |
 |---|---|---|
 | `SPRING_PROFILES_ACTIVE` | `prod` | Activates `application-prod.yml` |
-| `DB_HOST` | `${{Postgres.PGHOST}}` | Railway variable reference to the Postgres service |
-| `DB_PORT` | `${{Postgres.PGPORT}}` | |
-| `DB_NAME` | `${{Postgres.PGDATABASE}}` | |
-| `DB_USERNAME` | `${{Postgres.PGUSER}}` | |
-| `DB_PASSWORD` | `${{Postgres.PGPASSWORD}}` | |
-| `REDIS_HOST` | `${{Redis.REDISHOST}}` | Railway variable reference to the Redis service |
-| `REDIS_PORT` | `${{Redis.REDISPORT}}` | |
-| `REDIS_PASSWORD` | `${{Redis.REDISPASSWORD}}` | |
+| `DB_HOST` | the Postgres **internal** hostname | From the database's Info page / Connect menu (step 1) |
+| `DB_PORT` | `5432` | Render Postgres's port, as shown on the Info page |
+| `DB_NAME` | the database name | Info page |
+| `DB_USERNAME` | the username | Info page |
+| `DB_PASSWORD` | the password | Info page |
+| `REDIS_HOST` | the host from the Key Value **internal** URL | `redis://<host>:<port>` (step 1) |
+| `REDIS_PORT` | the port from the same URL | |
+| `REDIS_PASSWORD` | leave unset | Internal Key Value connections are unauthenticated by default; set it only if you enable auth on the instance |
 | `JWT_SECRET` | a random string, 32+ characters | e.g. `openssl rand -base64 48` |
 | `BOOTSTRAP_ADMIN_ENABLED` | `true` for the very first deploy only | Flip back to `false` after you've logged in once and changed the password |
 | `BOOTSTRAP_ADMIN_EMAIL` | your admin email | |
 | `BOOTSTRAP_ADMIN_PASSWORD` | a strong password | Change it after first login regardless. **Do set this whenever `BOOTSTRAP_ADMIN_ENABLED=true`** - if left unset, the app now boots fine and simply skips creating the admin (logged as an error), rather than the startup crash this used to cause (an unresolvable placeholder was thrown as an exception from a `CommandLineRunner`, failing the whole app). |
-| `CORS_ALLOWED_ORIGINS` | your real frontend origin(s), or `http://localhost:3000,http://localhost:5173` if the frontend isn't deployed yet | Comma-separated, no trailing slash. Defaults to the localhost dev origins if unset (deliberately - not a fake production-looking domain), so a locally-run frontend can still exercise the deployed backend before the frontend itself has anywhere to live. Update this value (Variables tab → redeploy, no code change) once the frontend has a real URL. |
-| `RESEND_API_KEY` | your [Resend](https://resend.com) API key | Needed for password-reset emails and the `EMAIL` notification channel to actually send. Sent over plain HTTPS via Resend's API, not raw SMTP - Railway blocks outbound SMTP entirely on free/hobby plans (and recommends an HTTPS-API provider regardless of plan). No fallback default - if unset, mail sending fails at send time (logged, not fatal). Free tier covers 3,000 emails/month. |
+| `CORS_ALLOWED_ORIGINS` | your real frontend origin(s), or `http://localhost:3000,http://localhost:5173` if the frontend isn't deployed yet | Comma-separated, no trailing slash. Defaults to the localhost dev origins if unset (deliberately - not a fake production-looking domain), so a locally-run frontend can still exercise the deployed backend before the frontend itself has anywhere to live. Update this value (Environment tab → save, which redeploys; no code change) once the frontend has a real URL. |
+| `RESEND_API_KEY` | your [Resend](https://resend.com) API key | Needed for password-reset emails and the `EMAIL` notification channel to actually send. Sent over plain HTTPS via Resend's API, not raw SMTP (the app moved off SMTP when its previous host, Railway, blocked outbound SMTP). No fallback default - if unset, mail sending fails at send time (logged, not fatal). Free tier covers 3,000 emails/month. |
 | `MAIL_FROM` | an address on a domain verified in Resend, or `onboarding@resend.dev` for testing | Must be a domain you've added and verified in Resend's dashboard for sending to arbitrary recipients - the sandbox address (`onboarding@resend.dev`) works without verification but can only send to your own account email. |
 | `PASSWORD_RESET_URL` | your frontend's reset-password page URL, or `http://localhost:3000/reset-password` if not deployed yet | e.g. `https://yourapp.com/reset-password`. Defaults to the localhost dev URL if unset (same reasoning as `CORS_ALLOWED_ORIGINS`) - this is the base URL each password-reset email links to with `?token=...` appended, so it only matters once real users are actually requesting resets. Update it once the frontend has a real URL. |
 | `STORAGE_PROVIDER` | `cloudinary` (default in prod), `gcs`, or `local` | **See the storage section below before going live.** |
@@ -48,9 +74,10 @@ In the app service's "Variables" tab, set:
 | `SENTRY_DSN` | your Sentry project's DSN | Optional - error tracking stays off (no-op) if unset. Get a DSN from [sentry.io](https://sentry.io) (or self-hosted Sentry). |
 | `SENTRY_TRACES_SAMPLE_RATE` | a number 0.0-1.0, default `0.1` | Fraction of requests to trace for performance monitoring; only matters if `SENTRY_DSN` is set. |
 | `OPENROUTE_API_KEY` | your [OpenRouteService](https://openrouteservice.org/dev/#/signup) API key | Powers practical-lesson route generation (`POST /api/v1/lesson-routes/generate`). No fallback default - if unset, route generation fails at request time with a clear error (logged, not fatal to the app) rather than silently calling the real API with a fake key. Free tier is generous enough for this app's scale; the directions endpoint URL and request timeout are fixed app config, not something you need to set. |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` | your Twilio credentials and sending number | Optional. SMS (booking scheduled/cancelled texts) only sends once all three are set; until then the SMS channel is a safe no-op that records the message as FAILED. |
 
-`PORT` is injected by Railway automatically and is already wired up (`application-prod.yml`
-reads `${PORT:8080}`) - don't set it yourself.
+`PORT` is injected by Render automatically (10000 by default) and is already wired up
+(`application-prod.yml` reads `${PORT:8080}`) - don't set it yourself.
 
 **Storage:** the app supports three providers via `STORAGE_PROVIDER`:
 
@@ -65,47 +92,42 @@ reads `${PORT:8080}`) - don't set it yourself.
 - **`gcs`** - Google Cloud Storage. Needs a real GCP project/bucket/credentials
   (`GCS_BUCKET_NAME`, optionally `GCP_PROJECT_ID`) - not set up by default.
 - **`local`** - writes to `./uploads` inside the container, which does **not** persist
-  across redeploys or restarts unless you attach a Railway
-  [volume](https://docs.railway.com/guides/volumes) to that path. Blocked outright when
+  across redeploys or restarts. Blocked outright when
   the `prod` profile is active (`StorageProperties` fails fast at startup) - it's a
   dev/test-only option, never a real choice for a live deployment.
 
-### 3. Get a Railway Project Token
+### 4. Create the bootstrap admin on the first deploy
 
-In the Railway project's settings, under "Tokens", create a **Project Token** (scoped to
-this project + environment - not your personal account token). Copy it.
+With `BOOTSTRAP_ADMIN_ENABLED=true` (and `BOOTSTRAP_ADMIN_EMAIL`/`BOOTSTRAP_ADMIN_PASSWORD`
+set), the first successful boot creates the one bootstrap admin account. Log in, change the
+password, then set `BOOTSTRAP_ADMIN_ENABLED=false`.
 
-### 4. Add GitHub repo secrets/variables
+### 5. Turn on auto-deploy after CI
 
-In this repo's GitHub settings → Secrets and variables → Actions:
-
-- **Secret** `RAILWAY_TOKEN` = the project token from step 3.
-- **Variable** `RAILWAY_SERVICE_NAME` = the exact name of the app service as shown in the
-  Railway dashboard (not the Postgres service).
-
-Once both are set, the next push to `main` that passes CI will deploy automatically.
-
-### 5. (Optional) Require manual approval before deploying
-
-The deploy job runs under a GitHub Actions `environment: production`. If you want a human
-to approve each production deploy rather than deploying automatically on green CI, create a
-"production" environment in this repo's Settings → Environments and add required reviewers
-there - no workflow changes needed.
+Web service → **Settings** → **Auto-Deploy** → **After CI Checks Pass**. From then on,
+every push to `main` deploys automatically once GitHub Actions is green. Per Render's docs,
+checks concluding `success`, `neutral` or `skipped` count as passed; if any check fails - or
+a push has no checks at all - Render doesn't deploy it.
 
 ## How the pipeline works
 
-`test` → `docker-build` → `deploy`, in that order, all gated by `needs:`. `docker-build`
-only builds the image to prove the Dockerfile still works (matches what Railway itself will
-build) - it doesn't push anywhere. `deploy` runs `railway up` from
-`project-with-changes/`, which builds from the same Dockerfile and deploys it. It only runs
-on pushes to `main` (never on pull requests), and only after both prior jobs succeed.
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request into it:
+`test` (the full Maven build: unit tests, the Testcontainers-backed integration tests,
+JaCoCo and SpotBugs reports) and then `docker-build` (builds the production image to prove
+the Dockerfile still works - the same Dockerfile Render builds from - without pushing it
+anywhere). Render watches those checks on `main` and deploys only when they pass (step 5).
+Pull requests get the same checks but never deploy - only what's merged into `main` does.
+
+To deploy without a push (e.g. to pick up a changed environment variable), use **Manual
+Deploy** on the service page, or the service's **Deploy Hook** URL (Settings), which
+triggers a deploy on an HTTP GET or POST.
 
 ## Observability
 
 - **Metrics**: `/actuator/prometheus` exposes Micrometer/Prometheus-format metrics in
   prod. It's still behind `SecurityConfig`'s `/actuator/** -> hasRole('ADMIN')` rule, so
   a real Prometheus server needs either network-level access to the app (e.g. both
-  running on Railway's private network) or a scrape credential with the ADMIN role -
+  running on Render's private network) or a scrape credential with the ADMIN role -
   it isn't openly scrapeable just because the endpoint is enabled.
 - **Logs**: prod logs are structured JSON (Elastic Common Schema) via Spring Boot's
   built-in structured logging, not the old plain-text pattern - point a log aggregator
@@ -121,44 +143,41 @@ on pushes to `main` (never on pull requests), and only after both prior jobs suc
 ## Secrets management
 
 All secrets (`JWT_SECRET`, `DB_PASSWORD`, `SENTRY_DSN`, etc. - the full list is the table
-in step 2 above) are stored as encrypted Railway environment variables, scoped per-service
-- never committed to the repo, never visible in build logs.
+in step 3 above) are stored as Render environment variables on the web service - never
+committed to the repo, never in build logs.
 
-**Rotation**: update the value in Railway's dashboard, then redeploy (Settings → Variables
-→ Deploy). No code change needed for any secret in the table above.
+**Rotation**: update the value in the service's **Environment** tab and save (which
+redeploys). No code change needed for any secret in the table above. Rotating `JWT_SECRET`
+invalidates every issued token, so every user has to log in again.
 
 **If you outgrow this** - multiple environments needing centrally-managed/audited secrets,
 automatic rotation, dynamic short-lived database credentials - the next step is HashiCorp
 Vault or a cloud provider's secrets manager (AWS Secrets Manager, GCP Secret Manager).
 That's deliberately not set up now: it requires running infrastructure this project doesn't
-have yet, and would be premature complexity for a single-environment Railway deployment.
+have yet, and would be premature complexity for a single-environment deployment.
 Revisit if/when that changes.
 
 ## Backups
 
-Railway's Postgres plugin supports both on-demand and scheduled backups from its
-dashboard (Postgres service → "Backups" tab) - this project doesn't run its own backup
-tooling, since duplicating what the platform already does well would be pure overhead.
-That tab being available isn't itself a backup *strategy* though, so here's the concrete
-one for this project:
+Render Postgres handles backups itself (not on the free tier, which has none - see step 1);
+this project doesn't run its own backup tooling. What Render provides, per its docs:
 
-1. **Turn on scheduled backups** for the Postgres service, not just on-demand ones.
-   Daily is the practical minimum for a system tracking bookings, quiz submissions, and
-   driving assessments - losing a day of that data to an unnoticed bad deploy is a real
-   cost, not a hypothetical one. Pick the longest retention window your Railway plan
-   offers that you're comfortable paying for; retention options and pricing are a
-   dashboard/plan detail that can change, so check what's actually offered rather than
-   assuming a specific number here.
-2. **Always take a manual on-demand backup immediately before a risky migration** (see
-   the migration-rollback runbook below) - scheduled backups cover the general case, but
-   don't rely on the schedule happening to line up with the one deploy that actually
-   needed it.
-3. **To restore**: Postgres service → "Backups" → select a snapshot → restore. Railway
-   restores into a fresh instance rather than overwriting the live one in place, so after
-   restoring, update the app service's `DB_HOST`/`DB_PORT`/etc. variables (step 2 above)
-   to point at the restored instance if Railway assigns it new connection details, then
-   redeploy and verify `/actuator/health/readiness` before considering the incident
-   closed.
+- **Point-in-time recovery**: restore to any moment in the past 3 days on a Hobby
+  workspace, or the past 7 days on Pro or higher.
+- **Logical exports** on demand: database → **Recovery** → **Create export**, kept for
+  seven days.
+
+The concrete strategy for this project:
+
+1. **Run production on a paid Postgres instance**, so recovery exists at all.
+2. **Always create an export immediately before a risky migration** (see the
+   migration-rollback runbook below) - point-in-time recovery covers the general case,
+   but an explicit export is a known-good point you chose deliberately.
+3. **To restore**: Render restores into a **new** database instance (with its own
+   connection details), not over the live one. Check the recovered data, then update the
+   web service's `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USERNAME`/`DB_PASSWORD` (step 3) to the
+   new instance, let it redeploy, and verify `/actuator/health/readiness` before considering
+   the incident closed.
 4. **Test a restore at least once before you actually need it.** A backup nobody has ever
    restored from is a hope, not a plan - the failure mode (a snapshot that turns out to
    be corrupt, or connection details that don't work the way you expected) is much better
@@ -186,7 +205,7 @@ If a migration reaches production and turns out to be wrong:
    column with real data in it, that data is gone unless you have a database backup or
    snapshot from before it ran - which is why the next point matters.
 3. **Take a database backup/snapshot before any migration you're not 100% sure about.**
-   Railway's Postgres plugin supports on-demand and scheduled backups from its dashboard.
+   On Render: database → **Recovery** → **Create export** (see Backups above).
    For anything destructive (dropping a column, an `ON DELETE CASCADE` chain, a data
    rewrite), take a manual backup immediately before deploying, not after something goes
    wrong.

@@ -18,7 +18,7 @@ import java.time.Duration;
  * classic credential-stuffing/brute-force targets) and a looser one for
  * everything else, so no endpoint is completely unthrottled. Health-check
  * paths are exempt - those are hit on a fixed interval by the platform
- * (Docker/Railway) and must never 429.
+ * (Docker/Render) and must never 429.
  */
 @Slf4j
 @Component
