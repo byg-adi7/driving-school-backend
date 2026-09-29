@@ -8,7 +8,8 @@ import java.util.Set;
 
 @Getter
 @Builder
-// Token fields are absent (not null) in a register response - see AuthMapper.toRegisteredUserResponse.
+// Token fields are absent (not null) in a register response - see AuthMapper.toRegisteredUserResponse -
+// and in a login response for an unverified account; the verification fields only appear then.
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class AuthResponse {
 
@@ -17,6 +18,11 @@ public class AuthResponse {
     private final String tokenType;
     private final Long expiresIn;
     private final UserInfo user;
+
+    // Set (with no tokens) when the password was right but the account still has to be
+    // verified with a one-time code - see POST /auth/verification/send and /confirm.
+    private final Boolean verificationRequired;
+    private final VerificationChallengeResponse verification;
 
     @Getter
     @Builder

@@ -84,7 +84,8 @@ public class SchoolServiceImpl implements SchoolService {
                 .email(request.getAdminEmail())
                 .password(passwordEncoder.encode(request.getAdminPassword()))
                 .enabled(true)
-                .emailVerified(true)
+                // Verifies with a one-time code at first login, like every other created account.
+                .emailVerified(false)
                 .build();
         admin.addRole(adminRole);
         User savedAdmin = userRepository.save(admin);

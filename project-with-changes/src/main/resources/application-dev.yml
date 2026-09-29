@@ -19,6 +19,9 @@ app:
        # Development admin credentials - safe for dev only
        email: ${BOOTSTRAP_ADMIN_EMAIL:admin@dev.local}
        password: ${BOOTSTRAP_ADMIN_PASSWORD:DevPassword123!}
+   verification:
+     # No Resend key locally: print verification codes to the log instead.
+     log-codes-when-email-unconfigured: ${VERIFICATION_LOG_CODES:true}
 
 # Development: Allow Swagger docs and detailed error responses
 server:

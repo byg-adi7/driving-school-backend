@@ -327,3 +327,42 @@ Measured against the live Render service with the temporary echo endpoint: `requ
 - The booking and assessment "notification failure can't fail it" tests now assert the after-commit path.
 - The MockMvc harness never commits, so the IN_APP notification assertions moved out of `BookingLifecycleIntegrationTest` and `MessagingIntegrationTest`. They now live in the new real-server `NotificationDeliveryIntegrationTest`, which checks welcome, booking (including mark-as-read) and message notifications after real commits.
 - `AbstractRealServerIntegrationTest` is the shared base for real-server tests.
+
+## Account Verification by One-Time Code (2026-09-29)
+
+**What:** login now requires a verified account. The product owner chose the design:
+- Codes are 6 digits, valid for 10 minutes, with 5 attempts and at most one send per 60 seconds.
+- Email codes are sent through the existing Resend setup. Twilio Verify's own email channel requires SendGrid, a second email provider, so it wasn't used.
+- WhatsApp codes go through Twilio Verify, and only to profiles with an international-format number.
+- Phone numbers stay optional.
+
+**Flow:**
+1. `POST /auth/login` with the right password, for an unverified account, returns `verificationRequired` plus a challenge (an opaque random id in Redis, 15 minutes), the available channels and the masked destinations. It returns no tokens.
+2. `POST /auth/verification/send` sends the code.
+3. `POST /auth/verification/confirm` verifies the account and returns the normal login tokens.
+
+A wrong password still gets a plain 401, so the flow can't be used to probe accounts.
+
+**Who verifies:**
+- V18 marks every existing account verified, so nobody who used the app before is locked out, and adds `users.phone_verified`.
+- New student and instructor accounts, and new school-owning admins (previously created as `email_verified=true`), verify at their first login.
+- The bootstrap admin is unchanged.
+
+**How it works:**
+- Email codes are stored only as a SHA-256 hash in Redis.
+- The attempt limit and cooldown are enforced in Redis for both channels.
+- A failed delivery (503) doesn't start the cooldown.
+- A code dies on its 5th wrong attempt.
+- The new endpoints are public, rate limited like the other auth endpoints, and permitted in `SecurityConfig`.
+
+**Configuration:**
+- `RESEND_API_KEY` and `MAIL_FROM` are now effectively required in production: without them, a new user can only verify by WhatsApp.
+- `TWILIO_VERIFY_SERVICE_SID` (with the existing SID and token) turns WhatsApp on.
+- `VERIFICATION_LOG_CODES` logs codes instead of emailing them. It's on only in the `dev` profile and must never be set in prod.
+
+**Verified:**
+- 14 new unit tests.
+- New `AccountVerificationIntegrationTest`: challenge instead of tokens, emailed code, 429 on early resend, wrong code, success, single-use challenge, later logins direct, school owner verifies, wrong password gets no challenge.
+- A 29-check live smoke run of the built jar against fresh Postgres and Redis: V18 applied, 5-miss lockout, and the auth rate limit on the new endpoints.
+- Existing integration tests mark the accounts they create as verified before logging in; the flow itself has its own test.
+- Full unit suite: 787 tests, green.

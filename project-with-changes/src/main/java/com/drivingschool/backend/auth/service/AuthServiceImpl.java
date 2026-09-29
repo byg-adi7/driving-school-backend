@@ -2,12 +2,14 @@ package com.drivingschool.backend.auth.service;
 
 import com.drivingschool.backend.auth.dto.AdminRegisterRequest;
 import com.drivingschool.backend.auth.dto.AuthResponse;
+import com.drivingschool.backend.auth.dto.ConfirmVerificationRequest;
 import com.drivingschool.backend.auth.dto.CurrentUserResponse;
 import com.drivingschool.backend.auth.dto.ForgotPasswordRequest;
 import com.drivingschool.backend.auth.dto.LoginRequest;
 import com.drivingschool.backend.auth.dto.RefreshTokenRequest;
 import com.drivingschool.backend.auth.dto.RegisterRequest;
 import com.drivingschool.backend.auth.dto.ResetPasswordRequest;
+import com.drivingschool.backend.auth.dto.SendVerificationCodeRequest;
 import com.drivingschool.backend.auth.entity.PasswordResetToken;
 import com.drivingschool.backend.auth.mapper.AuthMapper;
 import com.drivingschool.backend.auth.mapper.CurrentUserMapper;
@@ -72,6 +74,7 @@ public class AuthServiceImpl implements AuthService {
     private final SchoolDeletionRequestService schoolDeletionRequestService;
     private final NotificationService notificationService;
     private final AdminSchoolScope adminSchoolScope;
+    private final AccountVerificationService accountVerificationService;
     private final long passwordResetTokenExpirationMs;
 
     public AuthServiceImpl(AuthenticationManager authenticationManager,
@@ -92,6 +95,7 @@ public class AuthServiceImpl implements AuthService {
                            SchoolDeletionRequestService schoolDeletionRequestService,
                            NotificationService notificationService,
                            AdminSchoolScope adminSchoolScope,
+                           AccountVerificationService accountVerificationService,
                            @Value("${app.password-reset.token-expiration-ms}") long passwordResetTokenExpirationMs) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
@@ -111,6 +115,7 @@ public class AuthServiceImpl implements AuthService {
         this.schoolDeletionRequestService = schoolDeletionRequestService;
         this.notificationService = notificationService;
         this.adminSchoolScope = adminSchoolScope;
+        this.accountVerificationService = accountVerificationService;
         this.passwordResetTokenExpirationMs = passwordResetTokenExpirationMs;
     }
 
@@ -124,6 +129,31 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findById(principal.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", principal.getId()));
 
+        // Right password, unverified account: no tokens until a one-time code is confirmed.
+        if (!user.isAccountVerified()) {
+            log.info("Login for unverified account {} - verification required", user.getEmail());
+            return AuthResponse.builder()
+                    .verificationRequired(true)
+                    .verification(accountVerificationService.startChallenge(user))
+                    .build();
+        }
+
+        return completeLogin(user, principal);
+    }
+
+    @Override
+    public void sendVerificationCode(SendVerificationCodeRequest request) {
+        accountVerificationService.sendCode(request);
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse confirmVerification(ConfirmVerificationRequest request) {
+        User user = accountVerificationService.confirm(request);
+        return completeLogin(user, new UserPrincipal(user));
+    }
+
+    private AuthResponse completeLogin(User user, UserPrincipal principal) {
         user.recordLogin();
         userRepository.save(user);
 

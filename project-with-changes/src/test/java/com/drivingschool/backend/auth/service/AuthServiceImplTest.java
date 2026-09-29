@@ -2,11 +2,13 @@ package com.drivingschool.backend.auth.service;
 
 import com.drivingschool.backend.auth.dto.AdminRegisterRequest;
 import com.drivingschool.backend.auth.dto.AuthResponse;
+import com.drivingschool.backend.auth.dto.ConfirmVerificationRequest;
 import com.drivingschool.backend.auth.dto.ForgotPasswordRequest;
 import com.drivingschool.backend.auth.dto.LoginRequest;
 import com.drivingschool.backend.auth.dto.RefreshTokenRequest;
 import com.drivingschool.backend.auth.dto.RegisterRequest;
 import com.drivingschool.backend.auth.dto.ResetPasswordRequest;
+import com.drivingschool.backend.auth.dto.VerificationChallengeResponse;
 import com.drivingschool.backend.auth.entity.PasswordResetToken;
 import com.drivingschool.backend.auth.mapper.AuthMapper;
 import com.drivingschool.backend.auth.mapper.CurrentUserMapper;
@@ -80,6 +82,7 @@ class AuthServiceImplTest {
     @Mock private SchoolDeletionRequestService schoolDeletionRequestService;
     @Mock private NotificationService notificationService;
     @Mock private AdminSchoolScope adminSchoolScope;
+    @Mock private AccountVerificationService accountVerificationService;
 
     private AuthServiceImpl authService;
 
@@ -101,7 +104,7 @@ class AuthServiceImplTest {
                 schoolRepository, studentProfileRepository, instructorProfileRepository,
                 passwordEncoder, jwtTokenProvider, authMapper, currentUserMapper, currentUserService,
                 passwordResetTokenRepository, emailService, userService, refreshTokenRevocationService,
-                schoolDeletionRequestService, notificationService, adminSchoolScope, 3_600_000L);
+                schoolDeletionRequestService, notificationService, adminSchoolScope, accountVerificationService, 3_600_000L);
     }
 
     // --- login ---
@@ -599,5 +602,42 @@ class AuthServiceImplTest {
         authService.resetPassword(ResetPasswordRequest.builder().token("valid-token").newPassword("newPassword123").build());
 
         verify(refreshTokenRevocationService).revokeAllForUser(1L, 604_800_000L);
+    }
+
+    // --- account verification ---
+
+    @Test
+    void login_forAnUnverifiedAccount_returnsAChallengeInsteadOfTokens() {
+        User user = User.builder().email("new@example.com").password("encoded").enabled(true).emailVerified(false).build();
+        ReflectionTestUtils.setField(user, "id", 1L);
+        user.addRole(Role.builder().name(RoleName.STUDENT).build());
+        VerificationChallengeResponse challenge = VerificationChallengeResponse.builder().challengeId("c1").build();
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(authentication);
+        when(authentication.getPrincipal()).thenReturn(new UserPrincipal(user));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(accountVerificationService.startChallenge(user)).thenReturn(challenge);
+
+        AuthResponse response = authService.login(LoginRequest.builder().email("new@example.com").password("password123").build());
+
+        assertThat(response.getVerificationRequired()).isTrue();
+        assertThat(response.getVerification()).isSameAs(challenge);
+        assertThat(response.getAccessToken()).isNull();
+        assertThat(user.getLastLoginAt()).isNull();
+        verify(jwtTokenProvider, never()).generateAccessToken(any());
+    }
+
+    @Test
+    void confirmVerification_logsTheNowVerifiedUserIn() {
+        User user = existingUser(RoleName.STUDENT);
+        ConfirmVerificationRequest request = ConfirmVerificationRequest.builder().challengeId("c1").code("123456").build();
+        AuthResponse tokens = AuthResponse.builder().accessToken("access").build();
+        when(accountVerificationService.confirm(request)).thenReturn(user);
+        when(jwtTokenProvider.generateAccessToken(any())).thenReturn("access");
+        when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("refresh");
+        when(authMapper.toAuthResponse(user, "access", "refresh")).thenReturn(tokens);
+
+        assertThat(authService.confirmVerification(request)).isSameAs(tokens);
+        assertThat(user.getLastLoginAt()).isNotNull();
+        verify(userRepository).save(user);
     }
 }

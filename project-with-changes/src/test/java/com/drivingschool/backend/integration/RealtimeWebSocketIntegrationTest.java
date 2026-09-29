@@ -16,6 +16,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.messaging.converter.MappingJackson2MessageConverter;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
 import org.springframework.messaging.simp.stomp.StompHeaders;
@@ -59,6 +60,7 @@ class RealtimeWebSocketIntegrationTest {
     @LocalServerPort private int port;
     @Autowired private TestRestTemplate rest;
     @Autowired private StringRedisTemplate redisTemplate;
+    @Autowired private JdbcTemplate jdbcTemplate;
 
     private WebSocketStompClient stompClient;
 
@@ -97,7 +99,9 @@ class RealtimeWebSocketIntegrationTest {
                 .getBody().get("data");
     }
 
+    // Accounts made by this test are marked verified first - see AbstractIntegrationTest.loginFull.
     private String login(String email, String password) {
+        jdbcTemplate.update("UPDATE users SET email_verified = TRUE WHERE email = ?", email);
         return (String) post("/auth/login", null, Map.of("email", email, "password", password)).get("accessToken");
     }
 
