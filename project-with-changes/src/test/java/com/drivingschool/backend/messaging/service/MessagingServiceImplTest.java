@@ -15,6 +15,8 @@ import com.drivingschool.backend.messaging.repository.MessageRepository;
 import com.drivingschool.backend.notification.dto.SendNotificationRequest;
 import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.notification.service.NotificationService;
+import com.drivingschool.backend.realtime.RealtimeEvent;
+import com.drivingschool.backend.realtime.RealtimePublisher;
 import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.security.CurrentUserService;
@@ -55,13 +57,14 @@ class MessagingServiceImplTest {
     @Mock private InstructorProfileRepository instructorProfileRepository;
     @Mock private CurrentUserService currentUserService;
     @Mock private NotificationService notificationService;
+    @Mock private RealtimePublisher realtimePublisher;
 
     private MessagingServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new MessagingServiceImpl(conversationRepository, messageRepository, studentProfileRepository,
-                instructorProfileRepository, currentUserService, notificationService);
+                instructorProfileRepository, currentUserService, notificationService, realtimePublisher);
     }
 
     private School school(Long id) {
@@ -327,5 +330,42 @@ class MessagingServiceImplTest {
             assertThat(c.getUnreadCount()).isEqualTo(3L);
             assertThat(c.getCounterpartName()).isEqualTo("Ina Instructor");
         });
+    }
+
+    // --- realtime ---
+
+    @Test
+    void sendMessage_pushesItToTheRecipientAndBackToTheSender_eachWithTheirOwnMineFlag() {
+        School school = school(5L);
+        Conversation conversation = conversation(student(10L, user(STUDENT_USER_ID), school),
+                instructor(20L, user(INSTRUCTOR_USER_ID), school, true));
+        when(currentUserService.requireUserId()).thenReturn(STUDENT_USER_ID);
+        when(conversationRepository.findWithParticipantsById(70L)).thenReturn(Optional.of(conversation));
+        when(messageRepository.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.sendMessage(70L, SendMessageRequest.builder().body("On my way").build());
+
+        ArgumentCaptor<Object> toInstructor = ArgumentCaptor.forClass(Object.class);
+        verify(realtimePublisher).publishAfterCommit(eq(INSTRUCTOR_USER_ID), eq(RealtimeEvent.MESSAGE_CREATED), toInstructor.capture());
+        assertThat(((MessageResponse) toInstructor.getValue()).isMine()).isFalse();
+        ArgumentCaptor<Object> toSender = ArgumentCaptor.forClass(Object.class);
+        verify(realtimePublisher).publishAfterCommit(eq(STUDENT_USER_ID), eq(RealtimeEvent.MESSAGE_CREATED), toSender.capture());
+        assertThat(((MessageResponse) toSender.getValue()).isMine()).isTrue();
+    }
+
+    @Test
+    void markRead_sendsAReadReceiptToTheOtherParticipant_onlyWhenSomethingWasUnread() {
+        School school = school(5L);
+        Conversation conversation = conversation(student(10L, user(STUDENT_USER_ID), school),
+                instructor(20L, user(INSTRUCTOR_USER_ID), school, true));
+        when(currentUserService.requireUserId()).thenReturn(INSTRUCTOR_USER_ID);
+        when(conversationRepository.findWithParticipantsById(70L)).thenReturn(Optional.of(conversation));
+        when(messageRepository.markReadForRecipient(eq(70L), eq(INSTRUCTOR_USER_ID), any())).thenReturn(2, 0);
+
+        service.markRead(70L);
+        service.markRead(70L);
+
+        verify(realtimePublisher, org.mockito.Mockito.times(1))
+                .publishAfterCommit(eq(STUDENT_USER_ID), eq(RealtimeEvent.CONVERSATION_READ), any());
     }
 }

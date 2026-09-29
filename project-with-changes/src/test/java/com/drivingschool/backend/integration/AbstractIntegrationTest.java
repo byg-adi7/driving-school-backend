@@ -24,8 +24,6 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.PostgreSQLContainer;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -38,7 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * genuinely fresh Postgres and Redis containers - unlike @WebMvcTest
  * security-slice tests, nothing here is mocked.
  *
- * Containers are started once via a static initializer (the Testcontainers
+ * Containers are started once (IntegrationTestContainers - the Testcontainers
  * "singleton container" pattern) rather than per-class, so every integration
  * test class extending this one shares the same running Postgres/Redis and
  * the same cached Spring context, keeping the whole suite fast. Each test
@@ -58,21 +56,9 @@ public abstract class AbstractIntegrationTest {
     protected static final String BOOTSTRAP_ADMIN_EMAIL = "admin@drivingschool.local";
     protected static final String BOOTSTRAP_ADMIN_PASSWORD = "integration-test-admin-password";
 
-    private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
-    private static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
-
-    static {
-        POSTGRES.start();
-        REDIS.start();
-    }
-
     @DynamicPropertySource
     static void configureContainers(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
-        registry.add("spring.data.redis.host", REDIS::getHost);
-        registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
+        IntegrationTestContainers.register(registry);
     }
 
     @Autowired protected MockMvc mockMvc;

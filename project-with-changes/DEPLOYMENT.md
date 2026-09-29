@@ -125,6 +125,19 @@ To deploy without a push (e.g. to pick up a changed environment variable), use *
 Deploy** on the service page, or the service's **Deploy Hook** URL (Settings), which
 triggers a deploy on an HTTP GET or POST.
 
+## Realtime (WebSocket) and instance count
+
+The app pushes live updates to the frontend over a WebSocket at `/ws` (STOMP; see the
+frontend API guide). Render supports WebSockets with no extra setting and no fixed
+connection timeout, but drops every connection on each deploy or restart - clients
+reconnect on their own.
+
+**Keep the web service at one instance** unless this is changed: pushes go through
+Spring's in-memory broker, so they only reach users connected to the same instance that
+produced the event, and Render's load balancer assigns each WebSocket connection to a
+random instance. Scaling out needs a shared relay between instances (e.g. Redis pub/sub
+on the existing Key Value instance) - a code change, not a setting.
+
 ## Observability
 
 - **Metrics**: `/actuator/prometheus` exposes Micrometer/Prometheus-format metrics in
