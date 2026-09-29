@@ -322,6 +322,7 @@ class AuthServiceImplTest {
         when(refreshTokenRevocationService.isRevoked("jti-1")).thenReturn(false);
         when(jwtTokenProvider.getEmailFromToken("refresh-token")).thenReturn("user@example.com");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+        when(jwtTokenProvider.getIssuedAtFromToken("refresh-token")).thenReturn(new java.util.Date());
         when(jwtTokenProvider.generateAccessToken(any(UserPrincipal.class))).thenReturn("new-access");
         when(jwtTokenProvider.generateRefreshToken(any(UserPrincipal.class))).thenReturn("new-refresh");
         when(authMapper.toAuthResponse(eq(user), eq("new-access"), eq("new-refresh"))).thenReturn(expectedResponse);
@@ -535,5 +536,68 @@ class AuthServiceImplTest {
                 .isInstanceOf(BadRequestException.class);
         verify(userRepository, never()).save(any());
         verify(studentProfileRepository, never()).save(any());
+    }
+
+    private RefreshTokenRequest stubValidRefreshTokenFor(User user) {
+        when(jwtTokenProvider.validateToken("refresh-token")).thenReturn(true);
+        when(jwtTokenProvider.isRefreshToken("refresh-token")).thenReturn(true);
+        when(jwtTokenProvider.getJtiFromToken("refresh-token")).thenReturn("jti-1");
+        when(refreshTokenRevocationService.isRevoked("jti-1")).thenReturn(false);
+        when(jwtTokenProvider.getEmailFromToken("refresh-token")).thenReturn(user.getEmail());
+        when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
+        return RefreshTokenRequest.builder().refreshToken("refresh-token").build();
+    }
+
+    @Test
+    void refreshToken_forSoftDeletedUser_throwsAuthenticationException() {
+        User user = existingUser(RoleName.STUDENT);
+        user.softDelete();
+        RefreshTokenRequest request = stubValidRefreshTokenFor(user);
+
+        assertThatThrownBy(() -> authService.refreshToken(request))
+                .isInstanceOf(AuthenticationException.class)
+                .hasMessageContaining("disabled");
+        verify(jwtTokenProvider, never()).generateAccessToken(any());
+    }
+
+    @Test
+    void refreshToken_forDisabledUser_throwsAuthenticationException() {
+        User user = existingUser(RoleName.INSTRUCTOR);
+        user.setEnabled(false);
+        RefreshTokenRequest request = stubValidRefreshTokenFor(user);
+
+        assertThatThrownBy(() -> authService.refreshToken(request))
+                .isInstanceOf(AuthenticationException.class);
+        verify(jwtTokenProvider, never()).generateAccessToken(any());
+    }
+
+    @Test
+    void refreshToken_issuedBeforeAPasswordReset_throwsAuthenticationException() {
+        User user = existingUser(RoleName.STUDENT);
+        RefreshTokenRequest request = stubValidRefreshTokenFor(user);
+        when(jwtTokenProvider.getIssuedAtFromToken("refresh-token")).thenReturn(new java.util.Date(5_000L));
+        when(refreshTokenRevocationService.isRevokedForUser(1L, 5L)).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.refreshToken(request))
+                .isInstanceOf(AuthenticationException.class)
+                .hasMessageContaining("revoked");
+        verify(jwtTokenProvider, never()).generateAccessToken(any());
+    }
+
+    @Test
+    void resetPassword_revokesEveryExistingRefreshTokenForTheUser() {
+        User user = existingUser(RoleName.STUDENT);
+        PasswordResetToken resetToken = PasswordResetToken.builder()
+                .user(user)
+                .token("valid-token")
+                .expiresAt(LocalDateTime.now().plusHours(1))
+                .build();
+        when(passwordResetTokenRepository.findByToken("valid-token")).thenReturn(Optional.of(resetToken));
+        when(passwordEncoder.encode("newPassword123")).thenReturn("encoded-new-password");
+        when(jwtTokenProvider.getRefreshTokenExpirationMs()).thenReturn(604_800_000L);
+
+        authService.resetPassword(ResetPasswordRequest.builder().token("valid-token").newPassword("newPassword123").build());
+
+        verify(refreshTokenRevocationService).revokeAllForUser(1L, 604_800_000L);
     }
 }

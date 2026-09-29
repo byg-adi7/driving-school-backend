@@ -60,4 +60,37 @@ class RedisRefreshTokenRevocationServiceTest {
 
         assertThat(revocationService.isRevoked("jti-1")).isFalse();
     }
+
+    @Test
+    void revokeAllForUser_storesTheCurrentSecondWithTheGivenTtl() {
+        long before = System.currentTimeMillis() / 1000;
+
+        revocationService.revokeAllForUser(7L, 604_800_000L);
+
+        org.mockito.ArgumentCaptor<String> value = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(valueOperations).set(eq("revoked:refresh:user:7"), value.capture(), eq(Duration.ofMillis(604_800_000L)));
+        assertThat(Long.parseLong(value.getValue())).isBetween(before, System.currentTimeMillis() / 1000);
+    }
+
+    @Test
+    void isRevokedForUser_tokenIssuedBeforeTheMarker_isRevoked() {
+        org.mockito.Mockito.when(valueOperations.get("revoked:refresh:user:7")).thenReturn("1000");
+
+        assertThat(revocationService.isRevokedForUser(7L, 999L)).isTrue();
+    }
+
+    @Test
+    void isRevokedForUser_tokenIssuedInTheSameSecondOrLater_isNotRevoked() {
+        org.mockito.Mockito.when(valueOperations.get("revoked:refresh:user:7")).thenReturn("1000");
+
+        assertThat(revocationService.isRevokedForUser(7L, 1000L)).isFalse();
+        assertThat(revocationService.isRevokedForUser(7L, 1001L)).isFalse();
+    }
+
+    @Test
+    void isRevokedForUser_noMarker_isNotRevoked() {
+        org.mockito.Mockito.when(valueOperations.get("revoked:refresh:user:7")).thenReturn(null);
+
+        assertThat(revocationService.isRevokedForUser(7L, 1L)).isFalse();
+    }
 }
