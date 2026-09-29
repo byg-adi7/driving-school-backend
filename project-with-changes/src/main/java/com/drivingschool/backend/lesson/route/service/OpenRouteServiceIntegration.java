@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @Slf4j
@@ -36,10 +38,41 @@ public class OpenRouteServiceIntegration {
             String response = restTemplate.getForObject(url, String.class);
 
             return parseRouteResponse(response, startLat, startLon, destLat, destLon);
+        } catch (HttpClientErrorException e) {
+            throw toClientError(e);
         } catch (RestClientException e) {
             log.error("Failed to generate route from OpenRouteService", e);
             throw new BadRequestException("Failed to generate route. Please try again or check your coordinates.");
         }
+    }
+
+    // Per OpenRouteService's documented error codes, these statuses describe a request
+    // that simply can't be routed - 400 invalid parameter (2003), 404 no routable point
+    // near a coordinate (2010) or no route between them (2009), 413 over a limit (2004).
+    // That's a normal outcome for user-entered coordinates, not a server fault, so it's
+    // logged as a warning (not a Sentry-bound error) and the API's own explanation is
+    // passed back. Any other 4xx isn't a caller mistake the user can fix, so it stays
+    // an error with a generic message.
+    private static final Set<Integer> UNROUTABLE_REQUEST_STATUSES = Set.of(400, 404, 413);
+
+    private BadRequestException toClientError(HttpClientErrorException e) {
+        int status = e.getStatusCode().value();
+        if (!UNROUTABLE_REQUEST_STATUSES.contains(status)) {
+            log.error("OpenRouteService rejected the request with HTTP {}: {}", status, e.getResponseBodyAsString(), e);
+            return new BadRequestException("Failed to generate route. Please try again later.");
+        }
+
+        log.warn("OpenRouteService could not route this request (HTTP {}): {}", status, e.getResponseBodyAsString());
+        String apiMessage = null;
+        try {
+            // Error bodies look like {"error":{"code":2010,"message":"..."},"info":{...}}
+            apiMessage = objectMapper.readTree(e.getResponseBodyAsString()).path("error").path("message").asText(null);
+        } catch (IOException parseError) {
+            log.debug("Could not parse OpenRouteService error response body", parseError);
+        }
+        return new BadRequestException(apiMessage != null
+                ? "Could not generate route: " + apiMessage
+                : "Could not generate a route between these coordinates. Please check them and try again.");
     }
 
     private String buildRouteUrl(Double startLat, Double startLon, Double destLat, Double destLon) {

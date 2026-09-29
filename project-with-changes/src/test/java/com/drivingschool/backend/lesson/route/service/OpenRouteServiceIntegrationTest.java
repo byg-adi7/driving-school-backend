@@ -9,9 +9,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -107,5 +111,43 @@ class OpenRouteServiceIntegrationTest {
 
         assertThatThrownBy(() -> integration.generateRoute(51.5080, -0.1281, 51.5033, -0.1196))
                 .isInstanceOf(BadRequestException.class);
+    }
+
+    // Body shape as reported for a real 2010 error on the OpenRouteService issue tracker.
+    private static final String POINT_NOT_FOUND_BODY = "{\"error\":{\"code\":2010,\"message\":"
+            + "\"Could not find routable point within a radius of 350.0 meters of specified coordinate 0: -0.1281000 51.5080000.\"},"
+            + "\"info\":{\"engine\":{\"version\":\"9.0.0\"},\"timestamp\":1}}";
+
+    @Test
+    void generateRoute_http404PointNotFound_surfacesTheApisOwnMessage() {
+        when(restTemplate.getForObject(anyString(), org.mockito.ArgumentMatchers.eq(String.class)))
+                .thenThrow(HttpClientErrorException.create(HttpStatus.NOT_FOUND, "Not Found", HttpHeaders.EMPTY,
+                        POINT_NOT_FOUND_BODY.getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> integration.generateRoute(51.5080, -0.1281, 51.5033, -0.1196))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Could not find routable point within a radius of 350.0 meters");
+    }
+
+    @Test
+    void generateRoute_http404WithUnparseableBody_fallsBackToAGenericCoordinateMessage() {
+        when(restTemplate.getForObject(anyString(), org.mockito.ArgumentMatchers.eq(String.class)))
+                .thenThrow(HttpClientErrorException.create(HttpStatus.NOT_FOUND, "Not Found", HttpHeaders.EMPTY,
+                        "not json".getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> integration.generateRoute(51.5080, -0.1281, 51.5033, -0.1196))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("check them");
+    }
+
+    @Test
+    void generateRoute_otherClientError_isNotBlamedOnTheCoordinates() {
+        when(restTemplate.getForObject(anyString(), org.mockito.ArgumentMatchers.eq(String.class)))
+                .thenThrow(HttpClientErrorException.create(HttpStatus.FORBIDDEN, "Forbidden", HttpHeaders.EMPTY,
+                        "{}".getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> integration.generateRoute(51.5080, -0.1281, 51.5033, -0.1196))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Failed to generate route. Please try again later.");
     }
 }
