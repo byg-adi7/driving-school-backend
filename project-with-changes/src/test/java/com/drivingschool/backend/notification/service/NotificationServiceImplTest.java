@@ -25,6 +25,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -235,5 +237,64 @@ class NotificationServiceImplTest {
 
         assertThatThrownBy(() -> service.sendAsCaller(request)).isInstanceOf(BadRequestException.class);
         verify(notificationRepository, never()).save(any());
+    }
+
+    // --- async senders are only handed a notification once its transaction commits ---
+
+    private SendNotificationRequest emailRequest() {
+        return SendNotificationRequest.builder()
+                .userId(1L).subject("Lesson reminder").body("Your lesson is tomorrow")
+                .channel(NotificationChannel.EMAIL).build();
+    }
+
+    @Test
+    void send_asyncSenderInsideATransaction_isDeferredUntilAfterCommit() {
+        when(emailSender.isAsynchronous()).thenReturn(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(userWithId(1L, "student@example.com")));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.send(emailRequest());
+            verify(emailSender, never()).send(any());
+
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+            verify(emailSender).send(any(Notification.class));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void send_asyncSenderWhoseTransactionRollsBack_isNeverDispatched() {
+        when(emailSender.isAsynchronous()).thenReturn(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(userWithId(1L, "student@example.com")));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.send(emailRequest());
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(sync -> sync.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        verify(emailSender, never()).send(any());
+    }
+
+    @Test
+    void send_synchronousSenderInsideATransaction_isDispatchedImmediately() {
+        when(emailSender.isAsynchronous()).thenReturn(false);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(userWithId(1L, "student@example.com")));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.send(emailRequest());
+            verify(emailSender).send(any(Notification.class));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 }

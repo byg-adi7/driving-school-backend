@@ -102,4 +102,10 @@ class SmsNotificationSenderTest {
         assertThat(notification.getFailureReason()).isEqualTo("Twilio 400: invalid number");
         verify(notificationRepository).save(notification);
     }
+
+    @Test
+    void isAsynchronous_matchesHowSendRuns() {
+        // NotificationServiceImpl defers async senders until after commit - its send() is @Async.
+        assertThat(sender.isAsynchronous()).isTrue();
+    }
 }

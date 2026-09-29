@@ -36,6 +36,11 @@ public class EmailNotificationSender implements NotificationSender {
     // moments later via the save() calls below. That's the intended tradeoff:
     // a slow/unreachable mail server no longer adds latency to the caller.
     @Override
+    public boolean isAsynchronous() {
+        return true;
+    }
+
+    @Override
     @Async("notificationExecutor")
     public void send(Notification notification) {
         try {
