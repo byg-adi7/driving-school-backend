@@ -38,7 +38,7 @@ services:
       STORAGE_PROVIDER: local
       SPRING_PROFILES_ACTIVE: dev
     ports:
-      - "${SERVER_PORT:-8080}:8080"
+      - "${PORT:-8080}:${PORT:-8080}"
     depends_on:
       postgres:
         condition: service_healthy
