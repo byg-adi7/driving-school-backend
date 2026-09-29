@@ -103,6 +103,20 @@ d.P("Not all ADMIN accounts are equal. There is exactly one permanent \"bootstra
     "building UI for — the two need meaningfully different admin dashboards (see the "
     "Schools section below).")
 
+d.H(2, "Everyone is confined to their own school")
+d.P("Every account except the bootstrap admin is confined to ONE school: a student or "
+    "instructor to the school on their profile, a regular admin to the school they own "
+    "(GET /auth/me's schoolId in all three cases). Passing another school's IDs - a "
+    "student, instructor, vehicle, booking, lesson note, question, session, and so on - "
+    "is rejected with 400 (403 on the booking endpoints). The bootstrap admin is the only "
+    "account that can act across schools.")
+d.P("The ADMIN-only \"list everything\" endpoints (GET /lesson-notes, GET /lesson-routes, "
+    "and GET /lesson-questions/status/{status} for admins and instructors) don't reject a "
+    "regular admin - they return only that admin's own school's rows. The bootstrap admin "
+    "gets every school's.")
+d.P("Published courses, video lessons and quizzes are the one exception: they stay "
+    "readable by any authenticated user in any school.")
+
 # =====================================================================
 # AUTHENTICATION
 # =====================================================================
@@ -112,9 +126,10 @@ d.P("This is the first thing to implement — almost everything else needs a tok
 d.H(2, "There is no public self-registration")
 d.P("POST /auth/register requires the caller to ALREADY be authenticated as ADMIN or "
     "INSTRUCTOR. An instructor can only create STUDENT accounts, and only within their "
-    "own school. An admin can create either role, in any school. There is a separate "
-    "POST /auth/admin/register that can create a STUDENT or INSTRUCTOR anywhere — but "
-    "NOT an admin account anymore (see below).")
+    "own school. A regular admin can create either role, within the school they own; "
+    "only the bootstrap admin can create accounts in any school. There is a separate "
+    "POST /auth/admin/register for the same STUDENT/INSTRUCTOR creation (same school "
+    "rules) — but NOT an admin account anymore (see below).")
 d.P("Practically: a brand-new deployment only has the one bootstrap admin account "
     "(created from server-side config, not via the API). Every other account — "
     "instructors and students — gets created by an admin or instructor logged into "
@@ -180,17 +195,19 @@ ENDPOINT("POST", "/auth/register", "Create a STUDENT or INSTRUCTOR account.",
         ["yearsExperience", "number", "no", "instructor only"],
     ],
     example_req='{\n  "email": "student.jones@example.com",\n  "password": "SecurePass123!",\n  "firstName": "Jamie",\n  "lastName": "Jones",\n  "schoolId": 2,\n  "role": "STUDENT",\n  "licenseNumber": "LIC-2026-0031"\n}',
-    response=[["Same shape as /auth/login's response", "", "the newly created user is also logged in / issued tokens for immediately, if that's the flow you want, or just discard the tokens and let them log in separately"]],
-    notes=["An INSTRUCTOR caller creating a STUDENT in a DIFFERENT school than their own is rejected.",
+    response=[["user.id / user.email / user.roles", "", "the NEW user's identity only - no accessToken/refreshToken/tokenType/expiresIn. The account's creator never receives a session for it; the new user logs in themselves with the password they were given"]],
+    example_resp='{\n  "success": true,\n  "message": "Registration successful",\n  "data": {\n    "user": { "id": 31, "email": "student.jones@example.com", "roles": ["STUDENT"] }\n  }\n}',
+    notes=["An INSTRUCTOR or regular ADMIN caller creating an account in a DIFFERENT school than their own is rejected with 400.",
            "licenseNumber is required when role=INSTRUCTOR (a common mistake — don't forget it on an \"add instructor\" form)."])
 
-ENDPOINT("POST", "/auth/admin/register", "Admin creates a STUDENT or INSTRUCTOR in any school.",
+ENDPOINT("POST", "/auth/admin/register", "Admin creates a STUDENT or INSTRUCTOR.",
     access="ADMIN only",
     request=[["Same fields as /auth/register", "", "", "role must be STUDENT or INSTRUCTOR"]],
     notes=["role=ADMIN is rejected with 400 — admin accounts can only be created via "
-           "POST /schools now (they can't exist without a school to own). Use this endpoint "
-           "for a cross-school \"admin creates a student/instructor anywhere\" screen — for "
-           "normal instructor/student onboarding within one school, /auth/register is simpler."])
+           "POST /schools now (they can't exist without a school to own).",
+           "Same school rules as /auth/register: a regular admin only within their own "
+           "school, the bootstrap admin in any. Response is the same identity-only shape "
+           "(no tokens)."])
 
 ENDPOINT("POST", "/auth/refresh-token", "Exchange a refresh token for a new access token.",
     access="Public (the refresh token itself is the credential)",
@@ -198,7 +215,10 @@ ENDPOINT("POST", "/auth/refresh-token", "Exchange a refresh token for a new acce
     example_req='{\n  "refreshToken": "eyJhbGciOi..."\n}',
     response=[["Same shape as /auth/login's response", "", "a new access + refresh token pair"]],
     notes=["Standard pattern: on any 401 from a protected endpoint, call this once, retry the "
-           "original request with the new access token, and if that ALSO 401s, force a full re-login."])
+           "original request with the new access token, and if that ALSO 401s, force a full re-login.",
+           "Also 401s (so: send the user to login) when the account has been disabled or "
+           "deleted, or when the refresh token was issued before a password reset on that "
+           "account - a reset logs out every existing session."])
 
 ENDPOINT("POST", "/auth/logout", "Revoke a refresh token server-side.",
     access="Any authenticated user (needs a valid access token to call this, revokes the refresh token in the body)",
@@ -219,7 +239,10 @@ ENDPOINT("POST", "/auth/reset-password", "Complete a password reset using the em
     request=[
         ["token", "string", "yes", "from the reset-password link's ?token= query param"],
         ["newPassword", "string", "yes", "8-100 chars"],
-    ])
+    ],
+    notes=["Signs the account out everywhere: every refresh token issued before the reset "
+           "stops working (already-issued access tokens run out on their own - 15 minutes by default). The "
+           "user logs in again with the new password."])
 
 ENDPOINT("DELETE", "/auth/me", "Delete (or request deletion of) the current user's own account.",
     access="Any authenticated user",
@@ -425,9 +448,9 @@ ENDPOINT("PUT", "/students/me", "Update the current student's own profile.", acc
     ])
 
 ENDPOINT("GET", "/students/school/{schoolId}", "List students in a school.",
-    access="ADMIN (any school), or an INSTRUCTOR listing their OWN school only",
-    notes=["An INSTRUCTOR passing a DIFFERENT school's ID than their own (from GET /auth/me's "
-           "schoolId) gets 400, not the data.",
+    access="Bootstrap admin (any school), or a regular ADMIN / INSTRUCTOR listing their OWN school only",
+    notes=["A regular ADMIN or INSTRUCTOR passing a DIFFERENT school's ID than their own (from "
+           "GET /auth/me's schoolId) gets 400, not the data.",
            "This is the endpoint for a student picker on the instructor's \"book a lesson\" "
            "and \"add lesson note\" forms — use it instead of asking the instructor to type a "
            "raw numeric student ID."])
@@ -450,8 +473,8 @@ ENDPOINT("POST", "/vehicles", "Add a vehicle to a school's fleet.", access="ADMI
     ],
     example_req='{\n  "registrationNumber": "SPR-2026",\n  "make": "Toyota",\n  "model": "Corolla",\n  "modelYear": 2024,\n  "color": "Silver",\n  "schoolId": 2\n}')
 
-ENDPOINT("GET", "/vehicles/{id}", "Get a vehicle by ID.", access="Any authenticated user")
-ENDPOINT("GET", "/vehicles/school/{schoolId}", "List a school's vehicles.", access="Any authenticated user")
+ENDPOINT("GET", "/vehicles/{id}", "Get a vehicle by ID.", access="Any authenticated user in the vehicle's school (bootstrap admin: any)")
+ENDPOINT("GET", "/vehicles/school/{schoolId}", "List a school's vehicles.", access="Any authenticated user in that school (bootstrap admin: any)")
 ENDPOINT("PUT", "/vehicles/{id}", "Update vehicle details.", access="ADMIN only",
     request=[["make / model / modelYear / color", "", "yes", "same constraints as create"],
              ["gpsDeviceId", "string", "no", ""]])
@@ -670,9 +693,13 @@ ENDPOINT("POST", "/lesson-routes/generate", "Generate a route for a booking.", a
         ["distanceKm / durationMinutes", "number", "computed by the routing service"],
         ["coordinates", "array of {latitude, longitude}", "the actual path, for drawing a polyline on a map"],
     ],
-    notes=["This depends on a third-party routing API — it can fail with 400 (\"Failed to "
-           "generate route\") if that service is unreachable or the coordinates are unroutable; "
-           "handle this as a retryable error in the UI, not a hard failure.",
+    notes=["This depends on a third-party routing API (OpenRouteService). When a point can't "
+           "be routed - most commonly a coordinate that isn't near a road - the 400's message "
+           "is the routing service's own explanation, prefixed \"Could not generate route: \" "
+           "(e.g. \"Could not find routable point within a radius of 350.0 meters...\"); show "
+           "it to the user so they can move the pin. Any other 400 from this endpoint (\"Failed to "
+           "generate route. Please try again...\") means the routing service itself failed or "
+           "was unreachable - treat that as retryable.",
            "You'll need a map-rendering library (e.g. Leaflet, Mapbox GL, Google Maps JS) "
            "client-side to actually draw the coordinates array — the API only returns "
            "raw lat/lng points."])
@@ -680,7 +707,7 @@ ENDPOINT("POST", "/lesson-routes/generate", "Generate a route for a booking.", a
 ENDPOINT("GET", "/lesson-routes/{id}", "Get a route by ID.", access="ADMIN, INSTRUCTOR, or STUDENT (participant of the underlying booking)")
 ENDPOINT("GET", "/lesson-routes/booking/{bookingId}", "Get the route for a specific booking.", access="Same as above")
 ENDPOINT("GET", "/lesson-routes/instructor/{instructorId}", "Paginated list of an instructor's routes.", access="INSTRUCTOR or ADMIN")
-ENDPOINT("GET", "/lesson-routes", "Paginated list of ALL routes.", access="ADMIN only")
+ENDPOINT("GET", "/lesson-routes", "Paginated list of all routes - a regular admin gets only their own school's.", access="ADMIN only")
 ENDPOINT("DELETE", "/lesson-routes/{id}", "Delete a route.", access="INSTRUCTOR only (their own)")
 
 # =====================================================================
@@ -694,7 +721,7 @@ d.P("An instructor writes a structured note after a lesson (summary / strengths 
 ENDPOINT("POST", "/lesson-notes", "Create a lesson note.", access="INSTRUCTOR only",
     request=[
         ["bookingId", "number", "no", "if provided, must actually belong to this instructor+student pair"],
-        ["studentId", "number", "yes", "StudentProfile.id"],
+        ["studentId", "number", "yes", "StudentProfile.id - must be a student in the instructor's own school"],
         ["lessonSummary", "string", "yes", "10-1000 chars"],
         ["strengths", "string", "yes", "10-1500 chars"],
         ["weaknesses", "string", "yes", "10-1500 chars"],
@@ -711,7 +738,7 @@ ENDPOINT("PUT", "/lesson-notes/{id}", "Update a lesson note.", access="INSTRUCTO
 ENDPOINT("GET", "/lesson-notes/{id}", "Get a lesson note by ID.", access="ADMIN, the owning INSTRUCTOR, or the note's STUDENT")
 ENDPOINT("GET", "/lesson-notes/student/{studentId}", "Paginated notes for a student.", access="ADMIN, the student, or their instructor")
 ENDPOINT("GET", "/lesson-notes/instructor/{instructorId}", "Paginated notes by an instructor.", access="ADMIN or INSTRUCTOR")
-ENDPOINT("GET", "/lesson-notes", "Paginated list of ALL notes.", access="ADMIN only")
+ENDPOINT("GET", "/lesson-notes", "Paginated list of all notes - a regular admin gets only their own school's.", access="ADMIN only")
 ENDPOINT("DELETE", "/lesson-notes/{id}", "Delete a lesson note.", access="INSTRUCTOR only (their own)")
 
 d.H(2, "Attachments")
@@ -756,9 +783,9 @@ ENDPOINT("POST", "/lesson-questions", "Submit a question.", access="STUDENT only
     request=[
         ["subject", "string", "yes", "5-255 chars"],
         ["questionBody", "string", "yes", "10-3000 chars"],
-        ["assignedInstructorId", "number", "no", "InstructorProfile.id, if the student wants to target a specific instructor"],
+        ["assignedInstructorId", "number", "no", "InstructorProfile.id, if the student wants to target a specific instructor - must be at the student's own school"],
     ])
-ENDPOINT("POST", "/lesson-questions/{id}/respond", "Respond to a question.", access="INSTRUCTOR only",
+ENDPOINT("POST", "/lesson-questions/{id}/respond", "Respond to a question.", access="INSTRUCTOR only (the assigned instructor, or - for an unassigned question - any instructor at the student's school)",
     request=[["response", "string", "yes", "10-3000 chars"]])
 ENDPOINT("PUT", "/lesson-questions/{id}/status", "Change a question's status.", access="INSTRUCTOR or ADMIN",
     request=[["newStatus", "enum", "yes", "PENDING, IN_PROGRESS, ANSWERED, CLOSED"],
@@ -766,7 +793,7 @@ ENDPOINT("PUT", "/lesson-questions/{id}/status", "Change a question's status.", 
 ENDPOINT("GET", "/lesson-questions/{id}", "Get a question by ID.", access="Any authenticated user with access")
 ENDPOINT("GET", "/lesson-questions/my-questions", "Paginated: my own submitted questions.", access="STUDENT only")
 ENDPOINT("GET", "/lesson-questions/assigned", "Paginated: questions assigned to me.", access="INSTRUCTOR only")
-ENDPOINT("GET", "/lesson-questions/status/{status}", "Paginated: questions filtered by status.", access="INSTRUCTOR or ADMIN",
+ENDPOINT("GET", "/lesson-questions/status/{status}", "Paginated: questions filtered by status, from the caller's own school only (bootstrap admin: every school).", access="INSTRUCTOR or ADMIN",
     params=[["status", "enum (path segment)", "yes", "PENDING, IN_PROGRESS, ANSWERED, or CLOSED"]])
 ENDPOINT("GET", "/lesson-questions/pending", "Paginated: my pending questions.", access="INSTRUCTOR only")
 ENDPOINT("GET", "/lesson-questions/{id}/history", "Full status-change audit history.", access="Any authenticated user with access")
@@ -781,7 +808,7 @@ d.P("A scheduled online class (theory lecture, Q&A, etc.) with a meeting link, d
 
 ENDPOINT("POST", "/live-sessions", "Schedule a live session.", access="ADMIN or INSTRUCTOR",
     request=[
-        ["instructorId / schoolId", "number", "yes", ""],
+        ["instructorId / schoolId", "number", "yes", "schoolId must be the instructor's own school"],
         ["title", "string", "yes", "max 200 chars"],
         ["description", "string", "no", "max 2000 chars"],
         ["scheduledAt", "datetime", "yes", "must be in the future"],
@@ -816,7 +843,7 @@ d.P("Stages, in order: THEORY_LEARNING → THEORY_COMPLETED → QUIZ_PASSED → 
     "ROAD_TRAINING_STARTED → ROAD_TRAINING_IN_PROGRESS → ROAD_READY → "
     "DVLA_PROCESSING → LICENSE_APPROVED.")
 
-ENDPOINT("GET", "/progress/license/students/{studentId}", "Get a student's workflow state.", access="ADMIN, INSTRUCTOR, or the STUDENT themselves",
+ENDPOINT("GET", "/progress/license/students/{studentId}", "Get a student's workflow state.", access="ADMIN or INSTRUCTOR of the student's school, or the STUDENT themselves",
     response=[
         ["currentStage", "enum", "see the sequence above"],
         ["theoryProgressPercent", "number", "0-100"],
@@ -835,7 +862,7 @@ ENDPOINT("POST", "/progress/license/students/{studentId}/quiz-passed", "Mark the
            "automatically when QuizService.submit() records a genuine passing attempt on a "
            "quiz linked to the student's workflow. It's ADMIN-only specifically so a student "
            "can't call it themselves to skip taking the quiz."])
-ENDPOINT("PUT", "/progress/license/students/{studentId}/advance", "Advance to the next stage.", access="ADMIN or INSTRUCTOR",
+ENDPOINT("PUT", "/progress/license/students/{studentId}/advance", "Advance to the next stage.", access="ADMIN or INSTRUCTOR of the student's school",
     request=[["targetStage", "enum", "yes", "must be the next stage in sequence, or a later one where the API allows a manual jump"],
              ["notes", "string", "no", ""]],
     notes=["Rejected with 400 for: skipping a stage that requires automated progression "
@@ -856,7 +883,7 @@ d.P("An instructor records a formal pass/fail practical driving assessment for o
 
 ENDPOINT("POST", "/driving-assessments", "Record a driving assessment for a student.", access="INSTRUCTOR only",
     request=[
-        ["studentId", "number", "yes", "StudentProfile.id"],
+        ["studentId", "number", "yes", "StudentProfile.id - must be a student in the instructor's own school"],
         ["bookingId", "number", "no", "if provided, must actually belong to this instructor+student pair"],
         ["assessmentDate", "datetime", "yes", ""],
         ["score", "number", "yes", "0-100"],
@@ -902,22 +929,25 @@ d.P("Two things happen here: the system automatically sends notifications for ce
 
 ENDPOINT("POST", "/notifications/send", "Send a notification to a user.", access="ADMIN or INSTRUCTOR",
     request=[
-        ["userId", "number", "yes", "the raw User.id (not a profile id) of the recipient"],
+        ["userId", "number", "yes", "the raw User.id (not a profile id) of the recipient - must be in the caller's own school (bootstrap admin: anyone)"],
         ["subject", "string", "yes", "max 200 chars"],
         ["body", "string", "yes", ""],
         ["channel", "enum", "yes", "EMAIL, SMS, PUSH, IN_APP"],
         ["recipientAddress", "string", "no", "overrides the default recipient address (the user's own email) — rarely needed"],
     ],
     response=[["status", "enum", "PENDING, SENT, or FAILED — see the important note below"]],
-    notes=["IMPORTANT — EMAIL is asynchronous: the response comes back with status "
+    notes=["IMPORTANT — EMAIL and SMS are asynchronous: the response comes back with status "
            "PENDING immediately (the actual send happens moments later on a background "
            "thread, so the caller isn't stuck waiting on a slow mail server). If you display "
            "delivery status in a UI, don't treat PENDING as final — either poll GET "
            "/notifications/me afterward, or simply don't surface real-time delivery status "
            "for EMAIL at all (the common choice).",
            "IN_APP is synchronous and settles to SENT immediately in the same response.",
-           "SMS and PUSH channels are not currently wired to a real provider — they always "
-           "come back as FAILED. Don't offer these as user-facing channel choices yet."])
+           "SMS sends through Twilio only once the server's TWILIO_ACCOUNT_SID / "
+           "TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER are set, and only to a recipient with a "
+           "phone number on their profile - otherwise it settles to FAILED. PUSH is not wired "
+           "to a real provider yet and always comes back FAILED - don't offer it as a "
+           "user-facing channel choice."])
 
 ENDPOINT("GET", "/notifications/me", "My own notifications, most recent first.", access="Any authenticated user",
     notes=["This is the endpoint for a bell-icon notification list / inbox."])
