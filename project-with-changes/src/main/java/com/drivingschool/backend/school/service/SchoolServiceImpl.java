@@ -169,15 +169,11 @@ public class SchoolServiceImpl implements SchoolService {
     }
 
     private void sendWelcomeNotification(User user) {
-        try {
-            notificationService.send(SendNotificationRequest.builder()
-                    .userId(user.getId())
-                    .subject("Welcome to Aidly!")
-                    .body("Your admin account is ready. We're glad to have you on board - explore around and let us know if you need anything.")
-                    .channel(NotificationChannel.IN_APP)
-                    .build());
-        } catch (Exception ex) {
-            log.warn("Failed to send welcome notification: userId={}", user.getId(), ex);
-        }
+        notificationService.sendAfterCommit(SendNotificationRequest.builder()
+                .userId(user.getId())
+                .subject("Welcome to Aidly!")
+                .body("Your admin account is ready. We're glad to have you on board - explore around and let us know if you need anything.")
+                .channel(NotificationChannel.IN_APP)
+                .build());
     }
 }

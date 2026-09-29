@@ -21,7 +21,6 @@ import com.drivingschool.backend.user.repository.UserRepository;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -29,7 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class LessonQuestionSubmissionService {
@@ -240,33 +238,23 @@ public class LessonQuestionSubmissionService {
 
     private void notifyInstructorOfNewQuestion(LessonQuestionSubmission question, StudentProfile student,
                                                 InstructorProfile instructor) {
-        try {
-            notificationService.send(SendNotificationRequest.builder()
-                    .userId(instructor.getUser().getId())
-                    .subject("New question from " + student.getFirstName() + " " + student.getLastName())
-                    .body("%s asked: %s".formatted(
-                            student.getFirstName() + " " + student.getLastName(), question.getSubject()))
-                    .channel(NotificationChannel.IN_APP)
-                    .build());
-        } catch (Exception ex) {
-            log.warn("Failed to send new-question notification: questionId={}, instructorId={}",
-                    question.getId(), instructor.getId(), ex);
-        }
+        notificationService.sendAfterCommit(SendNotificationRequest.builder()
+                .userId(instructor.getUser().getId())
+                .subject("New question from " + student.getFirstName() + " " + student.getLastName())
+                .body("%s asked: %s".formatted(
+                        student.getFirstName() + " " + student.getLastName(), question.getSubject()))
+                .channel(NotificationChannel.IN_APP)
+                .build());
     }
 
     private void notifyStudentOfResponse(LessonQuestionSubmission question, InstructorProfile instructor) {
-        try {
-            notificationService.send(SendNotificationRequest.builder()
-                    .userId(question.getStudent().getUser().getId())
-                    .subject("Your question was answered")
-                    .body("%s %s answered your question: %s".formatted(
-                            instructor.getFirstName(), instructor.getLastName(), question.getSubject()))
-                    .channel(NotificationChannel.IN_APP)
-                    .build());
-        } catch (Exception ex) {
-            log.warn("Failed to send question-answered notification: questionId={}, studentId={}",
-                    question.getId(), question.getStudent().getId(), ex);
-        }
+        notificationService.sendAfterCommit(SendNotificationRequest.builder()
+                .userId(question.getStudent().getUser().getId())
+                .subject("Your question was answered")
+                .body("%s %s answered your question: %s".formatted(
+                        instructor.getFirstName(), instructor.getLastName(), question.getSubject()))
+                .channel(NotificationChannel.IN_APP)
+                .build());
     }
 }
 

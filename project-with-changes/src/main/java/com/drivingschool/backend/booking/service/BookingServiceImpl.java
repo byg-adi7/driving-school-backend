@@ -117,30 +117,22 @@ public class BookingServiceImpl implements BookingService {
                 .formatted(instructor.getFirstName(), instructor.getLastName(),
                         booking.getBookingType(), booking.getScheduledAt().format(NOTIFICATION_DATE_FORMAT));
 
-        try {
-            notificationService.send(SendNotificationRequest.builder()
-                    .userId(student.getUser().getId())
-                    .subject(subject)
-                    .body(body)
-                    .channel(NotificationChannel.IN_APP)
-                    .build());
-        } catch (Exception ex) {
-            log.warn("Failed to send booking IN_APP notification: bookingId={}, studentId={}", booking.getId(), student.getId(), ex);
-        }
+        notificationService.sendAfterCommit(SendNotificationRequest.builder()
+                .userId(student.getUser().getId())
+                .subject(subject)
+                .body(body)
+                .channel(NotificationChannel.IN_APP)
+                .build());
         // A scheduled lesson is time-sensitive enough to be worth a text, not
         // just an in-app entry the student might not see in time - falls back
         // to a harmless FAILED record until Twilio credentials are set, and
         // to "no phone number on file" if the student never added one.
-        try {
-            notificationService.send(SendNotificationRequest.builder()
-                    .userId(student.getUser().getId())
-                    .subject(subject)
-                    .body(body)
-                    .channel(NotificationChannel.SMS)
-                    .build());
-        } catch (Exception ex) {
-            log.warn("Failed to send booking SMS notification: bookingId={}, studentId={}", booking.getId(), student.getId(), ex);
-        }
+        notificationService.sendAfterCommit(SendNotificationRequest.builder()
+                .userId(student.getUser().getId())
+                .subject(subject)
+                .body(body)
+                .channel(NotificationChannel.SMS)
+                .build());
     }
 
     @Override
@@ -178,29 +170,21 @@ public class BookingServiceImpl implements BookingService {
         String body = "Your %s lesson scheduled for %s has been cancelled."
                 .formatted(booking.getBookingType(), booking.getScheduledAt().format(NOTIFICATION_DATE_FORMAT));
 
-        try {
-            notificationService.send(SendNotificationRequest.builder()
-                    .userId(booking.getStudent().getUser().getId())
-                    .subject(subject)
-                    .body(body)
-                    .channel(NotificationChannel.IN_APP)
-                    .build());
-        } catch (Exception ex) {
-            log.warn("Failed to send cancellation IN_APP notification: bookingId={}", booking.getId(), ex);
-        }
+        notificationService.sendAfterCommit(SendNotificationRequest.builder()
+                .userId(booking.getStudent().getUser().getId())
+                .subject(subject)
+                .body(body)
+                .channel(NotificationChannel.IN_APP)
+                .build());
         // A cancellation is the clearest case for SMS in this app - a student
         // who doesn't check the app in time could otherwise show up for a
         // lesson that no longer exists.
-        try {
-            notificationService.send(SendNotificationRequest.builder()
-                    .userId(booking.getStudent().getUser().getId())
-                    .subject(subject)
-                    .body(body)
-                    .channel(NotificationChannel.SMS)
-                    .build());
-        } catch (Exception ex) {
-            log.warn("Failed to send cancellation SMS notification: bookingId={}", booking.getId(), ex);
-        }
+        notificationService.sendAfterCommit(SendNotificationRequest.builder()
+                .userId(booking.getStudent().getUser().getId())
+                .subject(subject)
+                .body(body)
+                .channel(NotificationChannel.SMS)
+                .build());
     }
 
     @Override

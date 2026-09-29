@@ -79,7 +79,7 @@ class SchoolDeletionRequestServiceImplTest {
         service.requestOwnSchoolDeletion(1L);
 
         ArgumentCaptor<SendNotificationRequest> captor = ArgumentCaptor.forClass(SendNotificationRequest.class);
-        verify(notificationService, times(2)).send(captor.capture());
+        verify(notificationService, times(2)).sendAfterCommit(captor.capture());
         assertThat(captor.getAllValues())
                 .extracting(SendNotificationRequest::getChannel)
                 .containsExactlyInAnyOrder(NotificationChannel.EMAIL, NotificationChannel.IN_APP);

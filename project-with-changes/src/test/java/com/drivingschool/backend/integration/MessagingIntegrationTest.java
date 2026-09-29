@@ -69,7 +69,7 @@ class MessagingIntegrationTest extends AbstractIntegrationTest {
                         .content(json(Map.of("participantProfileId", otherSchoolInstructor.profileId()))))
                 .andExpect(status().isBadRequest());
 
-        // The student writes; it reaches THIS instructor - unread, with a preview and a notification.
+        // The student writes; it reaches THIS instructor - unread, with a preview.
         mockMvc.perform(post("/api/v1/conversations/" + conversationId + "/messages")
                         .header("Authorization", bearer(student.token()))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -84,10 +84,8 @@ class MessagingIntegrationTest extends AbstractIntegrationTest {
             assertThat(c.get("lastMessagePreview")).isEqualTo("Can we move Friday's lesson to 3pm?");
             assertThat(c.get("counterpartRole")).isEqualTo("STUDENT");
         });
-        String instructorNotifications = mockMvc.perform(get("/api/v1/notifications/me")
-                        .header("Authorization", bearer(instructor.token())))
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        assertThat(instructorNotifications).contains("New message from");
+        // (The "New message from" notification is sent after commit, so it never appears in
+        // this rolled-back harness - NotificationDeliveryIntegrationTest covers it.)
 
         // Another student of the same school can't read it.
         mockMvc.perform(get("/api/v1/conversations/" + conversationId + "/messages")

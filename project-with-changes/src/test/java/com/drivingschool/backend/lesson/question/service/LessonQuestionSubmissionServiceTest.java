@@ -451,7 +451,7 @@ class LessonQuestionSubmissionServiceTest {
 
         org.mockito.ArgumentCaptor<com.drivingschool.backend.notification.dto.SendNotificationRequest> sent =
                 org.mockito.ArgumentCaptor.forClass(com.drivingschool.backend.notification.dto.SendNotificationRequest.class);
-        verify(notificationService, times(2)).send(sent.capture());
+        verify(notificationService, times(2)).sendAfterCommit(sent.capture());
         assertThat(sent.getAllValues()).extracting(r -> r.getUserId()).containsExactlyInAnyOrder(2L, 3L);
     }
 
