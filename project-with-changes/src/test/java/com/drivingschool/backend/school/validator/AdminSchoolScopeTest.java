@@ -1,6 +1,7 @@
 package com.drivingschool.backend.school.validator;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
 import com.drivingschool.backend.role.enums.RoleName;
@@ -93,12 +94,12 @@ class AdminSchoolScopeTest {
     }
 
     @Test
-    void regularAdmin_requireAccessToAnotherSchool_throwsBadRequest() {
+    void regularAdmin_requireAccessToAnotherSchool_isForbidden() {
         callerIsRegularAdminOwning(OWN_SCHOOL_ID);
 
         assertThatCode(() -> scope.requireAccess(OWN_SCHOOL_ID)).doesNotThrowAnyException();
         assertThatThrownBy(() -> scope.requireAccess(OTHER_SCHOOL_ID))
-                .isInstanceOf(BadRequestException.class)
+                .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("do not have access");
     }
 
@@ -117,7 +118,7 @@ class AdminSchoolScopeTest {
         when(schoolRepository.findByOwningAdminId(ADMIN_USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> scope.canAccess(OWN_SCHOOL_ID))
-                .isInstanceOf(BadRequestException.class)
+                .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("do not own a school");
     }
 
@@ -140,7 +141,7 @@ class AdminSchoolScopeTest {
                 .thenReturn(Optional.of(InstructorProfile.builder().school(school(OTHER_SCHOOL_ID)).build()));
 
         assertThatThrownBy(() -> scope.requireAccessToUser(60L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -151,7 +152,7 @@ class AdminSchoolScopeTest {
         when(schoolRepository.findByOwningAdminId(70L)).thenReturn(Optional.of(school(OTHER_SCHOOL_ID)));
 
         assertThatThrownBy(() -> scope.requireAccessToUser(70L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -163,6 +164,6 @@ class AdminSchoolScopeTest {
         when(schoolRepository.findByOwningAdminId(80L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> scope.requireAccessToUser(80L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 }

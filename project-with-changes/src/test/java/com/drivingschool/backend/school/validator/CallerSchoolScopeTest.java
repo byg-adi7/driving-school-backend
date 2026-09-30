@@ -1,6 +1,7 @@
 package com.drivingschool.backend.school.validator;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
 import com.drivingschool.backend.role.enums.RoleName;
@@ -75,7 +76,7 @@ class CallerSchoolScopeTest {
                 .thenReturn(Optional.of(StudentProfile.builder().school(school(10L)).build()));
 
         assertThatCode(() -> scope.requireSameSchool(10L)).doesNotThrowAnyException();
-        assertThatThrownBy(() -> scope.requireSameSchool(20L)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> scope.requireSameSchool(20L)).isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -86,7 +87,7 @@ class CallerSchoolScopeTest {
                 .thenReturn(Optional.of(InstructorProfile.builder().school(school(10L)).build()));
 
         assertThat(scope.callerSchoolId()).contains(10L);
-        assertThatThrownBy(() -> scope.requireSameSchool(20L)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> scope.requireSameSchool(20L)).isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -96,7 +97,7 @@ class CallerSchoolScopeTest {
         when(instructorProfileRepository.findByUserId(CALLER_USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> scope.callerSchoolId())
-                .isInstanceOf(BadRequestException.class)
+                .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("do not belong to a school");
     }
 
@@ -108,7 +109,7 @@ class CallerSchoolScopeTest {
                 .thenReturn(Optional.of(InstructorProfile.builder().school(school(10L)).build()));
         when(adminSchoolScope.schoolIdOfUser(50L)).thenReturn(20L);
 
-        assertThatThrownBy(() -> scope.requireSameSchoolAsUser(50L)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> scope.requireSameSchoolAsUser(50L)).isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -118,6 +119,6 @@ class CallerSchoolScopeTest {
                 .thenReturn(Optional.of(StudentProfile.builder().school(school(10L)).build()));
         when(adminSchoolScope.schoolIdOfUser(50L)).thenReturn(null);
 
-        assertThatThrownBy(() -> scope.requireSameSchoolAsUser(50L)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> scope.requireSameSchoolAsUser(50L)).isInstanceOf(ForbiddenException.class);
     }
 }

@@ -2,7 +2,7 @@ package com.drivingschool.backend.lesson.route.service;
 
 import com.drivingschool.backend.booking.entity.Booking;
 import com.drivingschool.backend.booking.repository.BookingRepository;
-import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.lesson.route.dto.GenerateRouteRequest;
@@ -46,7 +46,7 @@ public class PracticalLessonRouteService {
         Booking booking = bookingRepository.findById(request.getBookingId())
                 .orElseThrow(() -> new ResourceNotFoundException("Booking", "id", request.getBookingId()));
         if (!booking.getInstructor().getId().equals(instructor.getId())) {
-            throw new BadRequestException("You can only generate a route for your own booking");
+            throw new ForbiddenException("You can only generate a route for your own booking");
         }
 
         Map<String, Object> routeData = openRouteService.generateRoute(
@@ -68,6 +68,13 @@ public class PracticalLessonRouteService {
                 .routeGeometry((String) routeData.get("geometry"))
                 .externalRouteId((String) routeData.get("externalRouteId"))
                 .build();
+
+        // Generating again for the same booking replaces its route (one route per lesson).
+        List<PracticalLessonRoute> previous = routeRepository.findAllByBookingIdNewestFirst(booking.getId());
+        if (!previous.isEmpty()) {
+            routeRepository.deleteAll(previous);
+            routeRepository.flush();
+        }
 
         PracticalLessonRoute savedRoute = routeRepository.save(route);
         return mapToResponse(savedRoute, (List<RouteCoordinateDTO>) routeData.get("coordinates"));
@@ -103,6 +110,15 @@ public class PracticalLessonRouteService {
 
         Page<PracticalLessonRoute> routes = routeRepository.findByInstructorId(instructor.getId(), pageable);
         return routes.map(route -> {
+            List<RouteCoordinateDTO> coordinates = parseRouteGeometry(route.getRouteGeometry());
+            return mapToResponse(route, coordinates);
+        });
+    }
+
+    /** A student's routes - the ones planned for their own lessons, newest first. */
+    @Transactional(readOnly = true)
+    public Page<RouteResponse> getMyRoutesAsStudent(Long userId, Pageable pageable) {
+        return routeRepository.findByStudentUserId(userId, pageable).map(route -> {
             List<RouteCoordinateDTO> coordinates = parseRouteGeometry(route.getRouteGeometry());
             return mapToResponse(route, coordinates);
         });

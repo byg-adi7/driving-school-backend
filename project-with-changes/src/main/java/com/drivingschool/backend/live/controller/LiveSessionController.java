@@ -15,6 +15,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -88,6 +89,14 @@ public class LiveSessionController {
         String role = SecurityUtils.getCurrentUserRole();
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Registered", liveSessionService.register(id, request, userId, role)));
+    }
+
+    @DeleteMapping("/{id}/register")
+    @Operation(summary = "Unregister yourself from a live session (before you're marked present and before it ends)")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<ApiResponse<Void>> unregister(@PathVariable Long id) {
+        liveSessionService.unregister(id, SecurityUtils.getCurrentUserId());
+        return ResponseEntity.ok(ApiResponse.success("Unregistered", null));
     }
 
     @PutMapping("/{id}/attendance/{studentId}/present")

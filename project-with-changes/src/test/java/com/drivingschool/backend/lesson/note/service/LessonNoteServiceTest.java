@@ -3,6 +3,7 @@ package com.drivingschool.backend.lesson.note.service;
 import com.drivingschool.backend.booking.entity.Booking;
 import com.drivingschool.backend.booking.repository.BookingRepository;
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
@@ -361,7 +362,7 @@ class LessonNoteServiceTest {
         when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(student));
 
         assertThatThrownBy(() -> lessonNoteService.createLessonNote(request, 1L))
-                .isInstanceOf(BadRequestException.class)
+                .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("own school");
         verify(lessonNoteRepository, never()).save(any());
     }

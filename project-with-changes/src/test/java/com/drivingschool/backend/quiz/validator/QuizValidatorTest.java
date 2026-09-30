@@ -1,6 +1,7 @@
 package com.drivingschool.backend.quiz.validator;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.learning.entity.Course;
 import com.drivingschool.backend.quiz.entity.Quiz;
@@ -53,7 +54,7 @@ class QuizValidatorTest {
         Course course = courseFor(userWithId(1L));
 
         assertThatThrownBy(() -> validator.validateCourseOwnership(course, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -68,7 +69,7 @@ class QuizValidatorTest {
         Course course = courseFor(userWithId(1L));
 
         assertThatThrownBy(() -> validator.validateCourseOwnership(course, 1L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     // --- validateQuizOwnership ---
@@ -85,7 +86,7 @@ class QuizValidatorTest {
         Quiz quiz = quizFor(userWithId(1L), false);
 
         assertThatThrownBy(() -> validator.validateQuizOwnership(quiz, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     // --- validateQuizReadAccess ---
@@ -109,7 +110,7 @@ class QuizValidatorTest {
         Quiz quiz = quizFor(userWithId(1L), false);
 
         assertThatThrownBy(() -> validator.validateQuizReadAccess(quiz, 999L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -117,7 +118,7 @@ class QuizValidatorTest {
         Quiz quiz = quizFor(userWithId(1L), false);
 
         assertThatThrownBy(() -> validator.validateQuizReadAccess(quiz, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

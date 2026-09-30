@@ -1,10 +1,13 @@
 package com.drivingschool.backend.lesson.route.validator;
 
+import com.drivingschool.backend.booking.entity.Booking;
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.lesson.route.entity.PracticalLessonRoute;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
+import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.user.entity.User;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -56,7 +59,7 @@ class RouteValidatorTest {
         PracticalLessonRoute route = routeFor(userWithId(1L));
 
         assertThatThrownBy(() -> validator.validateReadAccess(route, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     // --- validateOwnership ---
@@ -73,7 +76,7 @@ class RouteValidatorTest {
         PracticalLessonRoute route = routeFor(userWithId(1L));
 
         assertThatThrownBy(() -> validator.validateOwnership(route, 999L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     // --- validateInstructorRoutesAccess ---
@@ -91,7 +94,7 @@ class RouteValidatorTest {
         InstructorProfile instructor = instructorFor(userWithId(1L));
 
         assertThatThrownBy(() -> validator.validateInstructorRoutesAccess(instructor, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -118,5 +121,26 @@ class RouteValidatorTest {
 
         assertThatThrownBy(() -> validator.validateInstructorRoutesAccess(instructor, 999L, "ADMIN"))
                 .isInstanceOf(BadRequestException.class);
+    }
+
+    private PracticalLessonRoute routeForStudent(User studentUser) {
+        StudentProfile student = StudentProfile.builder().user(studentUser).school(School.builder().active(true).build()).build();
+        Booking booking = Booking.builder().student(student).build();
+        return PracticalLessonRoute.builder().instructor(instructorFor(userWithId(1L))).booking(booking).build();
+    }
+
+    @Test
+    void validateReadAccess_theStudentTheLessonIsFor_allowed() {
+        PracticalLessonRoute route = routeForStudent(userWithId(7L));
+
+        assertThatCode(() -> validator.validateReadAccess(route, 7L, "STUDENT")).doesNotThrowAnyException();
+    }
+
+    @Test
+    void validateReadAccess_anotherStudent_isForbidden() {
+        PracticalLessonRoute route = routeForStudent(userWithId(7L));
+
+        assertThatThrownBy(() -> validator.validateReadAccess(route, 8L, "STUDENT"))
+                .isInstanceOf(ForbiddenException.class);
     }
 }

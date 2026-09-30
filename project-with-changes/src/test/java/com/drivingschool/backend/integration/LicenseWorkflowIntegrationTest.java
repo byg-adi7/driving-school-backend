@@ -60,7 +60,7 @@ class LicenseWorkflowIntegrationTest extends AbstractIntegrationTest {
         // an unrelated student cannot view someone else's workflow
         mockMvc.perform(get("/api/v1/progress/license/students/" + student.profileId())
                         .header("Authorization", bearer(otherStudent.token())))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // an instructor can never update theory progress - role-gated entirely, not just ownership
         mockMvc.perform(put("/api/v1/progress/license/students/" + student.profileId() + "/theory-progress")
@@ -72,7 +72,7 @@ class LicenseWorkflowIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(put("/api/v1/progress/license/students/" + student.profileId() + "/theory-progress")
                         .header("Authorization", bearer(otherStudent.token()))
                         .param("progressPercent", "50"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // the student updates their own progress partway - stage doesn't move yet
         MvcResult partialResult = mockMvc.perform(put("/api/v1/progress/license/students/" + student.profileId() + "/theory-progress")
@@ -116,7 +116,7 @@ class LicenseWorkflowIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 AdvanceStageRequest.builder().targetStage(LicenseStage.ROAD_READY).build())))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // the instructor can, and gets recorded as the approver
         MvcResult roadReadyResult = mockMvc.perform(put("/api/v1/progress/license/students/" + student.profileId() + "/advance")

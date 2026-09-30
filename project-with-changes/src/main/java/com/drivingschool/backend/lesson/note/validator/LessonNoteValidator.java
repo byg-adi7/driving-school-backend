@@ -1,6 +1,7 @@
 package com.drivingschool.backend.lesson.note.validator;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.lesson.note.dto.CreateLessonNoteRequest;
@@ -29,7 +30,7 @@ public class LessonNoteValidator {
     public void validateOwnership(LessonNote note, Long callerId) {
         // callerId is the authenticated caller's User.id; compare against the instructor profile's user id
         if (!note.getInstructor().getUser().getId().equals(callerId)) {
-            throw new BadRequestException("You are not authorized to modify this lesson note");
+            throw new ForbiddenException("You are not authorized to modify this lesson note");
         }
     }
 
@@ -59,7 +60,7 @@ public class LessonNoteValidator {
         if ("STUDENT".equals(role) && note.getStudent().getUser().getId().equals(userId)) {
             return;
         }
-        throw new BadRequestException("You do not have access to this lesson note");
+        throw new ForbiddenException("You do not have access to this lesson note");
     }
 
     /**
@@ -80,7 +81,7 @@ public class LessonNoteValidator {
         if ("INSTRUCTOR".equals(role) && hasTaughtStudent) {
             return;
         }
-        throw new BadRequestException("You do not have access to this student's lesson notes");
+        throw new ForbiddenException("You do not have access to this student's lesson notes");
     }
 
     public void validateInstructorNotesAccess(InstructorProfile instructor, Long userId, String role) {
@@ -91,6 +92,6 @@ public class LessonNoteValidator {
         if ("INSTRUCTOR".equals(role) && instructor.getUser().getId().equals(userId)) {
             return;
         }
-        throw new BadRequestException("You do not have access to this instructor's lesson notes");
+        throw new ForbiddenException("You do not have access to this instructor's lesson notes");
     }
 }

@@ -1,6 +1,6 @@
 package com.drivingschool.backend.school.validator;
 
-import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
 import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.school.entity.School;
@@ -56,7 +56,7 @@ public class AdminSchoolScope {
 
     public void requireAccess(Long schoolId) {
         if (!canAccess(schoolId)) {
-            throw new BadRequestException("You do not have access to this school's records");
+            throw new ForbiddenException("You do not have access to this school's records");
         }
     }
 
@@ -85,7 +85,7 @@ public class AdminSchoolScope {
         Long callerId = currentUserService.requireUserId();
         return Optional.of(schoolRepository.findByOwningAdminId(callerId)
                 .map(School::getId)
-                .orElseThrow(() -> new BadRequestException("You do not own a school")));
+                .orElseThrow(() -> new ForbiddenException("You do not own a school")));
     }
 
     /** The school of a user's student profile, instructor profile, or owned school - null if none. */

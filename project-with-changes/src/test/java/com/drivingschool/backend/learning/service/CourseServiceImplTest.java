@@ -1,6 +1,7 @@
 package com.drivingschool.backend.learning.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
@@ -137,7 +138,7 @@ class CourseServiceImplTest {
         when(courseRepository.findById(5L)).thenReturn(Optional.of(course));
 
         assertThatThrownBy(() -> courseService.update(5L, request, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(courseRepository, never()).save(any());
     }
@@ -162,7 +163,7 @@ class CourseServiceImplTest {
         when(courseRepository.findById(5L)).thenReturn(Optional.of(course));
 
         assertThatThrownBy(() -> courseService.publish(5L, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(courseRepository, never()).save(any());
     }
@@ -197,7 +198,7 @@ class CourseServiceImplTest {
         when(adminSchoolScope.canAccess(any())).thenReturn(false);
 
         assertThatThrownBy(() -> courseService.archive(5L, 999L, "ADMIN"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
         verify(courseRepository, never()).save(any());
     }
 
@@ -209,7 +210,7 @@ class CourseServiceImplTest {
         when(courseRepository.findById(5L)).thenReturn(Optional.of(course));
 
         assertThatThrownBy(() -> courseService.getById(5L, 999L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -295,5 +296,27 @@ class CourseServiceImplTest {
 
         assertThat(result).hasSize(1);
         verify(courseRepository, never()).findByStatus(any());
+    }
+
+    // --- admin oversight: drafts included ---
+
+    @Test
+    void getAllIncludingDrafts_asRegularAdmin_returnsEveryCourseOfTheirSchool_draftsIncluded() {
+        InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
+        when(callerSchoolScope.callerSchoolId()).thenReturn(Optional.of(7L));
+        when(courseRepository.findByInstructor_School_Id(7L)).thenReturn(List.of(
+                courseFor(instructor, CourseStatus.DRAFT), courseFor(instructor, CourseStatus.PUBLISHED)));
+
+        assertThat(courseService.getAllIncludingDrafts()).extracting(c -> c.getStatus())
+                .containsExactlyInAnyOrder(CourseStatus.DRAFT, CourseStatus.PUBLISHED);
+        verify(courseRepository, never()).findAll();
+    }
+
+    @Test
+    void getAllIncludingDrafts_asBootstrapAdmin_returnsEverySchoolsCourses() {
+        when(callerSchoolScope.callerSchoolId()).thenReturn(Optional.empty());
+        when(courseRepository.findAll()).thenReturn(List.of());
+
+        assertThat(courseService.getAllIncludingDrafts()).isEmpty();
     }
 }

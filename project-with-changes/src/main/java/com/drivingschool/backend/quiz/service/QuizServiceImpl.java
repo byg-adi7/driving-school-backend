@@ -1,6 +1,7 @@
 package com.drivingschool.backend.quiz.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.gamification.service.GamificationService;
 import com.drivingschool.backend.learning.entity.Course;
@@ -194,7 +195,7 @@ public class QuizServiceImpl implements QuizService {
                         .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for user ID: " + userId));
         validator.validateAdminSchoolAccess(student);
         if (!student.getSchool().getId().equals(quiz.getCourse().getInstructor().getSchool().getId())) {
-            throw new BadRequestException("This quiz belongs to another school");
+            throw new ForbiddenException("This quiz belongs to another school");
         }
 
         long attempts = quizSubmissionRepository.countByQuizIdAndStudentId(quizId, student.getId());

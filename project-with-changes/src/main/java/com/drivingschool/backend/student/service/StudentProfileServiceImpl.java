@@ -1,6 +1,6 @@
 package com.drivingschool.backend.student.service;
 
-import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
@@ -84,7 +84,7 @@ public class StudentProfileServiceImpl implements StudentProfileService {
                 .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + callerId));
 
         if (!callerProfile.getSchool().getId().equals(schoolId)) {
-            throw new BadRequestException("You can only view students in your own school");
+            throw new ForbiddenException("You can only view students in your own school");
         }
     }
 

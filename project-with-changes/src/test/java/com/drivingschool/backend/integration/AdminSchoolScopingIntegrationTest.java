@@ -95,10 +95,10 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
                                 "lastName", "Student",
                                 "schoolId", schoolBId,
                                 "role", RoleName.STUDENT.name()))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         mockMvc.perform(delete("/api/v1/users/" + studentB.userId()).header("Authorization", bearer(adminAToken)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
         // ...and the attempted delete really didn't land: B's student can still use their account.
         mockMvc.perform(get("/api/v1/auth/me").header("Authorization", bearer(studentB.token())))
                 .andExpect(status().isOk());
@@ -106,19 +106,19 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
         // --- student/instructor profiles ---
 
         mockMvc.perform(get("/api/v1/students/school/" + schoolBId).header("Authorization", bearer(adminAToken)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/instructors/school/" + schoolBId).header("Authorization", bearer(adminAToken)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
         mockMvc.perform(patch("/api/v1/students/" + studentB.profileId() + "/status")
                         .header("Authorization", bearer(adminAToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("status", StudentStatus.SUSPENDED.name()))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
         mockMvc.perform(patch("/api/v1/instructors/" + instructorB.profileId() + "/active")
                         .header("Authorization", bearer(adminAToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("active", false))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // Admin A still has full access to their own school.
         mockMvc.perform(get("/api/v1/students/school/" + schoolAId).header("Authorization", bearer(adminAToken)))
@@ -136,7 +136,7 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
                                 "modelYear", 2022,
                                 "color", "White",
                                 "schoolId", schoolBId))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // --- bookings ---
 
@@ -178,7 +178,7 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
                                 "subject", "Not your student",
                                 "body", "This should never be delivered.",
                                 "channel", NotificationChannel.IN_APP.name()))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // --- ADMIN-only "list everything" endpoints are filtered, not rejected ---
 
@@ -206,7 +206,7 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
         assertThat(pageContentIds(adminBNotes)).contains(noteId);
 
         mockMvc.perform(get("/api/v1/lesson-notes/" + noteId).header("Authorization", bearer(adminAToken)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // --- the bootstrap admin is still unrestricted ---
 
@@ -246,7 +246,7 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
                                 "strengths", "Careful, well-controlled clutch work throughout.",
                                 "weaknesses", "Loses reference points when reversing into a bay.",
                                 "recommendations", "Repeat bay parking with a focus on mirror checks."))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
         // ...nor record a driving assessment for one.
         mockMvc.perform(post("/api/v1/driving-assessments")
                         .header("Authorization", bearer(instructorA.token()))
@@ -256,7 +256,7 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
                                 "assessmentDate", LocalDateTime.now().withNano(0).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
                                 "score", 90,
                                 "result", "PASSED"))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // An instructor can't schedule a live session under another school.
         mockMvc.perform(post("/api/v1/live-sessions")
@@ -269,7 +269,7 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
                                 "scheduledAt", LocalDateTime.now().plusDays(3).withNano(0).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
                                 "durationMinutes", 60,
                                 "meetingUrl", "https://example.com/meet"))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // An instructor can't message another school's user, or read its vehicles.
         mockMvc.perform(post("/api/v1/notifications/send")
@@ -280,9 +280,9 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
                                 "subject", "Not your student",
                                 "body", "This should never be delivered.",
                                 "channel", NotificationChannel.IN_APP.name()))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/vehicles/school/" + schoolBId).header("Authorization", bearer(instructorA.token())))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/vehicles/school/" + schoolAId).header("Authorization", bearer(instructorA.token())))
                 .andExpect(status().isOk());
 
@@ -292,7 +292,7 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isCreated());
         mockMvc.perform(get("/api/v1/progress/license/students/" + studentB.profileId())
                         .header("Authorization", bearer(instructorA.token())))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/progress/license/students/" + studentB.profileId())
                         .header("Authorization", bearer(instructorB.token())))
                 .andExpect(status().isOk());
@@ -305,7 +305,7 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
                                 "subject", "Roundabouts",
                                 "questionBody", "Who has priority on a mini roundabout?",
                                 "assignedInstructorId", instructorB.profileId()))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // An unassigned question is only open to instructors of the student's own school.
         MvcResult questionResult = mockMvc.perform(post("/api/v1/lesson-questions")
@@ -335,7 +335,7 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", bearer(instructorA.token()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("response", "Every five to eight seconds."))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/lesson-questions/" + questionId + "/respond")
                         .header("Authorization", bearer(instructorB.token()))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -361,9 +361,9 @@ class AdminSchoolScopingIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/api/v1/courses/" + courseId).header("Authorization", bearer(studentA.token())))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/courses/" + courseId).header("Authorization", bearer(studentB.token())))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/quizzes/course/" + courseId).header("Authorization", bearer(studentB.token())))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         MvcResult studentACourses = mockMvc.perform(get("/api/v1/courses").header("Authorization", bearer(studentA.token())))
                 .andExpect(status().isOk())

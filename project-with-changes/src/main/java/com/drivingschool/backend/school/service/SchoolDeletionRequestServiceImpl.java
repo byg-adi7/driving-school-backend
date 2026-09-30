@@ -1,6 +1,7 @@
 package com.drivingschool.backend.school.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.notification.dto.SendNotificationRequest;
 import com.drivingschool.backend.notification.enums.NotificationChannel;
@@ -59,7 +60,7 @@ public class SchoolDeletionRequestServiceImpl implements SchoolDeletionRequestSe
         // SchoolRepository.findByOwningAdminId for why the mappedBy side isn't used.
         School owned = schoolRepository.findByOwningAdminId(callerId).orElse(null);
         if (owned == null) {
-            throw new BadRequestException("You do not own a school");
+            throw new ForbiddenException("You do not own a school");
         }
         if (requestRepository.existsBySchoolIdAndStatus(owned.getId(), SchoolDeletionRequestStatus.PENDING)) {
             throw new BadRequestException("A deletion request for your school is already pending");
@@ -144,7 +145,7 @@ public class SchoolDeletionRequestServiceImpl implements SchoolDeletionRequestSe
         User caller = userRepository.findById(callerId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", callerId));
         if (!caller.isBootstrapAdmin()) {
-            throw new BadRequestException("Only the bootstrap admin can review school deletion requests");
+            throw new ForbiddenException("Only the bootstrap admin can review school deletion requests");
         }
         return caller;
     }

@@ -1,6 +1,7 @@
 package com.drivingschool.backend.lesson.note.validator;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.lesson.note.entity.LessonNote;
 import com.drivingschool.backend.school.entity.School;
@@ -49,7 +50,7 @@ class LessonNoteValidatorTest {
         LessonNote note = noteFor(userWithId(1L), userWithId(2L));
 
         assertThatThrownBy(() -> validator.validateOwnership(note, 999L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     // --- validateReadAccess ---
@@ -73,7 +74,7 @@ class LessonNoteValidatorTest {
         LessonNote note = noteFor(userWithId(1L), userWithId(2L));
 
         assertThatThrownBy(() -> validator.validateReadAccess(note, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -88,7 +89,7 @@ class LessonNoteValidatorTest {
         LessonNote note = noteFor(userWithId(1L), userWithId(2L));
 
         assertThatThrownBy(() -> validator.validateReadAccess(note, 999L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     // --- validateStudentNotesAccess ---
@@ -105,7 +106,7 @@ class LessonNoteValidatorTest {
         StudentProfile student = StudentProfile.builder().user(userWithId(2L)).school(School.builder().active(true).build()).build();
 
         assertThatThrownBy(() -> validator.validateStudentNotesAccess(student, 999L, "STUDENT", false))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -120,7 +121,7 @@ class LessonNoteValidatorTest {
         StudentProfile student = StudentProfile.builder().user(userWithId(2L)).school(School.builder().active(true).build()).build();
 
         assertThatThrownBy(() -> validator.validateStudentNotesAccess(student, 5L, "INSTRUCTOR", false))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -144,7 +145,7 @@ class LessonNoteValidatorTest {
         InstructorProfile instructor = InstructorProfile.builder().user(userWithId(1L)).active(true).school(School.builder().active(true).build()).build();
 
         assertThatThrownBy(() -> validator.validateInstructorNotesAccess(instructor, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

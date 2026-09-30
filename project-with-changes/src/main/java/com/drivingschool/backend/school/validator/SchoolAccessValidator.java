@@ -1,6 +1,6 @@
 package com.drivingschool.backend.school.validator;
 
-import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.school.entity.School;
 import com.drivingschool.backend.school.repository.SchoolRepository;
 import com.drivingschool.backend.user.entity.User;
@@ -23,7 +23,7 @@ public class SchoolAccessValidator {
         // SchoolRepository.findByOwningAdminId for why the mappedBy side isn't used.
         School owned = schoolRepository.findByOwningAdminId(caller.getId()).orElse(null);
         if (owned == null || !owned.getId().equals(school.getId())) {
-            throw new BadRequestException("You do not have access to this school");
+            throw new ForbiddenException("You do not have access to this school");
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.drivingschool.backend.school.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.role.entity.Role;
 import com.drivingschool.backend.role.enums.RoleName;
@@ -108,7 +109,7 @@ class SchoolServiceImplTest {
         when(currentUserService.isBootstrapAdmin()).thenReturn(false);
 
         assertThatThrownBy(() -> schoolService.createWithAdmin(createRequest()))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(schoolRepository, never()).save(any());
     }
@@ -169,7 +170,7 @@ class SchoolServiceImplTest {
         when(userRepository.findById(51L)).thenReturn(Optional.of(otherAdmin));
 
         assertThatThrownBy(() -> schoolService.getById(1L, 51L, "ADMIN"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -239,7 +240,7 @@ class SchoolServiceImplTest {
         when(currentUserService.isBootstrapAdmin()).thenReturn(false);
 
         assertThatThrownBy(() -> schoolService.deleteDirectly(1L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(cascadeDeletionService, never()).execute(any());
     }

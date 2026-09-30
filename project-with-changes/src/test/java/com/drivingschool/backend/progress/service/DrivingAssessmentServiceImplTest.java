@@ -5,6 +5,7 @@ import com.drivingschool.backend.booking.enums.BookingStatus;
 import com.drivingschool.backend.booking.enums.BookingType;
 import com.drivingschool.backend.booking.repository.BookingRepository;
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.gamification.service.GamificationService;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
@@ -252,7 +253,7 @@ class DrivingAssessmentServiceImplTest {
         request.setFeedback("Edited");
 
         assertThatThrownBy(() -> service.updateFeedback(900L, request, 999L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(drivingAssessmentRepository, never()).save(any());
     }
@@ -293,7 +294,7 @@ class DrivingAssessmentServiceImplTest {
         when(drivingAssessmentRepository.findById(900L)).thenReturn(Optional.of(assessment));
 
         assertThatThrownBy(() -> service.getAssessment(900L, 999L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -325,7 +326,7 @@ class DrivingAssessmentServiceImplTest {
         when(studentProfileRepository.findById(60L)).thenReturn(Optional.of(student));
 
         assertThatThrownBy(() -> service.createAssessment(request, 1L))
-                .isInstanceOf(BadRequestException.class)
+                .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("own school");
         verify(drivingAssessmentRepository, never()).save(any());
     }

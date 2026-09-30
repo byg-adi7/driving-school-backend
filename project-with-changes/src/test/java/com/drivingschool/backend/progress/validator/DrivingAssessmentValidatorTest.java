@@ -1,6 +1,7 @@
 package com.drivingschool.backend.progress.validator;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.progress.entity.DrivingAssessment;
 import com.drivingschool.backend.progress.enums.AssessmentResult;
@@ -52,7 +53,7 @@ class DrivingAssessmentValidatorTest {
         DrivingAssessment assessment = assessmentFor(userWithId(1L), userWithId(2L));
 
         assertThatThrownBy(() -> validator.validateOwnership(assessment, 999L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     // --- validateReadAccess ---
@@ -76,7 +77,7 @@ class DrivingAssessmentValidatorTest {
         DrivingAssessment assessment = assessmentFor(userWithId(1L), userWithId(2L));
 
         assertThatThrownBy(() -> validator.validateReadAccess(assessment, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -91,7 +92,7 @@ class DrivingAssessmentValidatorTest {
         DrivingAssessment assessment = assessmentFor(userWithId(1L), userWithId(2L));
 
         assertThatThrownBy(() -> validator.validateReadAccess(assessment, 999L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     // --- validateStudentAssessmentsAccess ---
@@ -108,7 +109,7 @@ class DrivingAssessmentValidatorTest {
         StudentProfile student = StudentProfile.builder().user(userWithId(2L)).school(School.builder().active(true).build()).build();
 
         assertThatThrownBy(() -> validator.validateStudentAssessmentsAccess(student, 999L, "STUDENT", false))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -123,7 +124,7 @@ class DrivingAssessmentValidatorTest {
         StudentProfile student = StudentProfile.builder().user(userWithId(2L)).school(School.builder().active(true).build()).build();
 
         assertThatThrownBy(() -> validator.validateStudentAssessmentsAccess(student, 5L, "INSTRUCTOR", false))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     // --- validateInstructorAssessmentsAccess ---
@@ -140,7 +141,7 @@ class DrivingAssessmentValidatorTest {
         InstructorProfile instructor = InstructorProfile.builder().user(userWithId(1L)).active(true).school(School.builder().active(true).build()).build();
 
         assertThatThrownBy(() -> validator.validateInstructorAssessmentsAccess(instructor, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

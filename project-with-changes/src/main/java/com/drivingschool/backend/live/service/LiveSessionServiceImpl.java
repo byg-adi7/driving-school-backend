@@ -1,6 +1,7 @@
 package com.drivingschool.backend.live.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
@@ -76,7 +77,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         // The session (and its meeting URL) is shown to every student of request.schoolId,
         // so it must be the instructor's own school.
         if (!instructor.getSchool().getId().equals(request.getSchoolId())) {
-            throw new BadRequestException("A session can only be scheduled at its instructor's own school");
+            throw new ForbiddenException("A session can only be scheduled at its instructor's own school");
         }
 
         School school = schoolRepository.findById(request.getSchoolId())
@@ -105,7 +106,10 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         LiveSession session = findSession(sessionId);
         validator.validateSchoolAccess(session.getSchool().getId(), resolveCallerSchoolId(userId, role), role);
         int count = attendanceRepository.findBySessionId(sessionId).size();
-        return liveSessionMapper.toResponse(session, count);
+        Boolean registered = callerStudentId(userId, role)
+                .map(studentId -> attendanceRepository.existsBySessionIdAndStudentId(sessionId, studentId))
+                .orElse(null);
+        return liveSessionMapper.toResponse(session, count, registered);
     }
 
     @Override
@@ -125,7 +129,13 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         validator.validateSchoolAccess(schoolId, resolveCallerSchoolId(userId, role), role);
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime weekAhead = now.plusDays(7);
-        List<LiveSession> sessions = liveSessionRepository.findBySchoolIdAndScheduledAtBetween(schoolId, now, weekAhead);
+        // Started sessions stay listed until they end (a class is at most a day long), so a
+        // student can still find and join one that's under way.
+        List<LiveSession> sessions = liveSessionRepository.findBySchoolIdAndScheduledAtBetween(
+                        schoolId, now.minusMinutes(LiveSession.MAX_DURATION_MINUTES), weekAhead).stream()
+                .filter(s -> !s.hasEnded(now))
+                .sorted(java.util.Comparator.comparing(LiveSession::getScheduledAt))
+                .toList();
 
         List<Long> sessionIds = sessions.stream().map(LiveSession::getId).toList();
         Map<Long, Long> countsBySessionId = sessionIds.isEmpty()
@@ -134,8 +144,14 @@ public class LiveSessionServiceImpl implements LiveSessionService {
                         .collect(Collectors.toMap(AttendanceRepository.SessionAttendanceCount::getSessionId,
                                 AttendanceRepository.SessionAttendanceCount::getAttendeeCount));
 
+        java.util.Optional<Long> studentId = callerStudentId(userId, role);
+        java.util.Set<Long> registeredIds = studentId.isEmpty() || sessionIds.isEmpty()
+                ? java.util.Set.of()
+                : new java.util.HashSet<>(attendanceRepository.findRegisteredSessionIds(studentId.get(), sessionIds));
+
         return sessions.stream()
-                .map(s -> liveSessionMapper.toResponse(s, countsBySessionId.getOrDefault(s.getId(), 0L).intValue()))
+                .map(s -> liveSessionMapper.toResponse(s, countsBySessionId.getOrDefault(s.getId(), 0L).intValue(),
+                        studentId.isPresent() ? registeredIds.contains(s.getId()) : null))
                 .toList();
     }
 
@@ -145,6 +161,10 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         LiveSession session = findSession(sessionId);
         if (session.getStatus() == SessionStatus.CANCELLED || session.getStatus() == SessionStatus.COMPLETED) {
             throw new BadRequestException("Cannot register for this session");
+        }
+        // Late registration is fine while the class is running; not once it's over.
+        if (session.hasEnded(LocalDateTime.now())) {
+            throw new BadRequestException("This session has already ended");
         }
 
         // STUDENT can only ever register themselves - request.getStudentId() is
@@ -160,7 +180,7 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         // admin or student - may register a student into another school's session.
         validator.validateSchoolAccess(session.getSchool().getId(), student.getSchool().getId(), role);
         if (!session.getSchool().getId().equals(student.getSchool().getId())) {
-            throw new BadRequestException("Student does not belong to this session's school");
+            throw new ForbiddenException("Student does not belong to this session's school");
         }
 
         if (attendanceRepository.existsBySessionIdAndStudentId(sessionId, student.getId())) {
@@ -180,7 +200,31 @@ public class LiveSessionServiceImpl implements LiveSessionService {
                 .status(AttendanceStatus.REGISTERED)
                 .build();
 
-        return liveSessionMapper.toAttendanceResponse(attendanceRepository.save(attendance));
+        AttendanceResponse saved = liveSessionMapper.toAttendanceResponse(attendanceRepository.save(attendance));
+        // Registering is what unlocks the meeting link, so hand it over right away.
+        return AttendanceResponse.builder()
+                .id(saved.getId())
+                .sessionId(saved.getSessionId())
+                .studentId(saved.getStudentId())
+                .studentName(saved.getStudentName())
+                .status(saved.getStatus())
+                .checkedInAt(saved.getCheckedInAt())
+                .meetingUrl(session.getMeetingUrl())
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public void unregister(Long sessionId, Long userId) {
+        LiveSession session = findSession(sessionId);
+        StudentProfile student = studentProfileRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student profile not found for user ID: " + userId));
+        Attendance attendance = attendanceRepository.findBySessionIdAndStudentId(sessionId, student.getId())
+                .orElseThrow(() -> new BadRequestException("You are not registered for this session"));
+        if (attendance.getStatus() != AttendanceStatus.REGISTERED || session.hasEnded(LocalDateTime.now())) {
+            throw new BadRequestException("You can no longer unregister from this session");
+        }
+        attendanceRepository.delete(attendance);
     }
 
     @Override
@@ -201,6 +245,14 @@ public class LiveSessionServiceImpl implements LiveSessionService {
         return attendanceRepository.findBySessionId(sessionId).stream()
                 .map(liveSessionMapper::toAttendanceResponse)
                 .toList();
+    }
+
+    // The calling student's profile id, or empty for instructors and admins.
+    private java.util.Optional<Long> callerStudentId(Long userId, String role) {
+        if (!"STUDENT".equals(role)) {
+            return java.util.Optional.empty();
+        }
+        return studentProfileRepository.findByUserId(userId).map(StudentProfile::getId);
     }
 
     private LiveSession findSession(Long sessionId) {

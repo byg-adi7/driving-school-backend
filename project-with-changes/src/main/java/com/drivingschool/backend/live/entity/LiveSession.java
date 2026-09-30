@@ -33,6 +33,9 @@ import java.util.List;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class LiveSession extends BaseEntity {
 
+    /** A live class is at most a day long - keeps "still running" lookups bounded. */
+    public static final int MAX_DURATION_MINUTES = 24 * 60;
+
     @Column(nullable = false, length = 200)
     private String title;
 
@@ -83,5 +86,13 @@ public class LiveSession extends BaseEntity {
 
     public void updateStatus(SessionStatus status) {
         this.status = status;
+    }
+
+    public LocalDateTime getEndsAt() {
+        return scheduledAt.plusMinutes(durationMinutes);
+    }
+
+    public boolean hasEnded(LocalDateTime now) {
+        return !now.isBefore(getEndsAt());
     }
 }

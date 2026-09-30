@@ -1,6 +1,7 @@
 package com.drivingschool.backend.lesson.note.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.lesson.note.entity.LessonNote;
 import com.drivingschool.backend.lesson.note.entity.LessonNoteAttachment;
@@ -130,7 +131,7 @@ class LessonNoteAttachmentServiceTest {
         when(attachmentRepository.findByIdWithLessonNote(200L)).thenReturn(Optional.of(attachment));
 
         assertThatThrownBy(() -> attachmentService.downloadAttachment(100L, 200L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -145,7 +146,7 @@ class LessonNoteAttachmentServiceTest {
         when(attachmentRepository.findByIdWithLessonNote(200L)).thenReturn(Optional.of(attachment));
 
         assertThatThrownBy(() -> attachmentService.downloadAttachment(100L, 200L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     // --- uploadAttachment: verifies the InstructorProfile-vs-User ID bug fix ---
@@ -162,7 +163,7 @@ class LessonNoteAttachmentServiceTest {
         when(userRepository.findById(999L)).thenReturn(Optional.of(unrelatedInstructor));
 
         assertThatThrownBy(() -> attachmentService.uploadAttachment(100L, null, null))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     // --- getAttachments / getAttachmentsPaginated: previously had zero access control ---
@@ -178,7 +179,7 @@ class LessonNoteAttachmentServiceTest {
         when(lessonNoteRepository.findById(100L)).thenReturn(Optional.of(note));
 
         assertThatThrownBy(() -> attachmentService.getAttachments(100L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

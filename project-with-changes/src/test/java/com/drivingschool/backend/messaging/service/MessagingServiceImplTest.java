@@ -1,6 +1,7 @@
 package com.drivingschool.backend.messaging.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
 import com.drivingschool.backend.messaging.dto.ContactResponse;
@@ -180,7 +181,7 @@ class MessagingServiceImplTest {
         when(instructorProfileRepository.findById(20L)).thenReturn(Optional.of(instructor(20L, user(INSTRUCTOR_USER_ID), school(6L), true)));
 
         assertThatThrownBy(() -> service.startConversation(StartConversationRequest.builder().participantProfileId(20L).build()))
-                .isInstanceOf(BadRequestException.class)
+                .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("your own school");
         verify(conversationRepository, never()).save(any());
     }
@@ -245,7 +246,7 @@ class MessagingServiceImplTest {
         when(conversationRepository.findWithParticipantsById(70L)).thenReturn(Optional.of(conversation));
 
         assertThatThrownBy(() -> service.sendMessage(70L, SendMessageRequest.builder().body("hi").build()))
-                .isInstanceOf(BadRequestException.class)
+                .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("not part of this conversation");
         verify(messageRepository, never()).save(any());
     }

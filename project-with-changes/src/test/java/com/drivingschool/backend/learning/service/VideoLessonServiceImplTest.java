@@ -1,6 +1,7 @@
 package com.drivingschool.backend.learning.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.learning.dto.CreateVideoLessonRequest;
@@ -103,7 +104,7 @@ class VideoLessonServiceImplTest {
         when(courseRepository.findById(5L)).thenReturn(Optional.of(course));
 
         assertThatThrownBy(() -> videoLessonService.create(request, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(videoLessonRepository, never()).save(any());
     }
@@ -129,7 +130,7 @@ class VideoLessonServiceImplTest {
         when(videoLessonRepository.findById(10L)).thenReturn(Optional.of(lesson));
 
         assertThatThrownBy(() -> videoLessonService.update(10L, request, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(videoLessonRepository, never()).save(any());
     }
@@ -153,7 +154,7 @@ class VideoLessonServiceImplTest {
         when(videoLessonRepository.findById(10L)).thenReturn(Optional.of(lesson));
 
         assertThatThrownBy(() -> videoLessonService.getById(10L, 999L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

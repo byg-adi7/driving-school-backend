@@ -1,6 +1,7 @@
 package com.drivingschool.backend.progress.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
 import com.drivingschool.backend.progress.dto.AdvanceStageRequest;
 import com.drivingschool.backend.progress.entity.LicenseWorkflow;
@@ -85,7 +86,7 @@ class LicenseWorkflowServiceImplTest {
         when(licenseWorkflowRepository.findByStudentId(20L)).thenReturn(Optional.of(workflow));
 
         assertThatThrownBy(() -> service.getByStudentId(20L, 999L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -104,7 +105,7 @@ class LicenseWorkflowServiceImplTest {
         when(licenseWorkflowRepository.findByStudentId(20L)).thenReturn(Optional.of(workflow));
 
         assertThatThrownBy(() -> service.updateTheoryProgress(20L, 50, 999L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(licenseWorkflowRepository, never()).save(any());
     }

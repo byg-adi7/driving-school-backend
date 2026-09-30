@@ -3,6 +3,7 @@ package com.drivingschool.backend.progress.service;
 import com.drivingschool.backend.booking.entity.Booking;
 import com.drivingschool.backend.booking.repository.BookingRepository;
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.gamification.service.GamificationService;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
@@ -70,7 +71,7 @@ public class DrivingAssessmentServiceImpl implements DrivingAssessmentService {
         // Same reasoning as lesson notes: recording an assessment grants read access to the
         // student's assessment history (and a PASSED result awards them points).
         if (!student.getSchool().getId().equals(instructor.getSchool().getId())) {
-            throw new BadRequestException("You can only assess students in your own school");
+            throw new ForbiddenException("You can only assess students in your own school");
         }
 
         Booking booking = null;

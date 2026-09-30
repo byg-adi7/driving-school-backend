@@ -26,6 +26,14 @@ spring:
           time_zone: UTC
     defer-datasource-initialization: false
 
+  servlet:
+    multipart:
+      # Spring's defaults (1MB per file, 10MB per request) sat far below the 50MB the
+      # upload endpoints promise (app.storage.max-file-size-mb / FileValidator), so any
+      # real PDF was rejected before our own checks ran - as a 500. Keep in step with it.
+      max-file-size: 50MB
+      max-request-size: 51MB
+
   sql:
     init:
       mode: never

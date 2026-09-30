@@ -1,6 +1,7 @@
 package com.drivingschool.backend.lesson.route.validator;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.lesson.route.dto.GenerateRouteRequest;
 import com.drivingschool.backend.lesson.route.entity.PracticalLessonRoute;
@@ -70,12 +71,16 @@ public class RouteValidator {
         if ("INSTRUCTOR".equals(role) && route.getInstructor().getUser().getId().equals(userId)) {
             return;
         }
-        throw new BadRequestException("You do not have access to this route");
+        // The student the lesson is for can see where it goes.
+        if ("STUDENT".equals(role) && route.getBooking().getStudent().getUser().getId().equals(userId)) {
+            return;
+        }
+        throw new ForbiddenException("You do not have access to this route");
     }
 
     public void validateOwnership(PracticalLessonRoute route, Long callerId) {
         if (!route.getInstructor().getUser().getId().equals(callerId)) {
-            throw new BadRequestException("You are not authorized to delete this route");
+            throw new ForbiddenException("You are not authorized to delete this route");
         }
     }
 
@@ -87,6 +92,6 @@ public class RouteValidator {
         if ("INSTRUCTOR".equals(role) && instructor.getUser().getId().equals(userId)) {
             return;
         }
-        throw new BadRequestException("You do not have access to this instructor's routes");
+        throw new ForbiddenException("You do not have access to this instructor's routes");
     }
 }

@@ -1,6 +1,7 @@
 package com.drivingschool.backend.lesson.note.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.common.util.SecurityUtils;
 import com.drivingschool.backend.lesson.note.dto.AttachmentResponse;
@@ -311,7 +312,7 @@ public class LessonNoteAttachmentService {
             return;  // Instructor who created note can upload
         }
 
-        throw new BadRequestException("You do not have permission to upload files to this lesson note");
+        throw new ForbiddenException("You do not have permission to upload files to this lesson note");
     }
 
     /**
@@ -341,7 +342,7 @@ public class LessonNoteAttachmentService {
             return;
         }
 
-        throw new BadRequestException("You do not have permission to download this attachment");
+        throw new ForbiddenException("You do not have permission to download this attachment");
     }
 
     /**
@@ -363,7 +364,7 @@ public class LessonNoteAttachmentService {
             return;  // Uploader can delete
         }
 
-        throw new BadRequestException("You do not have permission to delete this attachment");
+        throw new ForbiddenException("You do not have permission to delete this attachment");
     }
 
     /**

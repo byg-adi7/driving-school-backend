@@ -32,7 +32,8 @@ public class VideoLesson extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "video_url", nullable = false, length = 500)
+    // Null for a materials-only lesson (V19).
+    @Column(name = "video_url", length = 500)
     private String videoUrl;
 
     @Column(name = "lesson_order", nullable = false)
@@ -56,7 +57,7 @@ public class VideoLesson extends BaseEntity {
                        Integer durationSeconds, boolean published, Course course) {
         this.title = title;
         this.description = description;
-        this.videoUrl = videoUrl;
+        this.videoUrl = blankToNull(videoUrl);
         this.lessonOrder = lessonOrder;
         this.durationSeconds = durationSeconds;
         this.published = published;
@@ -75,8 +76,9 @@ public class VideoLesson extends BaseEntity {
         if (description != null) {
             this.description = description;
         }
+        // null = leave as is; "" = remove the video (the lesson becomes materials-only).
         if (videoUrl != null) {
-            this.videoUrl = videoUrl;
+            this.videoUrl = blankToNull(videoUrl);
         }
         if (lessonOrder != null) {
             this.lessonOrder = lessonOrder;
@@ -84,5 +86,9 @@ public class VideoLesson extends BaseEntity {
         if (durationSeconds != null) {
             this.durationSeconds = durationSeconds;
         }
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 }

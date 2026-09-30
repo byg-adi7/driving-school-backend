@@ -1,6 +1,7 @@
 package com.drivingschool.backend.progress.validator;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.progress.entity.LicenseWorkflow;
 import com.drivingschool.backend.progress.enums.LicenseStage;
 import com.drivingschool.backend.school.entity.School;
@@ -56,7 +57,7 @@ class LicenseWorkflowValidatorTest {
         LicenseWorkflow workflow = workflowFor(userWithId(1L));
 
         assertThatThrownBy(() -> validator.validateStudentAccess(workflow, 999L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

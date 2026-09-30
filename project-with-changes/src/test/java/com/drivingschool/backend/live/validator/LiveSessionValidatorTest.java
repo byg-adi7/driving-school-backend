@@ -1,6 +1,7 @@
 package com.drivingschool.backend.live.validator;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.live.entity.LiveSession;
 import com.drivingschool.backend.live.enums.SessionStatus;
@@ -57,7 +58,7 @@ class LiveSessionValidatorTest {
         InstructorProfile instructor = instructorFor(userWithId(1L));
 
         assertThatThrownBy(() -> validator.validateInstructorSelf(instructor, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -77,13 +78,13 @@ class LiveSessionValidatorTest {
     @Test
     void validateSchoolAccess_differentSchool_denied() {
         assertThatThrownBy(() -> validator.validateSchoolAccess(5L, 6L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
     void validateSchoolAccess_callerHasNoSchool_denied() {
         assertThatThrownBy(() -> validator.validateSchoolAccess(5L, null, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -105,7 +106,7 @@ class LiveSessionValidatorTest {
         LiveSession session = sessionFor(userWithId(1L), schoolWithId(5L));
 
         assertThatThrownBy(() -> validator.validateInstructorOwnership(session, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

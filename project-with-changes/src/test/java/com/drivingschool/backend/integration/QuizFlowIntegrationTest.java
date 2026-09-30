@@ -60,7 +60,7 @@ class QuizFlowIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", bearer(otherInstructor.token()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(questionJson("What does a red light mean?", "Stop", 50, 1)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         Long q1Id = addQuestion(instructor, quiz.getId(), "What does a red light mean?", "Stop", 50, 1);
         Long q2Id = addQuestion(instructor, quiz.getId(), "What does a green light mean?", "Go", 50, 2);
@@ -74,7 +74,7 @@ class QuizFlowIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(get("/api/v1/quizzes/" + quiz.getId())
                         .header("Authorization", bearer(student.token())))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // publish
         MvcResult publishResult = mockMvc.perform(put("/api/v1/quizzes/" + quiz.getId() + "/publish")

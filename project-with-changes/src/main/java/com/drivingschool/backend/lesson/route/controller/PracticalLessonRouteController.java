@@ -58,6 +58,14 @@ public class PracticalLessonRouteController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('STUDENT')")
+    @Operation(summary = "My lesson routes", description = "A student's routes: the ones planned for their own lessons, newest first")
+    public ResponseEntity<ApiResponse<Page<RouteResponse>>> getMyRoutes(Pageable pageable) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        return ResponseEntity.ok(ApiResponse.success(routeService.getMyRoutesAsStudent(userId, pageable)));
+    }
+
     @GetMapping("/instructor/{instructorId}")
     @PreAuthorize("hasAnyRole('INSTRUCTOR', 'ADMIN')")
     @Operation(summary = "Get instructor routes", description = "Get all routes created by an instructor")

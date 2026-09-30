@@ -1,6 +1,7 @@
 package com.drivingschool.backend.learning.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.learning.dto.CreateResourceRequest;
@@ -105,7 +106,7 @@ class ResourceServiceImplTest {
         when(videoLessonRepository.findById(10L)).thenReturn(Optional.of(lesson));
 
         assertThatThrownBy(() -> resourceService.create(request, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(resourceRepository, never()).save(any());
     }
@@ -129,7 +130,7 @@ class ResourceServiceImplTest {
         when(resourceRepository.findById(30L)).thenReturn(Optional.of(resource));
 
         assertThatThrownBy(() -> resourceService.delete(30L, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(resourceRepository, never()).delete(any());
     }
@@ -153,7 +154,7 @@ class ResourceServiceImplTest {
         when(videoLessonRepository.findById(10L)).thenReturn(Optional.of(lesson));
 
         assertThatThrownBy(() -> resourceService.getByLesson(10L, 999L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -211,7 +212,7 @@ class ResourceServiceImplTest {
         when(videoLessonRepository.findById(10L)).thenReturn(Optional.of(lessonFor(userWithId(1L), true)));
 
         assertThatThrownBy(() -> resourceService.upload(10L, "Highway Code", PDF, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
         verify(storageService, never()).store(any(), any(), any());
     }
 
@@ -315,7 +316,7 @@ class ResourceServiceImplTest {
         when(resourceRepository.findById(31L)).thenReturn(Optional.of(resource));
 
         assertThatThrownBy(() -> resourceService.download(31L, 5L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

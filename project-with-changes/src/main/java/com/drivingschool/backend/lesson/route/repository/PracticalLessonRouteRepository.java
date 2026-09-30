@@ -8,13 +8,23 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface PracticalLessonRouteRepository extends JpaRepository<PracticalLessonRoute, Long> {
 
-    @Query("SELECT plr FROM PracticalLessonRoute plr WHERE plr.booking.id = :bookingId")
-    Optional<PracticalLessonRoute> findByBookingId(@Param("bookingId") Long bookingId);
+    @Query("SELECT plr FROM PracticalLessonRoute plr WHERE plr.booking.id = :bookingId ORDER BY plr.createdAt DESC, plr.id DESC")
+    List<PracticalLessonRoute> findAllByBookingIdNewestFirst(@Param("bookingId") Long bookingId);
+
+    // A booking has one route - generating again replaces it - but rows created before
+    // that rule could leave several; the newest wins instead of a NonUniqueResult 500.
+    default Optional<PracticalLessonRoute> findByBookingId(Long bookingId) {
+        return findAllByBookingIdNewestFirst(bookingId).stream().findFirst();
+    }
+
+    @Query("SELECT plr FROM PracticalLessonRoute plr WHERE plr.booking.student.user.id = :userId ORDER BY plr.createdAt DESC")
+    Page<PracticalLessonRoute> findByStudentUserId(@Param("userId") Long userId, Pageable pageable);
 
     @Query("SELECT plr FROM PracticalLessonRoute plr WHERE plr.instructor.id = :instructorId ORDER BY plr.createdAt DESC")
     Page<PracticalLessonRoute> findByInstructorId(@Param("instructorId") Long instructorId, Pageable pageable);
