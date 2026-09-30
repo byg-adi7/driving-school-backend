@@ -2,6 +2,7 @@ package com.drivingschool.backend.progress.service;
 
 import com.drivingschool.backend.booking.entity.Booking;
 import com.drivingschool.backend.booking.repository.BookingRepository;
+import com.drivingschool.backend.common.transaction.AfterCommit;
 import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
@@ -181,11 +182,11 @@ public class DrivingAssessmentServiceImpl implements DrivingAssessmentService {
         }
     }
 
+    // After commit: points only for an assessment that was actually saved.
     private void awardGamificationPoints(DrivingAssessment a) {
-        try {
-            gamificationService.awardAssessmentPassed(a.getStudent().getId(), a.getId());
-        } catch (Exception ex) {
-            log.warn("Failed to award gamification points for assessment: assessmentId={}", a.getId(), ex);
-        }
+        Long studentId = a.getStudent().getId();
+        Long assessmentId = a.getId();
+        AfterCommit.run("award points for assessment " + assessmentId,
+                () -> gamificationService.awardAssessmentPassed(studentId, assessmentId));
     }
 }

@@ -6,6 +6,7 @@ import com.drivingschool.backend.booking.entity.Booking;
 import com.drivingschool.backend.booking.enums.BookingStatus;
 import com.drivingschool.backend.booking.mapper.BookingMapper;
 import com.drivingschool.backend.booking.repository.BookingRepository;
+import com.drivingschool.backend.common.transaction.AfterCommit;
 import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.gamification.service.GamificationService;
@@ -205,13 +206,14 @@ public class BookingServiceImpl implements BookingService {
         return bookingMapper.toResponse(saved);
     }
 
+    // After commit: points only for a completion that was actually saved (the award itself
+    // runs in its own transaction, see GamificationServiceImpl).
     private void awardCompletionPoints(Booking booking) {
-        try {
-            gamificationService.awardBookingCompleted(
-                    booking.getStudent().getId(), booking.getId(), LocalDateTime.now());
-        } catch (Exception ex) {
-            log.warn("Failed to award gamification points for completed booking: bookingId={}", booking.getId(), ex);
-        }
+        Long studentId = booking.getStudent().getId();
+        Long bookingId = booking.getId();
+        LocalDateTime completedAt = LocalDateTime.now();
+        AfterCommit.run("award points for completed booking " + bookingId,
+                () -> gamificationService.awardBookingCompleted(studentId, bookingId, completedAt));
     }
 
     @Override

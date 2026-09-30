@@ -1,5 +1,6 @@
 package com.drivingschool.backend.quiz.service;
 
+import com.drivingschool.backend.common.transaction.AfterCommit;
 import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
@@ -234,12 +235,12 @@ public class QuizServiceImpl implements QuizService {
         return quizMapper.toSubmissionResponse(saved);
     }
 
+    // After commit: points only for a submission that was actually saved.
     private void awardQuizPoints(Quiz quiz, StudentProfile student) {
-        try {
-            gamificationService.awardQuizPassed(student.getId(), quiz.getId());
-        } catch (Exception ex) {
-            log.warn("Failed to award gamification points for quiz: quizId={}, studentId={}", quiz.getId(), student.getId(), ex);
-        }
+        Long studentId = student.getId();
+        Long quizId = quiz.getId();
+        AfterCommit.run("award points for quiz " + quizId + " to student " + studentId,
+                () -> gamificationService.awardQuizPassed(studentId, quizId));
     }
 
     private void notifyStudentOfResult(Quiz quiz, StudentProfile student, QuizSubmission submission) {
