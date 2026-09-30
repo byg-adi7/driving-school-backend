@@ -18,6 +18,9 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
 
     boolean existsBySessionIdAndStudentId(Long sessionId, Long studentId);
 
+    @Query("SELECT a.session.id FROM Attendance a WHERE a.student.id = :studentId AND a.session.id IN :sessionIds")
+    List<Long> findRegisteredSessionIds(@Param("studentId") Long studentId, @Param("sessionIds") List<Long> sessionIds);
+
     /**
      * One grouped query for a whole page of sessions instead of a per-session
      * {@code findBySessionId(...).size()} call - see LiveSessionServiceImpl#getUpcomingBySchool.

@@ -1,6 +1,6 @@
 package com.drivingschool.backend.live.validator;
 
-import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.live.entity.LiveSession;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
@@ -24,7 +24,7 @@ public class LiveSessionValidator {
         if ("INSTRUCTOR".equals(role) && instructor.getUser().getId().equals(userId)) {
             return;
         }
-        throw new BadRequestException("You can only schedule sessions under your own instructor profile");
+        throw new ForbiddenException("You can only schedule sessions under your own instructor profile");
     }
 
     /**
@@ -40,7 +40,7 @@ public class LiveSessionValidator {
         if (targetSchoolId != null && targetSchoolId.equals(callerSchoolId)) {
             return;
         }
-        throw new BadRequestException("You do not have access to this school's sessions");
+        throw new ForbiddenException("You do not have access to this school's sessions");
     }
 
     /** For mutating/viewing a specific session's status or roster - only its own instructor, or ADMIN. */
@@ -52,6 +52,6 @@ public class LiveSessionValidator {
         if ("INSTRUCTOR".equals(role) && session.getInstructor().getUser().getId().equals(userId)) {
             return;
         }
-        throw new BadRequestException("You are not authorized to manage this session");
+        throw new ForbiddenException("You are not authorized to manage this session");
     }
 }

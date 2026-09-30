@@ -1,6 +1,7 @@
 package com.drivingschool.backend.notification.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.notification.dto.SendNotificationRequest;
 import com.drivingschool.backend.notification.entity.Notification;
@@ -221,7 +222,7 @@ class NotificationServiceImplTest {
         when(notificationRepository.findById(10L)).thenReturn(Optional.of(notification));
 
         assertThatThrownBy(() -> service.markAsRead(10L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(notificationRepository, never()).save(any());
     }

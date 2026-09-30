@@ -5,6 +5,7 @@ import com.drivingschool.backend.booking.enums.BookingStatus;
 import com.drivingschool.backend.booking.enums.BookingType;
 import com.drivingschool.backend.booking.repository.BookingRepository;
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
@@ -123,7 +124,7 @@ class PracticalLessonRouteServiceTest {
         when(bookingRepository.findById(500L)).thenReturn(Optional.of(bookingFor(otherInstructor, 500L)));
 
         assertThatThrownBy(() -> routeService.generateRoute(generateRequest(500L), 1L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(routeRepository, never()).save(any());
     }
@@ -144,7 +145,7 @@ class PracticalLessonRouteServiceTest {
         when(instructorProfileRepository.findById(50L)).thenReturn(Optional.of(instructor));
 
         assertThatThrownBy(() -> routeService.getInstructorRoutes(50L, Pageable.unpaged(), 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(routeRepository, never()).findByInstructorId(any(), any());
     }
@@ -186,5 +187,39 @@ class PracticalLessonRouteServiceTest {
         routeService.getAllRoutes(Pageable.unpaged());
 
         verify(routeRepository, never()).findAllRoutesBySchoolId(any(), any());
+    }
+
+    @Test
+    void generateRoute_again_replacesTheBookingsPreviousRoute() {
+        InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
+        Booking booking = bookingFor(instructor, 500L);
+        PracticalLessonRoute previous = PracticalLessonRoute.builder().booking(booking).instructor(instructor).build();
+        when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
+        when(bookingRepository.findById(500L)).thenReturn(Optional.of(booking));
+        when(openRouteService.generateRoute(any(), any(), any(), any())).thenReturn(java.util.Map.of(
+                "distance", 1000L, "duration", 120L, "geometry", "[]", "coordinates", List.of()));
+        when(routeRepository.findAllByBookingIdNewestFirst(500L)).thenReturn(List.of(previous));
+        when(routeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        routeService.generateRoute(generateRequest(500L), 1L);
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(routeRepository);
+        order.verify(routeRepository).deleteAll(List.of(previous));
+        order.verify(routeRepository).flush();
+        order.verify(routeRepository).save(any());
+    }
+
+    @Test
+    void getMyRoutesAsStudent_returnsTheRoutesOfTheirOwnLessons() {
+        InstructorProfile instructor = instructorProfile(50L, userWithId(1L));
+        PracticalLessonRoute route = PracticalLessonRoute.builder().booking(bookingFor(instructor, 500L))
+                .instructor(instructor).startLocation("A").destinationLocation("B").routeGeometry("[]")
+                .distanceMeters(1000L).durationSeconds(120L).build();
+        when(routeRepository.findByStudentUserId(7L, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(route)));
+
+        var page = routeService.getMyRoutesAsStudent(7L, Pageable.unpaged());
+
+        org.assertj.core.api.Assertions.assertThat(page.getContent()).singleElement()
+                .satisfies(r -> org.assertj.core.api.Assertions.assertThat(r.getBookingId()).isEqualTo(500L));
     }
 }

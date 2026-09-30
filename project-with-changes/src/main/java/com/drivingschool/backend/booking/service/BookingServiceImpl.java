@@ -194,6 +194,11 @@ public class BookingServiceImpl implements BookingService {
         if (booking.getStatus() != BookingStatus.CONFIRMED) {
             throw new BadRequestException("Only confirmed bookings can be completed");
         }
+        // Completing awards points and badges, so it must follow a lesson that has actually
+        // started - same clock as the @Future check on scheduledAt when it was booked.
+        if (LocalDateTime.now().isBefore(booking.getScheduledAt())) {
+            throw new BadRequestException("A lesson can't be completed before its scheduled start time");
+        }
         booking.complete();
         Booking saved = bookingRepository.save(booking);
         awardCompletionPoints(saved);

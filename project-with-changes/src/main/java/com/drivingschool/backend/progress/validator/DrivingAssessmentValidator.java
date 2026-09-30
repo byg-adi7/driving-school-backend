@@ -1,6 +1,7 @@
 package com.drivingschool.backend.progress.validator;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.progress.dto.CreateDrivingAssessmentRequest;
 import com.drivingschool.backend.progress.entity.DrivingAssessment;
@@ -25,7 +26,7 @@ public class DrivingAssessmentValidator {
 
     public void validateOwnership(DrivingAssessment assessment, Long callerId) {
         if (!assessment.getInstructor().getUser().getId().equals(callerId)) {
-            throw new BadRequestException("You are not authorized to modify this driving assessment");
+            throw new ForbiddenException("You are not authorized to modify this driving assessment");
         }
     }
 
@@ -40,7 +41,7 @@ public class DrivingAssessmentValidator {
         if ("STUDENT".equals(role) && assessment.getStudent().getUser().getId().equals(userId)) {
             return;
         }
-        throw new BadRequestException("You do not have access to this driving assessment");
+        throw new ForbiddenException("You do not have access to this driving assessment");
     }
 
     /**
@@ -61,7 +62,7 @@ public class DrivingAssessmentValidator {
         if ("INSTRUCTOR".equals(role) && hasTaughtStudent) {
             return;
         }
-        throw new BadRequestException("You do not have access to this student's driving assessments");
+        throw new ForbiddenException("You do not have access to this student's driving assessments");
     }
 
     public void validateInstructorAssessmentsAccess(InstructorProfile instructor, Long userId, String role) {
@@ -72,6 +73,6 @@ public class DrivingAssessmentValidator {
         if ("INSTRUCTOR".equals(role) && instructor.getUser().getId().equals(userId)) {
             return;
         }
-        throw new BadRequestException("You do not have access to this instructor's driving assessments");
+        throw new ForbiddenException("You do not have access to this instructor's driving assessments");
     }
 }

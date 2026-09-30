@@ -1,6 +1,6 @@
 package com.drivingschool.backend.school.validator;
 
-import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
 import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.security.CurrentUserService;
@@ -48,13 +48,13 @@ public class CallerSchoolScope {
                 .map(profile -> profile.getSchool().getId())
                 .or(() -> instructorProfileRepository.findByUserId(userId)
                         .map(profile -> profile.getSchool().getId()))
-                .orElseThrow(() -> new BadRequestException("You do not belong to a school")));
+                .orElseThrow(() -> new ForbiddenException("You do not belong to a school")));
     }
 
     public void requireSameSchool(Long schoolId) {
         callerSchoolId().ifPresent(own -> {
             if (!own.equals(schoolId)) {
-                throw new BadRequestException("You do not have access to this school's records");
+                throw new ForbiddenException("You do not have access to this school's records");
             }
         });
     }

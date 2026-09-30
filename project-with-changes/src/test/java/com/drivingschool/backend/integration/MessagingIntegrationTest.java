@@ -67,7 +67,7 @@ class MessagingIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", bearer(student.token()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("participantProfileId", otherSchoolInstructor.profileId()))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // The student writes; it reaches THIS instructor - unread, with a preview.
         mockMvc.perform(post("/api/v1/conversations/" + conversationId + "/messages")
@@ -90,7 +90,7 @@ class MessagingIntegrationTest extends AbstractIntegrationTest {
         // Another student of the same school can't read it.
         mockMvc.perform(get("/api/v1/conversations/" + conversationId + "/messages")
                         .header("Authorization", bearer(classmate.token())))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // The instructor reads and replies.
         mockMvc.perform(post("/api/v1/conversations/" + conversationId + "/read")

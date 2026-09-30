@@ -107,7 +107,7 @@ class BookingLifecycleIntegrationTest extends AbstractIntegrationTest {
         // an unrelated instructor cannot
         mockMvc.perform(get("/api/v1/lesson-notes/" + note.getId())
                         .header("Authorization", bearer(otherInstructor.token())))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // a genuine PDF attachment upload succeeds
         MockMultipartFile validFile = new MockMultipartFile("file", "handbook.pdf", "application/pdf", VALID_PDF_CONTENT);

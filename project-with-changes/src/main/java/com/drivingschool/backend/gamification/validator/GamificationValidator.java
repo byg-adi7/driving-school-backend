@@ -1,6 +1,6 @@
 package com.drivingschool.backend.gamification.validator;
 
-import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import org.springframework.stereotype.Component;
@@ -31,7 +31,7 @@ public class GamificationValidator {
         if ("INSTRUCTOR".equals(role) && callerSchoolId != null && callerSchoolId.equals(student.getSchool().getId())) {
             return;
         }
-        throw new BadRequestException("You do not have access to this student's gamification summary");
+        throw new ForbiddenException("You do not have access to this student's gamification summary");
     }
 
     public void validateLeaderboardAccess(Long schoolId, String role, Long callerSchoolId) {
@@ -42,6 +42,6 @@ public class GamificationValidator {
         if (callerSchoolId != null && callerSchoolId.equals(schoolId)) {
             return;
         }
-        throw new BadRequestException("You do not have access to this school's leaderboard");
+        throw new ForbiddenException("You do not have access to this school's leaderboard");
     }
 }

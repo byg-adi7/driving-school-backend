@@ -1,6 +1,7 @@
 package com.drivingschool.backend.messaging.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
@@ -109,7 +110,7 @@ public class MessagingServiceImpl implements MessagingService {
         }
 
         if (!student.getSchool().getId().equals(instructor.getSchool().getId())) {
-            throw new BadRequestException("You can only message people at your own school");
+            throw new ForbiddenException("You can only message people at your own school");
         }
 
         Conversation conversation = conversationRepository
@@ -211,7 +212,7 @@ public class MessagingServiceImpl implements MessagingService {
         Conversation conversation = conversationRepository.findWithParticipantsById(conversationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation", "id", conversationId));
         if (!conversation.hasParticipant(userId)) {
-            throw new BadRequestException("You are not part of this conversation");
+            throw new ForbiddenException("You are not part of this conversation");
         }
         return conversation;
     }

@@ -1,6 +1,7 @@
 package com.drivingschool.backend.lesson.question.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.lesson.question.entity.LessonQuestionSubmission;
@@ -67,7 +68,7 @@ class LessonQuestionStatusHistoryServiceTest {
         when(questionRepository.findById(10L)).thenReturn(Optional.of(question));
 
         assertThatThrownBy(() -> service.getQuestionStatusHistory(10L, 888L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(statusHistoryRepository, never()).findByQuestionSubmissionId(10L);
     }
@@ -96,7 +97,7 @@ class LessonQuestionStatusHistoryServiceTest {
 
         assertThatThrownBy(() -> service.getQuestionStatusHistoryPaginated(10L,
                 org.springframework.data.domain.Pageable.unpaged(), 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(statusHistoryRepository, never()).findByQuestionSubmissionIdPaginated(anyLong(), any());
     }

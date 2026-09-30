@@ -167,7 +167,7 @@ class SchoolDeletionRequestIntegrationTest extends AbstractIntegrationTest {
         String adminAToken = login("owner.a@example.com", "SecurePass123!");
 
         mockMvc.perform(get("/api/v1/schools/" + schoolB.getSchool().getId()).header("Authorization", bearer(adminAToken)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         MvcResult listResult = mockMvc.perform(get("/api/v1/schools").header("Authorization", bearer(adminAToken)))
                 .andExpect(status().isOk())
@@ -191,7 +191,7 @@ class SchoolDeletionRequestIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", bearer(adminToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(anotherSchool)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         AdminRegisterRequest adminRegisterRequest = AdminRegisterRequest.builder()
                 .email("second.admin@example.com").password("SecurePass123!")

@@ -1,6 +1,7 @@
 package com.drivingschool.backend.user.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.school.entity.School;
@@ -73,7 +74,7 @@ public class UserServiceImpl implements UserService {
         User caller = userRepository.findById(callerId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", callerId));
         if (!caller.isBootstrapAdmin()) {
-            throw new BadRequestException("Only the bootstrap admin can delete another admin's account");
+            throw new ForbiddenException("Only the bootstrap admin can delete another admin's account");
         }
 
         // Queried on School's owning FK side rather than User.ownedSchool - see

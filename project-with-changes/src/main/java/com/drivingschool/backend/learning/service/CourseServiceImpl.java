@@ -128,6 +128,18 @@ public class CourseServiceImpl implements CourseService {
         return publishedCourseCatalog.forSchool(callerSchoolScope.callerSchoolId().orElse(null));
     }
 
+    // Admin oversight: every course of the admin's school whatever its status, drafts
+    // included (the bootstrap admin: every school's). Uncached - drafts change often and
+    // this is admin-only.
+    @Override
+    @Transactional(readOnly = true)
+    public List<CourseResponse> getAllIncludingDrafts() {
+        List<Course> courses = callerSchoolScope.callerSchoolId()
+                .map(courseRepository::findByInstructor_School_Id)
+                .orElseGet(courseRepository::findAll);
+        return courses.stream().map(mapper::toResponse).toList();
+    }
+
     @Override
     @Transactional(readOnly = true)
     public List<CourseResponse> getMine(Long userId) {

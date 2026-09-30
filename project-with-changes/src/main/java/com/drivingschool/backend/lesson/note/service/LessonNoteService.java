@@ -3,6 +3,7 @@ package com.drivingschool.backend.lesson.note.service;
 import com.drivingschool.backend.booking.entity.Booking;
 import com.drivingschool.backend.booking.repository.BookingRepository;
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.lesson.note.dto.CreateLessonNoteRequest;
@@ -56,7 +57,7 @@ public class LessonNoteService {
         // whole note history (see LessonNoteValidator.validateStudentNotesAccess), so this
         // must never be possible across schools.
         if (!student.getSchool().getId().equals(instructor.getSchool().getId())) {
-            throw new BadRequestException("You can only write lesson notes for students in your own school");
+            throw new ForbiddenException("You can only write lesson notes for students in your own school");
         }
 
         Booking booking = null;

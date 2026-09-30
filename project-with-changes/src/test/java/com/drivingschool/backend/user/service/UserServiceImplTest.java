@@ -1,6 +1,7 @@
 package com.drivingschool.backend.user.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.role.entity.Role;
 import com.drivingschool.backend.role.enums.RoleName;
@@ -131,7 +132,7 @@ class UserServiceImplTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(caller));
 
         assertThatThrownBy(() -> userService.deleteUserAccount(3L, 1L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(cascadeDeletionService, never()).execute(any());
     }

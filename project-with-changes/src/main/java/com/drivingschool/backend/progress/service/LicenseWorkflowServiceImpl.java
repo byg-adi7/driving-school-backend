@@ -1,6 +1,7 @@
 package com.drivingschool.backend.progress.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
@@ -101,7 +102,7 @@ public class LicenseWorkflowServiceImpl implements LicenseWorkflowService {
 
         if (LicenseWorkflow.isInstructorControlledStage(targetStage)) {
             InstructorProfile instructor = instructorProfileRepository.findByUserId(instructorUserId)
-                    .orElseThrow(() -> new BadRequestException("Only instructors can approve this stage"));
+                    .orElseThrow(() -> new ForbiddenException("Only instructors can approve this stage"));
             validateInstructorStageTransition(workflow.getCurrentStage(), targetStage);
             workflow.advanceStage(targetStage, instructor, request.getNotes());
         } else {

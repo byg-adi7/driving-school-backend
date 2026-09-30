@@ -1,6 +1,7 @@
 package com.drivingschool.backend.student.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
@@ -167,7 +168,7 @@ class StudentProfileServiceImplTest {
         when(instructorProfileRepository.findByUserId(5L)).thenReturn(Optional.of(instructor));
 
         assertThatThrownBy(() -> studentProfileService.getBySchool(2L))
-                .isInstanceOf(BadRequestException.class)
+                .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("your own school");
 
         org.mockito.Mockito.verify(studentProfileRepository, org.mockito.Mockito.never())

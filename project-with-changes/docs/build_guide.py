@@ -69,10 +69,13 @@ d.H(2, "HTTP status codes used")
 d.T(["Code", "Meaning in this API"], [
     ["200", "Success (GET, most PUT/PATCH/POST actions that don't create a resource)"],
     ["201", "Success, a new resource was created (POST that creates something)"],
-    ["400", "Validation failure or a business-rule violation (e.g. conflicting booking, wrong workflow stage)"],
+    ["400", "Bad input or a business-rule violation (e.g. conflicting booking, wrong workflow stage, missing parameter or file, malformed JSON) - show the message, the user can fix it"],
     ["401", "Missing/expired/invalid access token"],
-    ["403", "Authenticated, but wrong role or not the owner of this resource"],
+    ["403", "Authenticated, but not allowed: wrong role, not the owner of this record, or it belongs to another school - show \"you don't have access\", retrying won't help"],
     ["404", "Resource doesn't exist"],
+    ["405", "HTTP method not supported on this path (the Allow header lists the ones that are)"],
+    ["413", "Uploaded file too large (max 50 MB)"],
+    ["415", "Wrong Content-Type (e.g. JSON sent to a multipart upload)"],
     ["429", "Too many requests - rate limit, or a verification code resent too soon (see the Retry-After header)"],
     ["500", "Unexpected server error — report these, they're bugs"],
     ["503", "An outside provider (email, WhatsApp) failed or isn't configured - safe to retry"],
@@ -113,7 +116,7 @@ d.P("Every account except the bootstrap admin is confined to ONE school: a stude
     "instructor to the school on their profile, a regular admin to the school they own "
     "(GET /auth/me's schoolId in all three cases). Passing another school's IDs - a "
     "student, instructor, vehicle, booking, lesson note, question, session, and so on - "
-    "is rejected with 400 (403 on the booking endpoints). The bootstrap admin is the only "
+    "is rejected with 403. The bootstrap admin is the only "
     "account that can act across schools.")
 d.P("The ADMIN-only \"list everything\" endpoints (GET /lesson-notes, GET /lesson-routes, "
     "and GET /lesson-questions/status/{status} for admins and instructors) don't reject a "
@@ -277,7 +280,8 @@ ENDPOINT("POST", "/auth/register", "Create a STUDENT or INSTRUCTOR account.",
     example_req='{\n  "email": "student.jones@example.com",\n  "password": "SecurePass123!",\n  "firstName": "Jamie",\n  "lastName": "Jones",\n  "schoolId": 2,\n  "role": "STUDENT",\n  "licenseNumber": "LIC-2026-0031"\n}',
     response=[["user.id / user.email / user.roles", "", "the NEW user's identity only - no accessToken/refreshToken/tokenType/expiresIn. The account's creator never receives a session for it; the new user logs in themselves with the password they were given, and verifies the account with a one-time code at that first login"]],
     example_resp='{\n  "success": true,\n  "message": "Registration successful",\n  "data": {\n    "user": { "id": 31, "email": "student.jones@example.com", "roles": ["STUDENT"] }\n  }\n}',
-    notes=["An INSTRUCTOR or regular ADMIN caller creating an account in a DIFFERENT school than their own is rejected with 400.",
+    notes=["An INSTRUCTOR or regular ADMIN caller creating an account in a DIFFERENT school than their own is rejected with 403 (so is an INSTRUCTOR trying to create an INSTRUCTOR).",
+           "Calling it without a token gets 401 before the body is even checked.",
            "licenseNumber is required when role=INSTRUCTOR (a common mistake — don't forget it on an \"add instructor\" form)."])
 
 ENDPOINT("POST", "/auth/admin/register", "Admin creates a STUDENT or INSTRUCTOR.",
@@ -371,7 +375,7 @@ ENDPOINT("POST", "/schools", "Create a new school and its owning admin account t
         ["adminUserId", "number", "the new admin's raw User.id"],
         ["adminEmail", "string", "echoes the email you just set — log this admin in separately with adminPassword"],
     ],
-    notes=["A non-bootstrap admin calling this gets 400 — there is no self-service "
+    notes=["A non-bootstrap admin calling this gets 403 — there is no self-service "
            "\"create your own school\" flow.",
            "There is no adminFirstName/adminLastName — an admin account has no profile "
            "record of its own (unlike students/instructors), just an email/password login. "
@@ -382,7 +386,7 @@ ENDPOINT("POST", "/schools", "Create a new school and its owning admin account t
 
 ENDPOINT("GET", "/schools/{id}", "Get a school by ID.",
     access="Bootstrap admin (any school), or a regular admin viewing their OWN school",
-    notes=["A regular admin requesting a DIFFERENT school's ID gets 400, not the data — "
+    notes=["A regular admin requesting a DIFFERENT school's ID gets 403, not the data — "
            "always use the caller's own schoolId (from GET /auth/me) unless you know "
            "you're bootstrap.",
            "Every path under /schools/** other than the exact GET /schools list endpoint "
@@ -530,7 +534,7 @@ ENDPOINT("PUT", "/students/me", "Update the current student's own profile.", acc
 ENDPOINT("GET", "/students/school/{schoolId}", "List students in a school.",
     access="Bootstrap admin (any school), or a regular ADMIN / INSTRUCTOR listing their OWN school only",
     notes=["A regular ADMIN or INSTRUCTOR passing a DIFFERENT school's ID than their own (from "
-           "GET /auth/me's schoolId) gets 400, not the data.",
+           "GET /auth/me's schoolId) gets 403, not the data.",
            "This is the endpoint for a student picker on the instructor's \"book a lesson\" "
            "and \"add lesson note\" forms — use it instead of asking the instructor to type a "
            "raw numeric student ID."])
@@ -588,14 +592,19 @@ ENDPOINT("PUT", "/courses/{courseId}/unpublish", "Unpublish a course back to dra
 ENDPOINT("PUT", "/courses/{courseId}/archive", "Archive a course.", access="ADMIN or the owning INSTRUCTOR")
 
 ENDPOINT("GET", "/courses/{courseId}", "Get a course by ID.", access="ADMIN, INSTRUCTOR, or STUDENT of the course's school",
-    notes=["A course from another school gets 400, published or not.",
+    notes=["A course from another school gets 403, published or not.",
            "A DRAFT course is only visible to its owning instructor or an admin — a student "
-           "(or a different instructor) gets 400 Bad Request, not 404, if they try to view "
-           "someone else's draft."])
+           "(or a different instructor) gets 403, not 404, if they try to view someone else's "
+           "draft."])
 
 ENDPOINT("GET", "/courses", "List the published courses of the caller's own school.", access="ADMIN, INSTRUCTOR, or STUDENT",
+    params=[["includeDrafts", "boolean (query)", "no", "ADMIN only: true returns EVERY course of the admin's school "
+             "- drafts and archived too (bootstrap admin: every school's). Anyone else passing true gets 403."]],
     notes=["This is the main course catalog / browse screen — only the caller's own "
-           "school's courses (the bootstrap admin gets every school's), drafts never appear here."])
+           "school's courses (the bootstrap admin gets every school's), drafts never appear "
+           "here unless an admin asks with includeDrafts=true.",
+           "Admin course-management screen: GET /courses?includeDrafts=true, and use each "
+           "course's status to label drafts. Instructors keep using GET /courses/mine."])
 
 ENDPOINT("GET", "/courses/mine", "List the current instructor's own courses, including drafts.", access="INSTRUCTOR")
 
@@ -605,12 +614,15 @@ ENDPOINT("POST", "/video-lessons", "Add a video lesson to a course (starts unpub
         ["courseId", "number", "yes", ""],
         ["title", "string", "yes", "max 200 chars"],
         ["description", "string", "no", "max 2000 chars"],
-        ["videoUrl", "string", "yes", "max 500 chars — host the actual video file yourself (e.g. YouTube unlisted, Cloudinary, etc.); this API only stores the URL"],
+        ["videoUrl", "string", "no", "max 500 chars — host the actual video file yourself (e.g. YouTube unlisted, Cloudinary, etc.); this API only stores the URL. Leave it out for a lesson that is course materials (PDFs) only"],
         ["lessonOrder", "number", "yes", "≥ 1, controls display order within the course"],
         ["durationSeconds", "number", "no", "≥ 0"],
     ])
 ENDPOINT("PUT", "/video-lessons/{lessonId}", "Update a video lesson.", access="ADMIN or owning INSTRUCTOR",
-    request=[["title / description / videoUrl / lessonOrder / durationSeconds", "", "no (partial update)", "same limits as create"]])
+    request=[["title / description / videoUrl / lessonOrder / durationSeconds", "", "no (partial update)", "same limits as create. "
+              "A field left out (or null) is unchanged; videoUrl \"\" (empty string) removes the video, making the lesson materials-only"]],
+    notes=["A lesson without a video comes back with no videoUrl field - show its materials "
+           "(GET /resources/lesson/{lessonId}) instead of a player."])
 ENDPOINT("PUT", "/video-lessons/{lessonId}/publish", "Publish a video lesson.", access="ADMIN or owning INSTRUCTOR")
 ENDPOINT("PUT", "/video-lessons/{lessonId}/unpublish", "Unpublish a video lesson.", access="ADMIN or owning INSTRUCTOR")
 ENDPOINT("GET", "/video-lessons/{lessonId}", "Get a video lesson by ID.", access="ADMIN, INSTRUCTOR, or STUDENT")
@@ -657,7 +669,8 @@ ENDPOINT("POST", "/resources/upload", "Upload a PDF as a resource of a video les
         ["fileName / fileSize", "", "original name and size in bytes"],
         ["downloadUrl", "string", "/api/v1/resources/{id}/download - relative to the API host"],
     ],
-    notes=["multipart/form-data, not JSON. 400 with a message if the file isn't a valid PDF, "
+    notes=["multipart/form-data, not JSON. 413 if the file is over 50 MB; 400 if the file part "
+           "is missing. 400 with a message if the file isn't a valid PDF, "
            "is too large, or the caller doesn't own the lesson's course."])
 ENDPOINT("PUT", "/resources/{resourceId}", "Rename a resource.", access="ADMIN or owning INSTRUCTOR",
     request=[["title", "string", "yes", "max 200 chars"]])
@@ -727,7 +740,7 @@ ENDPOINT("GET", "/quizzes/{quizId}", "Get a quiz by ID.", access="ADMIN, INSTRUC
            "students."])
 
 ENDPOINT("GET", "/quizzes/course/{courseId}", "List published quizzes for a course.", access="ADMIN, INSTRUCTOR, or STUDENT of the course's school",
-    notes=["A course from another school gets 400; an unknown course ID gets 404.",
+    notes=["A course from another school gets 403; an unknown course ID gets 404.",
            "Always returns answers stripped, regardless of caller — use the single-quiz "
            "endpoint above with forStudent=false for an authoring view of one quiz's answers."])
 
@@ -799,7 +812,9 @@ ENDPOINT("PUT", "/bookings/{id}/cancel", "Cancel a booking.",
            "cancelled — see the Notifications section."])
 ENDPOINT("PUT", "/bookings/{id}/complete", "Mark a booking completed.",
     access="ADMIN, or the assigned INSTRUCTOR",
-    notes=["Only valid from CONFIRMED status.",
+    notes=["Only valid from CONFIRMED status, and not before the lesson's scheduledAt - "
+           "completing a future lesson is rejected with 400 (hide/disable the button until "
+           "the lesson has started).",
            "This is also the trigger for the student's gamification points/streak — see the "
            "Gamification section. No separate call is needed from the frontend for that."])
 ENDPOINT("GET", "/bookings/student/{studentId}", "List a student's bookings.",
@@ -819,7 +834,7 @@ d.P("A route is a planned driving path for a specific booking, generated via an 
     "routing service (the backend calls OpenRouteService server-side — the frontend never "
     "needs a maps API key of its own for this).")
 
-ENDPOINT("POST", "/lesson-routes/generate", "Generate a route for a booking.", access="INSTRUCTOR only",
+ENDPOINT("POST", "/lesson-routes/generate", "Generate (or regenerate) the route for a booking.", access="INSTRUCTOR only",
     request=[
         ["bookingId", "number", "yes", "must be one of the CALLING instructor's own bookings"],
         ["startLocation / destinationLocation", "string", "yes", "2-500 chars, human-readable labels"],
@@ -838,12 +853,19 @@ ENDPOINT("POST", "/lesson-routes/generate", "Generate a route for a booking.", a
            "it to the user so they can move the pin. Any other 400 from this endpoint (\"Failed to "
            "generate route. Please try again...\") means the routing service itself failed or "
            "was unreachable - treat that as retryable.",
+           "A booking has ONE route: generating again for the same booking replaces the "
+           "old one (new id). Use it as the \"Regenerate route\" action.",
            "You'll need a map-rendering library (e.g. Leaflet, Mapbox GL, Google Maps JS) "
            "client-side to actually draw the coordinates array — the API only returns "
            "raw lat/lng points."])
 
-ENDPOINT("GET", "/lesson-routes/{id}", "Get a route by ID.", access="ADMIN, INSTRUCTOR, or STUDENT (participant of the underlying booking)")
-ENDPOINT("GET", "/lesson-routes/booking/{bookingId}", "Get the route for a specific booking.", access="Same as above")
+ENDPOINT("GET", "/lesson-routes/{id}", "Get a route by ID.",
+    access="ADMIN (own school), the INSTRUCTOR who planned it, or the STUDENT the lesson is for - anyone else gets 403")
+ENDPOINT("GET", "/lesson-routes/booking/{bookingId}", "Get the route for a specific booking.", access="Same as above",
+    notes=["404 when no route has been planned for that booking yet - show \"no route yet\", not an error."])
+ENDPOINT("GET", "/lesson-routes/me", "A student's own lesson routes, newest first (paginated).", access="STUDENT",
+    notes=["The \"my routes\" screen for students - no booking IDs needed. Each item has "
+           "bookingId if you want to link it to the lesson."])
 ENDPOINT("GET", "/lesson-routes/instructor/{instructorId}", "Paginated list of an instructor's routes.", access="INSTRUCTOR or ADMIN")
 ENDPOINT("GET", "/lesson-routes", "Paginated list of all routes - a regular admin gets only their own school's.", access="ADMIN only")
 ENDPOINT("DELETE", "/lesson-routes/{id}", "Delete a route.", access="INSTRUCTOR only (their own)")
@@ -957,21 +979,36 @@ ENDPOINT("POST", "/live-sessions", "Schedule a live session.", access="ADMIN or 
         ["title", "string", "yes", "max 200 chars"],
         ["description", "string", "no", "max 2000 chars"],
         ["scheduledAt", "datetime", "yes", "must be in the future"],
-        ["durationMinutes", "number", "yes", "positive"],
+        ["durationMinutes", "number", "yes", "1 to 1440 (24 hours)"],
         ["meetingUrl", "string", "no", "max 500 chars, e.g. a Zoom/Meet link"],
         ["maxParticipants", "number", "no", "positive, omit for unlimited"],
     ])
-ENDPOINT("GET", "/live-sessions/{id}", "Get a session by ID.", access="ADMIN, INSTRUCTOR, or STUDENT")
+d.P("The meeting link is only for registered students: for a STUDENT caller, meetingUrl "
+    "is left out until they register, and every session carries registered: true/false. "
+    "Instructors and admins always get meetingUrl (and no registered field). Each session "
+    "also has endsAt (scheduledAt + durationMinutes).")
+ENDPOINT("GET", "/live-sessions/{id}", "Get a session by ID.", access="ADMIN, INSTRUCTOR, or STUDENT of that school",
+    response=[["meetingUrl", "string or absent", "absent for a student who hasn't registered"],
+              ["registered", "boolean or absent", "students only: whether the caller is registered"],
+              ["endsAt", "datetime", "scheduledAt + durationMinutes"]])
 ENDPOINT("PUT", "/live-sessions/{id}/status", "Update session status.", access="ADMIN or INSTRUCTOR",
     params=[["status", "enum (query param)", "yes", "SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED"]],
     notes=["Sent as a query parameter, e.g. PUT /live-sessions/12/status?status=IN_PROGRESS — "
            "not a JSON body."])
-ENDPOINT("GET", "/live-sessions/school/{schoolId}/upcoming", "List sessions in the next 7 days for a school.", access="ADMIN, INSTRUCTOR, or STUDENT",
-    notes=["This is the endpoint for a student's \"upcoming classes\" widget."])
+ENDPOINT("GET", "/live-sessions/school/{schoolId}/upcoming", "Sessions that haven't ended yet and start within the next 7 days, soonest first.", access="ADMIN, INSTRUCTOR, or STUDENT",
+    notes=["This is the endpoint for a student's \"upcoming classes\" widget.",
+           "A session that has started but not ended stays in the list until endsAt, so "
+           "students can still join (and register) late.",
+           "Same meetingUrl / registered rules as GET /live-sessions/{id}."])
 ENDPOINT("POST", "/live-sessions/{id}/register", "Register a student for a session.", access="ADMIN or STUDENT",
     request=[["studentId", "number", "yes", "ignored/overridden for STUDENT callers, who always register themselves"]],
-    notes=["Rejected with 400 if already registered, or if the session is full "
-           "(maxParticipants reached)."])
+    response=[["meetingUrl", "string", "the link the student just unlocked - show a Join button straight away"]],
+    notes=["Allowed until the session ends (late registration while it's running is fine).",
+           "Rejected with 400 if already registered, if the session is full "
+           "(maxParticipants reached), cancelled, completed, or already over."])
+ENDPOINT("DELETE", "/live-sessions/{id}/register", "Unregister yourself from a session.", access="STUDENT",
+    notes=["400 if you weren't registered, were already marked present, or the session is over. "
+           "Afterwards meetingUrl is hidden again."])
 ENDPOINT("PUT", "/live-sessions/{id}/attendance/{studentId}/present", "Mark a student present.", access="ADMIN or INSTRUCTOR")
 ENDPOINT("GET", "/live-sessions/{id}/attendance", "List attendance for a session.", access="ADMIN or INSTRUCTOR",
     response=[["status", "enum", "REGISTERED, PRESENT, ABSENT, LATE"],
@@ -1083,15 +1120,15 @@ ENDPOINT("POST", "/conversations", "Open my conversation with someone (or get th
               ["unreadCount / lastMessagePreview / lastMessageAt", "", ""]],
     notes=["Idempotent: there is exactly one conversation per student-instructor pair, so "
            "calling this again returns the same one (200 both times).",
-           "400 if the other person is at a different school, is an inactive instructor, or "
-           "their account has been deleted."])
+           "403 if the other person is at a different school; 400 if they're an inactive "
+           "instructor or their account has been deleted."])
 ENDPOINT("GET", "/conversations", "My inbox, most recent activity first.", access="STUDENT or INSTRUCTOR",
     response=[["[] of the same shape as POST /conversations", "", "unreadCount counts messages the OTHER person sent that I haven't read"]])
 ENDPOINT("GET", "/conversations/{id}/messages", "A conversation's messages, NEWEST first (paginated, 50 per page by default).", access="Participants only",
     response=[["content[].body / sentAt / readAt", "", ""],
               ["content[].mine", "boolean", "true for messages the caller sent - use it to align chat bubbles"]],
     notes=["Reverse the page for a top-to-bottom chat view; load page=1, 2, ... to scroll back in history.",
-           "Anyone who isn't one of the two participants gets 400."])
+           "Anyone who isn't one of the two participants gets 403."])
 ENDPOINT("POST", "/conversations/{id}/messages", "Send a message.", access="Participants only",
     request=[["body", "string", "yes", "1-5000 chars"]])
 ENDPOINT("POST", "/conversations/{id}/read", "Mark everything the other person sent me here as read.", access="Participants only",
@@ -1246,7 +1283,7 @@ ENDPOINT("GET", "/gamification/students/{studentId}", "Another student's gamific
 ENDPOINT("GET", "/gamification/leaderboard/school/{schoolId}", "School-wide leaderboard, ranked by total points.", access="ADMIN, or an INSTRUCTOR/STUDENT in that same school",
     response=[["Paginated (see the Pagination convention above) — each row:", "", ""],
               ["rank / studentId / studentName / totalPoints / currentStreakWeeks", "", ""]],
-    notes=["An INSTRUCTOR or STUDENT requesting a DIFFERENT school's leaderboard gets 400, "
+    notes=["An INSTRUCTOR or STUDENT requesting a DIFFERENT school's leaderboard gets 403, "
            "not the data — always pass the caller's own schoolId (from GET /auth/me)."])
 
 # =====================================================================
@@ -1337,10 +1374,12 @@ d.BULLETS([
 d.H(2, "8. CORS")
 d.BULLETS([
     "The backend only accepts requests from origins listed in its CORS_ALLOWED_ORIGINS "
-    "config — currently set to localhost dev origins. Once the frontend has a real "
-    "deployed URL, that's a BACKEND-side config change (an environment variable + a "
-    "redeploy) that the backend team needs to make — it isn't something the frontend "
-    "can work around on its own.",
+    "setting on Render (comma-separated). It must list every origin the frontend runs "
+    "from - the deployed site (https://aidly-frontend-mu.vercel.app) AND local dev "
+    "(http://localhost:5173) if you develop against the live backend. A blocked origin "
+    "shows up as a failed preflight (OPTIONS 403). Changing it is a BACKEND-side config "
+    "change (the environment variable + a redeploy) - not something the frontend can "
+    "work around.",
 ])
 
 d.H(2, "9. Environment configuration")

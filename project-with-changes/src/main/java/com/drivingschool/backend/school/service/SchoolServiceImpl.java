@@ -1,6 +1,7 @@
 package com.drivingschool.backend.school.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.role.entity.Role;
 import com.drivingschool.backend.role.enums.RoleName;
@@ -71,7 +72,7 @@ public class SchoolServiceImpl implements SchoolService {
     @CacheEvict(value = {"schools", "schools-active"}, allEntries = true)
     public SchoolWithAdminResponse createWithAdmin(CreateSchoolWithAdminRequest request) {
         if (!currentUserService.isBootstrapAdmin()) {
-            throw new BadRequestException("Only the bootstrap admin can create a school");
+            throw new ForbiddenException("Only the bootstrap admin can create a school");
         }
         if (userRepository.existsByEmail(request.getAdminEmail())) {
             throw new BadRequestException("Email is already registered");
@@ -148,7 +149,7 @@ public class SchoolServiceImpl implements SchoolService {
     @Transactional
     public void deleteDirectly(Long schoolId) {
         if (!currentUserService.isBootstrapAdmin()) {
-            throw new BadRequestException("Only the bootstrap admin can delete a school");
+            throw new ForbiddenException("Only the bootstrap admin can delete a school");
         }
         if (!schoolRepository.existsById(schoolId)) {
             throw new ResourceNotFoundException("School", "id", schoolId);

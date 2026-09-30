@@ -1,6 +1,6 @@
 package com.drivingschool.backend.progress.validator;
 
-import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.progress.entity.LicenseWorkflow;
 import com.drivingschool.backend.school.validator.CallerSchoolScope;
 import com.drivingschool.backend.student.entity.StudentProfile;
@@ -24,7 +24,7 @@ public class LicenseWorkflowValidator {
     public void validateStudentAccess(LicenseWorkflow workflow, Long userId, String role) {
         validateSchoolAccess(workflow.getStudent());
         if ("STUDENT".equals(role) && !workflow.getStudent().getUser().getId().equals(userId)) {
-            throw new BadRequestException("You do not have access to this student's license workflow");
+            throw new ForbiddenException("You do not have access to this student's license workflow");
         }
     }
 

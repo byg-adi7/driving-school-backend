@@ -1,6 +1,7 @@
 package com.drivingschool.backend.school.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.notification.dto.SendNotificationRequest;
 import com.drivingschool.backend.notification.enums.NotificationChannel;
 import com.drivingschool.backend.notification.service.NotificationService;
@@ -101,7 +102,7 @@ class SchoolDeletionRequestServiceImplTest {
         User caller = userWithId(1L);
         when(userRepository.findById(1L)).thenReturn(Optional.of(caller));
 
-        assertThatThrownBy(() -> service.requestOwnSchoolDeletion(1L)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> service.requestOwnSchoolDeletion(1L)).isInstanceOf(ForbiddenException.class);
 
         verify(requestRepository, never()).save(any());
     }
@@ -148,7 +149,7 @@ class SchoolDeletionRequestServiceImplTest {
         User caller = userWithId(1L);
         when(userRepository.findById(1L)).thenReturn(Optional.of(caller));
 
-        assertThatThrownBy(() -> service.approve(5L, 1L, null)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> service.approve(5L, 1L, null)).isInstanceOf(ForbiddenException.class);
 
         verify(cascadeDeletionService, never()).execute(any());
     }

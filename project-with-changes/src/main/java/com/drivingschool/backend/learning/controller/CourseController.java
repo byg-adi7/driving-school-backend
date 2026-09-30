@@ -1,5 +1,6 @@
 package com.drivingschool.backend.learning.controller;
 
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.response.ApiResponse;
 import com.drivingschool.backend.common.util.SecurityUtils;
 import com.drivingschool.backend.learning.dto.CourseResponse;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -92,9 +94,17 @@ public class CourseController {
     }
 
     @GetMapping
-    @Operation(summary = "List all published courses")
+    @Operation(summary = "List published courses (admins: ?includeDrafts=true for every course of their school)")
     @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR', 'STUDENT')")
-    public ResponseEntity<ApiResponse<List<CourseResponse>>> getPublished() {
+    public ResponseEntity<ApiResponse<List<CourseResponse>>> getPublished(
+            @RequestParam(defaultValue = "false") boolean includeDrafts) {
+        if (includeDrafts) {
+            // Instructors have GET /courses/mine for their own drafts; students never see drafts.
+            if (!"ADMIN".equals(SecurityUtils.getCurrentUserRole())) {
+                throw new ForbiddenException("Only admins can list draft courses - instructors use GET /courses/mine");
+            }
+            return ResponseEntity.ok(ApiResponse.success(courseService.getAllIncludingDrafts()));
+        }
         return ResponseEntity.ok(ApiResponse.success(courseService.getPublished()));
     }
 

@@ -1,6 +1,6 @@
 package com.drivingschool.backend.lesson.question.service;
 
-import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.lesson.question.dto.QuestionResponse;
 import com.drivingschool.backend.lesson.question.dto.RespondToQuestionRequest;
@@ -54,7 +54,7 @@ public class LessonQuestionSubmissionService {
                 : null;
         if (instructorProfile != null
                 && !instructorProfile.getSchool().getId().equals(studentProfile.getSchool().getId())) {
-            throw new BadRequestException("You can only assign a question to an instructor at your own school");
+            throw new ForbiddenException("You can only assign a question to an instructor at your own school");
         }
 
         LessonQuestionSubmission question = LessonQuestionSubmission.builder()

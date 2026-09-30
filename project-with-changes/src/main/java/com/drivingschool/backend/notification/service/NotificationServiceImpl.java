@@ -1,6 +1,6 @@
 package com.drivingschool.backend.notification.service;
 
-import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.notification.dto.NotificationResponse;
 import com.drivingschool.backend.notification.dto.SendNotificationRequest;
@@ -192,7 +192,7 @@ public class NotificationServiceImpl implements NotificationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Notification", "id", notificationId));
 
         if (!notification.getUser().getId().equals(userId)) {
-            throw new BadRequestException("You do not have access to this notification");
+            throw new ForbiddenException("You do not have access to this notification");
         }
 
         notification.markRead();

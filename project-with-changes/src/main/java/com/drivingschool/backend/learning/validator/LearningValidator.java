@@ -1,6 +1,6 @@
 package com.drivingschool.backend.learning.validator;
 
-import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.learning.entity.Course;
 import com.drivingschool.backend.learning.entity.VideoLesson;
@@ -35,7 +35,7 @@ public class LearningValidator {
 
     public void validateCourseOwnership(Course course, Long userId, String role) {
         if (!isCourseOwnerOrAdmin(course, userId, role)) {
-            throw new BadRequestException("You are not authorized to manage this course");
+            throw new ForbiddenException("You are not authorized to manage this course");
         }
     }
 
@@ -63,7 +63,7 @@ public class LearningValidator {
         if ("INSTRUCTOR".equals(role) && course.getInstructor().getUser().getId().equals(userId)) {
             return;
         }
-        throw new BadRequestException("You do not have access to this course");
+        throw new ForbiddenException("You do not have access to this course");
     }
 
     public void validateLessonOwnership(VideoLesson lesson, Long userId, String role) {
@@ -87,6 +87,6 @@ public class LearningValidator {
         if ("INSTRUCTOR".equals(role) && lesson.getCourse().getInstructor().getUser().getId().equals(userId)) {
             return;
         }
-        throw new BadRequestException("You do not have access to this lesson");
+        throw new ForbiddenException("You do not have access to this lesson");
     }
 }

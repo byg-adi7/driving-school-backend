@@ -22,5 +22,7 @@ public interface CourseService {
 
     List<CourseResponse> getPublished();
 
+    List<CourseResponse> getAllIncludingDrafts();
+
     List<CourseResponse> getMine(Long userId);
 }

@@ -1,6 +1,7 @@
 package com.drivingschool.backend.lesson.question.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.instructor.repository.InstructorProfileRepository;
@@ -228,7 +229,7 @@ class LessonQuestionSubmissionServiceTest {
         when(questionRepository.findById(100L)).thenReturn(Optional.of(question));
 
         assertThatThrownBy(() -> service.respondToQuestion(100L, request, 999L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(questionRepository, never()).save(any());
     }
@@ -300,7 +301,7 @@ class LessonQuestionSubmissionServiceTest {
         when(questionRepository.findById(100L)).thenReturn(Optional.of(question));
 
         assertThatThrownBy(() -> service.getQuestion(100L, 999L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -425,7 +426,7 @@ class LessonQuestionSubmissionServiceTest {
         when(instructorProfileRepository.findById(20L)).thenReturn(Optional.of(instructor));
 
         assertThatThrownBy(() -> service.submitQuestion(request, 1L))
-                .isInstanceOf(BadRequestException.class)
+                .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("own school");
         verify(questionRepository, never()).save(any());
     }

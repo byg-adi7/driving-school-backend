@@ -1,6 +1,7 @@
 package com.drivingschool.backend.quiz.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.common.exception.ResourceNotFoundException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.gamification.service.GamificationService;
@@ -132,7 +133,7 @@ class QuizServiceImplTest {
         when(courseRepository.findById(5L)).thenReturn(Optional.of(course));
 
         assertThatThrownBy(() -> quizService.create(request, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(quizRepository, never()).save(any());
     }
@@ -149,7 +150,7 @@ class QuizServiceImplTest {
         when(quizRepository.findById(10L)).thenReturn(Optional.of(quiz));
 
         assertThatThrownBy(() -> quizService.addQuestion(10L, request, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(quizQuestionRepository, never()).save(any());
     }
@@ -162,7 +163,7 @@ class QuizServiceImplTest {
         when(quizRepository.findById(10L)).thenReturn(Optional.of(quiz));
 
         assertThatThrownBy(() -> quizService.publish(10L, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
 
         verify(quizRepository, never()).save(any());
     }
@@ -175,7 +176,7 @@ class QuizServiceImplTest {
         when(quizRepository.findById(10L)).thenReturn(Optional.of(quiz));
 
         assertThatThrownBy(() -> quizService.getById(10L, true, 999L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -277,7 +278,7 @@ class QuizServiceImplTest {
         when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student));
 
         assertThatThrownBy(() -> quizService.submit(10L, request, 2L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class)
+                .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("another school");
         verify(quizSubmissionRepository, never()).save(any());
     }

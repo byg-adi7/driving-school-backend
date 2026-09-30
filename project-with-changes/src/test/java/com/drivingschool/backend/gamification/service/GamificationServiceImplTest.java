@@ -1,6 +1,7 @@
 package com.drivingschool.backend.gamification.service;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.gamification.entity.BadgeAward;
 import com.drivingschool.backend.gamification.entity.PointsTransaction;
 import com.drivingschool.backend.gamification.entity.StudentGameStats;
@@ -231,7 +232,7 @@ class GamificationServiceImplTest {
         when(instructorProfileRepository.findByUserId(1L)).thenReturn(Optional.of(instructor));
 
         assertThatThrownBy(() -> service.getSchoolLeaderboard(1L, Pageable.unpaged(), 1L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

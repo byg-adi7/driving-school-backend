@@ -14,6 +14,7 @@ import com.drivingschool.backend.auth.entity.PasswordResetToken;
 import com.drivingschool.backend.auth.mapper.AuthMapper;
 import com.drivingschool.backend.auth.mapper.CurrentUserMapper;
 import com.drivingschool.backend.auth.repository.PasswordResetTokenRepository;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.security.CurrentUserService;
 import com.drivingschool.backend.security.RefreshTokenRevocationService;
 import com.drivingschool.backend.common.exception.AuthenticationException;
@@ -378,7 +379,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         if (request.getRole() != RoleName.STUDENT) {
-            throw new BadRequestException("Instructors can only create student accounts");
+            throw new ForbiddenException("Instructors can only create student accounts");
         }
 
         Long callerId = currentUserService.requireUserId();
@@ -386,7 +387,7 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new ResourceNotFoundException("Instructor profile not found for user ID: " + callerId));
 
         if (!callerProfile.getSchool().getId().equals(request.getSchoolId())) {
-            throw new BadRequestException("You can only create students for your own school");
+            throw new ForbiddenException("You can only create students for your own school");
         }
     }
 

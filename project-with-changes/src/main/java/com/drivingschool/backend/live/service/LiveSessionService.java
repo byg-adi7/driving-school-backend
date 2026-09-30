@@ -21,6 +21,8 @@ public interface LiveSessionService {
 
     AttendanceResponse register(Long sessionId, RegisterAttendanceRequest request, Long userId, String role);
 
+    void unregister(Long sessionId, Long userId);
+
     AttendanceResponse markPresent(Long sessionId, Long studentId, Long userId, String role);
 
     List<AttendanceResponse> getAttendance(Long sessionId, Long userId, String role);

@@ -1,6 +1,7 @@
 package com.drivingschool.backend.lesson.question.validator;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.lesson.question.dto.RespondToQuestionRequest;
 import com.drivingschool.backend.lesson.question.dto.SubmitQuestionRequest;
 import com.drivingschool.backend.lesson.question.entity.LessonQuestionSubmission;
@@ -39,7 +40,7 @@ public class QuestionValidator {
 
     public void validateInstructorAccess(LessonQuestionSubmission question, Long callerId) {
         if (question.getInstructor() != null && !question.getInstructor().getUser().getId().equals(callerId)) {
-            throw new BadRequestException("You are not assigned to this question");
+            throw new ForbiddenException("You are not assigned to this question");
         }
         // An unassigned question is open to any instructor - of the student's own school.
         callerSchoolScope.requireSameSchool(question.getStudent().getSchool().getId());
@@ -47,12 +48,12 @@ public class QuestionValidator {
 
     public void validateStatusUpdate(LessonQuestionSubmission question, QuestionStatus newStatus, Long userId, String role) {
         if (!"ADMIN".equals(role) && !"INSTRUCTOR".equals(role)) {
-            throw new BadRequestException("Only admins and instructors can update question status");
+            throw new ForbiddenException("Only admins and instructors can update question status");
         }
 
         if ("INSTRUCTOR".equals(role) && question.getInstructor() != null
                 && !question.getInstructor().getUser().getId().equals(userId)) {
-            throw new BadRequestException("You are not assigned to this question");
+            throw new ForbiddenException("You are not assigned to this question");
         }
 
         if ("INSTRUCTOR".equals(role)) {
@@ -92,6 +93,6 @@ public class QuestionValidator {
         if ("STUDENT".equals(role) && question.getStudent() != null && question.getStudent().getUser().getId().equals(userId)) {
             return;
         }
-        throw new BadRequestException("You do not have access to this question");
+        throw new ForbiddenException("You do not have access to this question");
     }
 }

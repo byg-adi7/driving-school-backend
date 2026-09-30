@@ -374,3 +374,37 @@ Without its own domain, Resend only delivers from `onboarding@resend.dev` to the
 - **When `false`:** login returns tokens for unverified accounts without a challenge, and the app logs a warning at startup. Accounts stay unverified, so each one verifies at its next login once the switch is back on. That way every real account's email still gets checked eventually.
 - **Going live:** the steps are in `DEPLOYMENT.md` ("Going live with account verification").
 - **Tests:** 1 new unit test. Full unit suite: 788 tests, green.
+
+## Frontend-Reported Issues (2026-09-30)
+
+The frontend team tested against the live API and reported 18 issues. Where a choice was needed, the product owner decided.
+
+**Fixed (bugs):**
+1. **PDF uploads always 500.** There was no multipart setting, so Spring's defaults (1 MB per file, 10 MB per request) rejected any real PDF before the 50 MB check in `FileValidator` ran, and the resulting `MaxUploadSizeExceededException` fell through to the catch-all 500. `spring.servlet.multipart` is now 50 MB, and an oversized upload gets 413.
+2. **Students couldn't see their own lesson's route.** The guide promised it, but `RouteValidator` only allowed admins and the owning instructor. The student the booking is for can now read it.
+3. **Future lessons could be completed.** A lesson scheduled for 15 Nov was completed on 29 Sep, awarding points and badges. `complete` now rejects a lesson before its `scheduledAt` (400).
+4. **A second route for a booking broke the lookup.** `findByBookingId` returned a non-unique result, giving a 500. Generating again now replaces the booking's route, and the lookup takes the newest row, so rows created earlier can't cause a 500 either.
+5. **Request-shape errors returned 500.** Missing query parameter, missing file part and malformed JSON are now 400; an unsupported method is 405 with `Allow`; a wrong content type is 415.
+6. **Access denials returned 400.** The product owner chose 403 everywhere. There's a new `ForbiddenException`, and 53 ownership / other-school / role checks now throw it; bad input and state conflicts stay 400.
+7. **`POST /auth/register` without a token** returned a validation 400 (the endpoint was `permitAll` with `@PreAuthorize` inside). It's no longer public, so it gets 401 first.
+
+**Built (requests):**
+- **Live sessions:**
+  - A student gets no `meetingUrl` until they register; every session has `registered` for students and `endsAt`.
+  - The register response carries the link.
+  - Sessions stay listed until they end, and late registration is allowed until the end.
+  - New `DELETE /live-sessions/{id}/register`.
+  - `durationMinutes` is capped at 24 hours, which keeps "still running" bounded.
+- **`videoUrl` optional** (V19): a lesson can be materials only. On update, `""` removes the video.
+- **`GET /lesson-routes/me`:** a student's routes, paginated.
+- **`GET /courses?includeDrafts=true`:** every course of an admin's school, drafts included (403 for other roles).
+- **Guide:** the CORS section no longer says localhost is allowed. The status table, 403 notes and every changed endpoint are updated.
+
+**Configuration, not code:**
+- **CORS:** add `http://localhost:5173` to `CORS_ALLOWED_ORIGINS` on Render if the frontend develops against the live API.
+- **Email verification:** waits on a verified email domain (see "Going live with account verification").
+- **Render free-tier sleep:** the owner chose to stay on the free plan for now. Free Postgres expires 30 days after creation.
+
+**Test data (item 10):** cleanup SQL was given to the owner to run by hand. It checks every assumption and changes nothing if one fails.
+
+**Verified:** the unit suite and local integration tests (Testcontainers now works locally with `DOCKER_API_VERSION=1.44` and `-DargLine=-Dapi.version=1.44`, because Docker 29 rejects the client's default API version), then CI.

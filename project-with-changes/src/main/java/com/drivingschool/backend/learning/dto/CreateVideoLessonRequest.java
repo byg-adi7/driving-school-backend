@@ -23,7 +23,7 @@ public class CreateVideoLessonRequest {
     @Size(max = 2000)
     private final String description;
 
-    @NotBlank(message = "Video URL is required")
+    // Optional: a lesson can be course materials (PDFs) only, with no video.
     @Size(max = 500)
     private final String videoUrl;
 

@@ -1,6 +1,7 @@
 package com.drivingschool.backend.lesson.question.validator;
 
 import com.drivingschool.backend.common.exception.BadRequestException;
+import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.lesson.question.entity.LessonQuestionSubmission;
 import com.drivingschool.backend.lesson.question.enums.QuestionStatus;
@@ -55,7 +56,7 @@ class QuestionValidatorTest {
         LessonQuestionSubmission question = questionAssignedTo(userWithId(1L), userWithId(2L), QuestionStatus.PENDING);
 
         assertThatThrownBy(() -> validator.validateInstructorAccess(question, 999L))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -80,7 +81,7 @@ class QuestionValidatorTest {
         LessonQuestionSubmission question = questionAssignedTo(userWithId(1L), userWithId(2L), QuestionStatus.PENDING);
 
         assertThatThrownBy(() -> validator.validateStatusUpdate(question, QuestionStatus.ANSWERED, 999L, "INSTRUCTOR"))
-                .isInstanceOf(BadRequestException.class)
+                .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("not assigned");
     }
 
@@ -89,7 +90,7 @@ class QuestionValidatorTest {
         LessonQuestionSubmission question = questionAssignedTo(userWithId(1L), userWithId(2L), QuestionStatus.PENDING);
 
         assertThatThrownBy(() -> validator.validateStatusUpdate(question, QuestionStatus.ANSWERED, 2L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -137,7 +138,7 @@ class QuestionValidatorTest {
         LessonQuestionSubmission question = questionAssignedTo(userWithId(1L), userWithId(2L), QuestionStatus.PENDING);
 
         assertThatThrownBy(() -> validator.validateReadAccess(question, 888L, "STUDENT"))
-                .isInstanceOf(BadRequestException.class);
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

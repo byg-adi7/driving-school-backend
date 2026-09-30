@@ -60,7 +60,7 @@ class UploadsIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(multipart("/api/v1/lesson-notes/" + note.getId() + "/attachments")
                         .file(new MockMultipartFile("file", "handbook.pdf", "application/pdf", VALID_PDF_CONTENT))
                         .header("Authorization", bearer(otherInstructor.token())))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // a wrong file extension is rejected regardless of a valid PDF Content-Type header
         mockMvc.perform(multipart("/api/v1/lesson-notes/" + note.getId() + "/attachments")
@@ -95,7 +95,7 @@ class UploadsIntegrationTest extends AbstractIntegrationTest {
         // an unrelated student cannot list attachments for this note
         mockMvc.perform(get("/api/v1/lesson-notes/" + note.getId() + "/attachments")
                         .header("Authorization", bearer(otherStudent.token())))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // paginated listing works for the owning instructor too
         MvcResult paginatedResult = mockMvc.perform(get("/api/v1/lesson-notes/" + note.getId() + "/attachments/page")
@@ -120,10 +120,10 @@ class UploadsIntegrationTest extends AbstractIntegrationTest {
         // an unrelated student or instructor cannot download it
         mockMvc.perform(get("/api/v1/lesson-notes/" + note.getId() + "/attachments/" + attachmentId + "/download")
                         .header("Authorization", bearer(otherStudent.token())))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/lesson-notes/" + note.getId() + "/attachments/" + attachmentId + "/download")
                         .header("Authorization", bearer(otherInstructor.token())))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         // replacing resets the download counter and swaps the file
         MvcResult replaceResult = mockMvc.perform(multipart(org.springframework.http.HttpMethod.PUT,
@@ -146,7 +146,7 @@ class UploadsIntegrationTest extends AbstractIntegrationTest {
         // only the uploader (or ADMIN) may delete - not an unrelated instructor
         mockMvc.perform(delete("/api/v1/lesson-notes/" + note.getId() + "/attachments/" + attachmentId)
                         .header("Authorization", bearer(otherInstructor.token())))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         mockMvc.perform(delete("/api/v1/lesson-notes/" + note.getId() + "/attachments/" + attachmentId)
                         .header("Authorization", bearer(instructor.token())))

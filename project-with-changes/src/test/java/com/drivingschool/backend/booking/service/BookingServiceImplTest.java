@@ -323,12 +323,25 @@ class BookingServiceImplTest {
     @Test
     void complete_confirmedBooking_transitionsToCompleted() {
         Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
+        ReflectionTestUtils.setField(booking, "scheduledAt", LocalDateTime.now().minusHours(2));
         when(bookingRepository.findById(10L)).thenReturn(Optional.of(booking));
         when(bookingRepository.save(booking)).thenReturn(booking);
 
         bookingService.complete(10L);
 
         assertThat(booking.getStatus()).isEqualTo(BookingStatus.COMPLETED);
+    }
+
+    @Test
+    void complete_beforeTheLessonStarts_isRejected_andAwardsNothing() {
+        Booking booking = bookingWithStatus(BookingStatus.CONFIRMED); // scheduled for tomorrow
+        when(bookingRepository.findById(10L)).thenReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> bookingService.complete(10L))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("A lesson can't be completed before its scheduled start time");
+        assertThat(booking.getStatus()).isEqualTo(BookingStatus.CONFIRMED);
+        verify(gamificationService, never()).awardBookingCompleted(any(), any(), any());
     }
 
     @Test
