@@ -333,6 +333,27 @@ class BookingServiceImplTest {
     }
 
     @Test
+    void complete_awardsPointsOnlyAfterTheCompletionCommits() {
+        Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
+        ReflectionTestUtils.setField(booking, "scheduledAt", LocalDateTime.now().minusHours(2));
+        when(bookingRepository.findById(10L)).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(booking)).thenReturn(booking);
+
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            bookingService.complete(10L);
+            verify(gamificationService, never()).awardBookingCompleted(any(), any(), any());
+
+            org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(org.springframework.transaction.support.TransactionSynchronization::afterCommit);
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        verify(gamificationService).awardBookingCompleted(any(), any(), any());
+    }
+
+    @Test
     void complete_beforeTheLessonStarts_isRejected_andAwardsNothing() {
         Booking booking = bookingWithStatus(BookingStatus.CONFIRMED); // scheduled for tomorrow
         when(bookingRepository.findById(10L)).thenReturn(Optional.of(booking));
