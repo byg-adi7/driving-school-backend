@@ -1,5 +1,6 @@
 package com.drivingschool.backend.lesson.note.controller;
 
+import com.drivingschool.backend.common.exception.ServiceUnavailableException;
 import com.drivingschool.backend.common.response.ApiResponse;
 import com.drivingschool.backend.common.util.SecurityUtils;
 import com.drivingschool.backend.lesson.note.dto.AttachmentResponse;
@@ -19,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -28,7 +30,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
@@ -200,18 +201,18 @@ public class LessonNoteController {
         try {
             Resource resource = attachmentService.downloadAttachment(lessonNoteId, attachmentId);
 
-            // Encode filename for proper handling of special characters
-            String filename = resource.getFilename() != null ?
-                    URLEncoder.encode(resource.getFilename(), StandardCharsets.UTF_8) :
-                    "file.pdf";
+            String filename = resource.getFilename() != null ? resource.getFilename() : "file.pdf";
 
+            // RFC 6266/5987: an ASCII fallback plus filename*=UTF-8''..., so names with
+            // non-ASCII characters (accents, "·") survive in every browser.
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_PDF)
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build().toString())
                     .body(resource);
         } catch (IOException e) {
             log.error("File download failed", e);
-            throw new RuntimeException("File download failed: " + e.getMessage());
+            throw new ServiceUnavailableException("The file can't be fetched from storage right now - please try again later", e);
         }
     }
 

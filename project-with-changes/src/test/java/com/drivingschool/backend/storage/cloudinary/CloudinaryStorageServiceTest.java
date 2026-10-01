@@ -52,7 +52,37 @@ class CloudinaryStorageServiceTest {
         when(url.resourceType(anyString())).thenReturn(url);
         when(url.type(anyString())).thenReturn(url);
         when(url.signed(anyBoolean())).thenReturn(url);
+        when(url.secure(anyBoolean())).thenReturn(url);
         when(url.generate(anyString())).thenReturn(SIGNED_URL);
+    }
+
+    private static final String API_DOWNLOAD_URL = "https://api.cloudinary.com/v1_1/test/raw/download?signature=x";
+
+    @Test
+    void load_whenCloudinaryRefusesPdfDelivery_fallsBackToTheSignedDownloadApi() throws Exception {
+        stubUrlBuilder();
+        when(restTemplate.getForObject(SIGNED_URL, byte[].class))
+                .thenThrow(org.springframework.web.client.HttpClientErrorException.create(
+                        org.springframework.http.HttpStatus.UNAUTHORIZED, "Unauthorized", null, null, null));
+        when(cloudinary.privateDownload(eq("lesson-notes/x.pdf"), eq(""), org.mockito.ArgumentMatchers.anyMap()))
+                .thenReturn(API_DOWNLOAD_URL);
+        byte[] content = "pdf bytes".getBytes();
+        when(restTemplate.getForObject(API_DOWNLOAD_URL, byte[].class)).thenReturn(content);
+
+        Resource resource = service.load("lesson-notes/x.pdf");
+
+        assertThat(resource.getContentAsByteArray()).isEqualTo(content);
+        verify(url).secure(true);
+    }
+
+    @Test
+    void load_whenStorageIsDown_isServiceUnavailable_notA500() {
+        stubUrlBuilder();
+        when(restTemplate.getForObject(SIGNED_URL, byte[].class))
+                .thenThrow(new org.springframework.web.client.ResourceAccessException("connection reset"));
+
+        assertThatThrownBy(() -> service.load("lesson-notes/x.pdf"))
+                .isInstanceOf(com.drivingschool.backend.common.exception.ServiceUnavailableException.class);
     }
 
     @Test

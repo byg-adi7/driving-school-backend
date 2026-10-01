@@ -13,12 +13,14 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
+import java.util.Map;
 
 /**
  * Cloudinary-backed implementation, active when {@code app.storage.provider=cloudinary}.
@@ -85,28 +87,55 @@ public class CloudinaryStorageService implements StorageService {
             throw new IllegalArgumentException("Invalid file path");
         }
 
-        String signedUrl = cloudinary.url()
+        byte[] content = fetch(storagePath);
+        if (content == null) {
+            throw new IOException("Cloudinary returned no content for: " + storagePath);
+        }
+        return new ByteArrayResource(content) {
+            @Override
+            public String getFilename() {
+                int lastSlash = storagePath.lastIndexOf('/');
+                return lastSlash == -1 ? storagePath : storagePath.substring(lastSlash + 1);
+            }
+        };
+    }
+
+    // First the signed delivery URL (CDN-cached). If Cloudinary refuses it - a new account
+    // blocks PDF delivery until "Allow delivery of PDF and ZIP files" is enabled in its
+    // security settings - fall back to the signed download API, which serves the original
+    // straight from storage. Anything else is a storage outage: 503, not 500.
+    private byte[] fetch(String storagePath) {
+        String deliveryUrl = cloudinary.url()
                 .resourceType(RESOURCE_TYPE)
                 .type(DELIVERY_TYPE)
                 .signed(true)
+                .secure(true)
                 .generate(storagePath);
+        try {
+            return restTemplate.getForObject(deliveryUrl, byte[].class);
+        } catch (HttpClientErrorException e) {
+            if (e.getStatusCode().value() != 401 && e.getStatusCode().value() != 403 && e.getStatusCode().value() != 404) {
+                throw unavailable(storagePath, e);
+            }
+            log.warn("Cloudinary refused delivery of {} ({}); retrying via the download API. If this keeps "
+                    + "happening, enable \"Allow delivery of PDF and ZIP files\" in Cloudinary's security settings.",
+                    storagePath, e.getStatusCode());
+        } catch (RestClientException e) {
+            throw unavailable(storagePath, e);
+        }
 
         try {
-            byte[] content = restTemplate.getForObject(signedUrl, byte[].class);
-            if (content == null) {
-                throw new IOException("Cloudinary returned no content for: " + storagePath);
-            }
-            return new ByteArrayResource(content) {
-                @Override
-                public String getFilename() {
-                    int lastSlash = storagePath.lastIndexOf('/');
-                    return lastSlash == -1 ? storagePath : storagePath.substring(lastSlash + 1);
-                }
-            };
-        } catch (RestClientException e) {
-            log.error("Error reading file from Cloudinary: {}", storagePath, e);
-            throw new IOException("Failed to read file: " + e.getMessage(), e);
+            String downloadUrl = cloudinary.privateDownload(storagePath, "",
+                    Map.of("resource_type", RESOURCE_TYPE, "type", DELIVERY_TYPE));
+            return restTemplate.getForObject(downloadUrl, byte[].class);
+        } catch (Exception e) {
+            throw unavailable(storagePath, e);
         }
+    }
+
+    private ServiceUnavailableException unavailable(String storagePath, Exception e) {
+        log.error("Error reading file from Cloudinary: {} ({})", storagePath, e.getMessage(), e);
+        return new ServiceUnavailableException("The file can't be fetched from storage right now - please try again later", e);
     }
 
     @Override
