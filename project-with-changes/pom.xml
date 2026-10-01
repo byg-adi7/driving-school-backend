@@ -165,6 +165,14 @@
             <artifactId>cloudinary-http44</artifactId>
             <version>1.39.0</version>
         </dependency>
+
+        <!-- Apache PDFBox - parses uploaded PDFs (including compressed object streams a
+             byte search can't see) to strip active content before they're stored -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.7</version>
+        </dependency>
     </dependencies>
 
     <build>

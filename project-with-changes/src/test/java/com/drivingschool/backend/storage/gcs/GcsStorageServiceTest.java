@@ -38,10 +38,10 @@ class GcsStorageServiceTest {
     void setUp() {
         StorageProperties properties = new StorageProperties(new MockEnvironment());
         properties.getGcs().setBucketName(BUCKET);
-        service = new GcsStorageService(storage, properties, new FileValidator(properties));
+        service = new GcsStorageService(storage, properties, new FileValidator(properties, new com.drivingschool.backend.storage.PdfSanitizer()));
     }
 
-    private static final byte[] VALID_PDF_CONTENT = "%PDF-1.4\n%%EOF".getBytes();
+    private static final byte[] VALID_PDF_CONTENT = com.drivingschool.backend.storage.TestPdfs.blank();
 
     @Test
     void store_uploadsToConfiguredBucketAndReturnsMetadata() throws Exception {

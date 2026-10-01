@@ -653,8 +653,13 @@ d.BULLETS([
     "agree it with the product owner before adding one. The picker gives you a file or "
     "link; download its bytes in the app and upload them like any other file.",
     "Validate client-side before uploading (PDF only, 50 MB max) for a fast error message, "
-    "and show upload progress - the server enforces the same rules and also rejects files "
-    "that aren't really PDFs or that contain active content (scripts, embedded files).",
+    "and show upload progress - the server enforces the same rules and rejects files that "
+    "aren't really PDFs, or that are password-protected.",
+    "Ordinary PDFs from Word, Google Docs, LaTeX, scanners etc. upload as-is. If a PDF "
+    "contains active content (JavaScript, launch/submit actions, embedded files, media), "
+    "the upload still succeeds and the server stores a cleaned copy with only those parts "
+    "removed - the text and pages are untouched. fileSize in the response is the size of "
+    "the stored copy.",
 ])
 
 ENDPOINT("POST", "/resources/upload", "Upload a PDF as a resource of a video lesson.", access="ADMIN or the lesson's owning INSTRUCTOR",
@@ -670,8 +675,9 @@ ENDPOINT("POST", "/resources/upload", "Upload a PDF as a resource of a video les
         ["downloadUrl", "string", "/api/v1/resources/{id}/download - relative to the API host"],
     ],
     notes=["multipart/form-data, not JSON. 413 if the file is over 50 MB; 400 if the file part "
-           "is missing. 400 with a message if the file isn't a valid PDF, "
-           "is too large, or the caller doesn't own the lesson's course."])
+           "is missing. 400 with a message if the file isn't a valid PDF or is "
+           "password-protected; 403 if the caller doesn't own the lesson's course. Active "
+           "content is stripped, not rejected (see above)."])
 ENDPOINT("PUT", "/resources/{resourceId}", "Rename a resource.", access="ADMIN or owning INSTRUCTOR",
     request=[["title", "string", "yes", "max 200 chars"]])
 ENDPOINT("PUT", "/resources/{resourceId}/file", "Replace an uploaded resource's file with a new version.", access="ADMIN or owning INSTRUCTOR",

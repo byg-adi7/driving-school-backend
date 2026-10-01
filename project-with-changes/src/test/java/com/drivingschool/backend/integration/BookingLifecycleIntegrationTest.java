@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 class BookingLifecycleIntegrationTest extends AbstractIntegrationTest {
 
-    private static final byte[] VALID_PDF_CONTENT = "%PDF-1.4\n%%EOF".getBytes();
+    private static final byte[] VALID_PDF_CONTENT = com.drivingschool.backend.storage.TestPdfs.blank();
 
     @Test
     void instructorBooksLessonForOwnStudent_studentIsNotified_lessonNoteIsAuthored() throws Exception {

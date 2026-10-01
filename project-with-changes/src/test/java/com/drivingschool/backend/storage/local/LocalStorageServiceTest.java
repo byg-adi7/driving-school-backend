@@ -27,10 +27,10 @@ class LocalStorageServiceTest {
     void setUp() {
         StorageProperties properties = new StorageProperties(new MockEnvironment());
         properties.getLocal().setBasePath(tempDir.toString());
-        service = new LocalStorageService(properties, new FileValidator(properties));
+        service = new LocalStorageService(properties, new FileValidator(properties, new com.drivingschool.backend.storage.PdfSanitizer()));
     }
 
-    private static final byte[] VALID_PDF_CONTENT = "%PDF-1.4\n%%EOF".getBytes();
+    private static final byte[] VALID_PDF_CONTENT = com.drivingschool.backend.storage.TestPdfs.blank();
 
     @Test
     void store_thenLoad_roundTripsContent() throws Exception {
@@ -89,7 +89,7 @@ class LocalStorageServiceTest {
         try {
             StorageProperties properties = new StorageProperties(new MockEnvironment());
             properties.getLocal().setBasePath(relativeConfigValue);
-            LocalStorageService relativeService = new LocalStorageService(properties, new FileValidator(properties));
+            LocalStorageService relativeService = new LocalStorageService(properties, new FileValidator(properties, new com.drivingschool.backend.storage.PdfSanitizer()));
             MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", VALID_PDF_CONTENT);
 
             StoredFile stored = relativeService.store(file, "lesson-notes", "42");

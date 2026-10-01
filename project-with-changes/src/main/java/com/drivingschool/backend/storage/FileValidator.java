@@ -19,19 +19,20 @@ public class FileValidator {
     private static final byte[] PDF_SIGNATURE = "%PDF-".getBytes(StandardCharsets.US_ASCII);
     private static final String PDF_EOF_MARKER = "%%EOF";
 
-    // Dictionary keys that let a PDF execute code or reach outside itself on open.
-    // None of these have a legitimate use in a static lesson-note attachment, so
-    // their mere presence is treated as disqualifying rather than trying to judge intent.
-    private static final List<String> ACTIVE_CONTENT_MARKERS =
-            List.of("/JavaScript", "/JS", "/Launch", "/EmbeddedFile", "/OpenAction", "/AA");
-
     private final StorageProperties properties;
+    private final PdfSanitizer pdfSanitizer;
 
-    public FileValidator(StorageProperties properties) {
+    public FileValidator(StorageProperties properties, PdfSanitizer pdfSanitizer) {
         this.properties = properties;
+        this.pdfSanitizer = pdfSanitizer;
     }
 
-    public void validate(MultipartFile file) throws IOException {
+    /**
+     * Validates the upload and returns the content to store: the original bytes, or a
+     * copy with active content (scripts, launch/submit actions, embedded files, media)
+     * stripped - see {@link PdfSanitizer}. Store what this returns, not file.getBytes().
+     */
+    public byte[] validate(MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("File is required and cannot be empty");
         }
@@ -64,10 +65,10 @@ public class FileValidator {
                     String.format("File extension '.%s' is not allowed", extension));
         }
 
-        validateContent(file.getBytes());
+        return validateContent(file.getBytes());
     }
 
-    private void validateContent(byte[] content) {
+    private byte[] validateContent(byte[] content) {
         if (content.length < PDF_SIGNATURE.length || !startsWith(content, PDF_SIGNATURE)) {
             throw new IllegalArgumentException(
                     "File content does not match a valid PDF (the claimed file type does not match its actual content)");
@@ -78,12 +79,10 @@ public class FileValidator {
             throw new IllegalArgumentException("File content does not match a valid PDF (missing end-of-file marker)");
         }
 
-        for (String marker : ACTIVE_CONTENT_MARKERS) {
-            if (text.contains(marker)) {
-                throw new IllegalArgumentException(
-                        "PDF contains active content (" + marker + ") that is not allowed in uploaded documents");
-            }
-        }
+        // Used to reject any PDF whose raw bytes contained /OpenAction or /AA - which
+        // blocked ordinary Word/Google Docs/LaTeX exports ("open at page 1") while missing
+        // anything inside a compressed object stream. Now: parse, strip what's dangerous.
+        return pdfSanitizer.sanitize(content).content();
     }
 
     private boolean startsWith(byte[] content, byte[] prefix) {
