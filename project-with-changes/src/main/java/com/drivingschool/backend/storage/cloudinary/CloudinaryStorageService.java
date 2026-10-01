@@ -2,6 +2,7 @@ package com.drivingschool.backend.storage.cloudinary;
 
 import com.cloudinary.Cloudinary;
 import com.cloudinary.utils.ObjectUtils;
+import com.drivingschool.backend.common.exception.ServiceUnavailableException;
 import com.drivingschool.backend.storage.FileHasher;
 import com.drivingschool.backend.storage.FileValidator;
 import com.drivingschool.backend.storage.StoragePaths;
@@ -61,9 +62,12 @@ public class CloudinaryStorageService implements StorageService {
                     "resource_type", RESOURCE_TYPE,
                     "type", DELIVERY_TYPE));
             log.info("File uploaded successfully to Cloudinary: {} (size: {} bytes)", storagePath, content.length);
-        } catch (IOException e) {
-            log.error("Failed to upload file to Cloudinary: {}", storagePath, e);
-            throw new IOException("Failed to store file: " + e.getMessage(), e);
+        } catch (IOException | RuntimeException e) {
+            // Cloudinary reports its own API errors (bad credentials, "Invalid cloud_name",
+            // quota) as plain RuntimeExceptions - not the client's fault, so a 503 with
+            // the real reason in the log rather than a generic 500.
+            log.error("Failed to upload file to Cloudinary: {} ({})", storagePath, e.getMessage(), e);
+            throw new ServiceUnavailableException("File storage is unavailable right now - please try again later", e);
         }
 
         return StoredFile.builder()
