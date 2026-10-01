@@ -17,10 +17,10 @@ class FileValidatorTest {
     }
 
     private FileValidator validatorWith(long maxFileSizeMb, String allowedMimeTypes) {
-        return new FileValidator(propertiesWith(maxFileSizeMb, allowedMimeTypes));
+        return new FileValidator(propertiesWith(maxFileSizeMb, allowedMimeTypes), new PdfSanitizer());
     }
 
-    private static final byte[] VALID_PDF_CONTENT = "%PDF-1.4\n%%EOF".getBytes();
+    private static final byte[] VALID_PDF_CONTENT = com.drivingschool.backend.storage.TestPdfs.blank();
 
     @Test
     void validate_validPdf_doesNotThrow() {
@@ -53,39 +53,38 @@ class FileValidatorTest {
     }
 
     @Test
-    void validate_pdfWithEmbeddedJavaScript_throws() {
+    void validate_ordinaryExportWithAnOpenAction_isAcceptedUnchanged() throws Exception {
+        // Word / Google Docs / LaTeX: "open at page 1, fit width" - used to be rejected.
+        byte[] pdf = TestPdfs.withHarmlessOpenAction();
         FileValidator validator = validatorWith(50, "application/pdf");
-        MockMultipartFile file = new MockMultipartFile(
-                "file", "report.pdf", "application/pdf",
-                "%PDF-1.4\n/JavaScript (app.alert('x'))\n%%EOF".getBytes());
 
-        assertThatThrownBy(() -> validator.validate(file))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("active content");
+        byte[] stored = validator.validate(new MockMultipartFile("file", "lecture.pdf", "application/pdf", pdf));
+
+        org.assertj.core.api.Assertions.assertThat(stored).isEqualTo(pdf);
     }
 
     @Test
-    void validate_pdfWithLaunchAction_throws() {
+    void validate_pdfWithJavaScript_isAccepted_andTheStoredCopyHasItStripped() throws Exception {
+        byte[] pdf = TestPdfs.withJavaScriptOpenAction();
         FileValidator validator = validatorWith(50, "application/pdf");
-        MockMultipartFile file = new MockMultipartFile(
-                "file", "report.pdf", "application/pdf",
-                "%PDF-1.4\n/Launch (cmd.exe)\n%%EOF".getBytes());
 
-        assertThatThrownBy(() -> validator.validate(file))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("active content");
+        byte[] stored = validator.validate(new MockMultipartFile("file", "report.pdf", "application/pdf", pdf));
+
+        org.assertj.core.api.Assertions.assertThat(stored).isNotEqualTo(pdf);
+        try (var cleaned = org.apache.pdfbox.Loader.loadPDF(stored)) {
+            org.assertj.core.api.Assertions.assertThat(cleaned.getDocumentCatalog().getOpenAction()).isNull();
+        }
     }
 
     @Test
-    void validate_pdfWithEmbeddedFile_throws() {
+    void validate_somethingThatOnlyLooksLikeAPdf_throws() {
         FileValidator validator = validatorWith(50, "application/pdf");
         MockMultipartFile file = new MockMultipartFile(
-                "file", "report.pdf", "application/pdf",
-                "%PDF-1.4\n/EmbeddedFile\n%%EOF".getBytes());
+                "file", "report.pdf", "application/pdf", "%PDF-1.4\n/Launch (cmd.exe)\n%%EOF".getBytes());
 
         assertThatThrownBy(() -> validator.validate(file))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("active content");
+                .hasMessageContaining("does not match a valid PDF");
     }
 
     @Test

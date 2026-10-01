@@ -39,11 +39,11 @@ public class LocalStorageService implements StorageService {
 
     @Override
     public StoredFile store(MultipartFile file, String folder, String identifier) throws IOException, NoSuchAlgorithmException {
-        validator.validate(file);
+        byte[] content = validator.validate(file);
 
         String extension = validator.getFileExtension(file.getOriginalFilename());
         String storagePath = StoragePaths.generate(folder, identifier, extension);
-        String fileHash = FileHasher.sha256Hex(file.getBytes());
+        String fileHash = FileHasher.sha256Hex(content);
 
         Path basePath = basePath();
         Path filePath = basePath.resolve(storagePath);
@@ -54,12 +54,10 @@ public class LocalStorageService implements StorageService {
         Files.createDirectories(parentDir);
 
         try {
-            // MultipartFile#transferTo(File) resolves a *relative* File against
-            // Tomcat's own internal temp/work directory, not the JVM's working
-            // directory - basePath() being absolute is what makes this land in the
-            // real uploads directory instead of silently failing there.
-            file.transferTo(filePath.toFile());
-            log.info("File uploaded successfully: {} (size: {} bytes)", storagePath, file.getSize());
+            // The validated (possibly sanitized) content, not the raw upload. basePath()
+            // is absolute, so this lands in the real uploads directory.
+            Files.write(filePath, content);
+            log.info("File uploaded successfully: {} (size: {} bytes)", storagePath, content.length);
         } catch (IOException e) {
             log.error("Failed to upload file: {}", storagePath, e);
             throw new IOException("Failed to store file: " + e.getMessage(), e);
@@ -68,7 +66,7 @@ public class LocalStorageService implements StorageService {
         return StoredFile.builder()
                 .storagePath(storagePath)
                 .fileName(file.getOriginalFilename())
-                .fileSize(file.getSize())
+                .fileSize((long) content.length)
                 .contentType(file.getContentType())
                 .fileHash(fileHash)
                 .build();

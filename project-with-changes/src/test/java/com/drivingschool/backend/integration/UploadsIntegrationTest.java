@@ -31,8 +31,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 class UploadsIntegrationTest extends AbstractIntegrationTest {
 
-    private static final byte[] VALID_PDF_CONTENT = "%PDF-1.4\n%%EOF".getBytes();
-    private static final byte[] REPLACEMENT_PDF_CONTENT = "%PDF-1.4\nreplacement\n%%EOF".getBytes();
+    private static final byte[] VALID_PDF_CONTENT = com.drivingschool.backend.storage.TestPdfs.blank();
+    private static final byte[] REPLACEMENT_PDF_CONTENT = com.drivingschool.backend.storage.TestPdfs.blank("replacement");
 
     @Test
     void attachmentLifecycle_uploadListDownloadReplaceDelete() throws Exception {

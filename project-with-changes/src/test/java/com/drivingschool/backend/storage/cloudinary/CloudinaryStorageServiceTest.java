@@ -31,7 +31,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class CloudinaryStorageServiceTest {
 
-    private static final byte[] VALID_PDF_CONTENT = "%PDF-1.4\n%%EOF".getBytes();
+    private static final byte[] VALID_PDF_CONTENT = com.drivingschool.backend.storage.TestPdfs.blank();
     private static final String SIGNED_URL = "https://res.cloudinary.com/test/raw/authenticated/s--sig--/lesson-notes/x.pdf";
 
     @Mock private Cloudinary cloudinary;
@@ -44,7 +44,7 @@ class CloudinaryStorageServiceTest {
     @BeforeEach
     void setUp() {
         StorageProperties properties = new StorageProperties(new MockEnvironment());
-        service = new CloudinaryStorageService(cloudinary, new FileValidator(properties), restTemplate);
+        service = new CloudinaryStorageService(cloudinary, new FileValidator(properties, new com.drivingschool.backend.storage.PdfSanitizer()), restTemplate);
     }
 
     private void stubUrlBuilder() {

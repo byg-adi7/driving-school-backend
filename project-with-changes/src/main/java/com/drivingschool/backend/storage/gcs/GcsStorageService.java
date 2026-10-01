@@ -38,11 +38,10 @@ public class GcsStorageService implements StorageService {
 
     @Override
     public StoredFile store(MultipartFile file, String folder, String identifier) throws IOException, NoSuchAlgorithmException {
-        validator.validate(file);
+        byte[] content = validator.validate(file);
 
         String extension = validator.getFileExtension(file.getOriginalFilename());
         String storagePath = StoragePaths.generate(folder, identifier, extension);
-        byte[] content = file.getBytes();
         String fileHash = FileHasher.sha256Hex(content);
 
         BlobId blobId = BlobId.of(bucketName(), storagePath);
@@ -52,7 +51,7 @@ public class GcsStorageService implements StorageService {
 
         try {
             storage.create(blobInfo, content);
-            log.info("File uploaded successfully to gs://{}/{} (size: {} bytes)", bucketName(), storagePath, file.getSize());
+            log.info("File uploaded successfully to gs://{}/{} (size: {} bytes)", bucketName(), storagePath, content.length);
         } catch (RuntimeException e) {
             log.error("Failed to upload file to gs://{}/{}", bucketName(), storagePath, e);
             throw new IOException("Failed to store file: " + e.getMessage(), e);
@@ -61,7 +60,7 @@ public class GcsStorageService implements StorageService {
         return StoredFile.builder()
                 .storagePath(storagePath)
                 .fileName(file.getOriginalFilename())
-                .fileSize(file.getSize())
+                .fileSize((long) content.length)
                 .contentType(file.getContentType())
                 .fileHash(fileHash)
                 .build();

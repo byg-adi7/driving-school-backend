@@ -49,11 +49,10 @@ public class CloudinaryStorageService implements StorageService {
 
     @Override
     public StoredFile store(MultipartFile file, String folder, String identifier) throws IOException, NoSuchAlgorithmException {
-        validator.validate(file);
+        byte[] content = validator.validate(file);
 
         String extension = validator.getFileExtension(file.getOriginalFilename());
         String storagePath = StoragePaths.generate(folder, identifier, extension);
-        byte[] content = file.getBytes();
         String fileHash = FileHasher.sha256Hex(content);
 
         try {
@@ -61,7 +60,7 @@ public class CloudinaryStorageService implements StorageService {
                     "public_id", storagePath,
                     "resource_type", RESOURCE_TYPE,
                     "type", DELIVERY_TYPE));
-            log.info("File uploaded successfully to Cloudinary: {} (size: {} bytes)", storagePath, file.getSize());
+            log.info("File uploaded successfully to Cloudinary: {} (size: {} bytes)", storagePath, content.length);
         } catch (IOException e) {
             log.error("Failed to upload file to Cloudinary: {}", storagePath, e);
             throw new IOException("Failed to store file: " + e.getMessage(), e);
@@ -70,7 +69,7 @@ public class CloudinaryStorageService implements StorageService {
         return StoredFile.builder()
                 .storagePath(storagePath)
                 .fileName(file.getOriginalFilename())
-                .fileSize(file.getSize())
+                .fileSize((long) content.length)
                 .contentType(file.getContentType())
                 .fileHash(fileHash)
                 .build();
