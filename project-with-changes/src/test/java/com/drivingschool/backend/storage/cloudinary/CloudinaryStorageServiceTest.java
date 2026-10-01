@@ -94,15 +94,27 @@ class CloudinaryStorageServiceTest {
     }
 
     @Test
-    void store_uploadFailure_wrapsAsIOException() throws Exception {
+    void store_networkFailure_isServiceUnavailable() throws Exception {
         when(cloudinary.uploader()).thenReturn(uploader);
         when(uploader.upload(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenThrow(new IOException("network blip"));
         MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", VALID_PDF_CONTENT);
 
         assertThatThrownBy(() -> service.store(file, "lesson-notes", "42"))
-                .isInstanceOf(IOException.class)
-                .hasMessageContaining("Failed to store file");
+                .isInstanceOf(com.drivingschool.backend.common.exception.ServiceUnavailableException.class)
+                .hasMessageContaining("File storage is unavailable");
+    }
+
+    @Test
+    void store_cloudinaryApiError_likeABadCloudName_isServiceUnavailable_notA500() throws Exception {
+        when(cloudinary.uploader()).thenReturn(uploader);
+        when(uploader.upload(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenThrow(new RuntimeException("Invalid cloud_name divd2hyy"));
+        MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", VALID_PDF_CONTENT);
+
+        assertThatThrownBy(() -> service.store(file, "lesson-notes", "42"))
+                .isInstanceOf(com.drivingschool.backend.common.exception.ServiceUnavailableException.class)
+                .hasRootCauseMessage("Invalid cloud_name divd2hyy");
     }
 
     @Test
