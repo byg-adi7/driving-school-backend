@@ -15,4 +15,5 @@ public class ContactResponse {
     private final Long profileId;
     private final String firstName;
     private final String lastName;
+    private final String profileImageUrl;
 }

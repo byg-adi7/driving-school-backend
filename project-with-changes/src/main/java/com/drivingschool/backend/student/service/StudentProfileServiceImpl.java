@@ -54,7 +54,7 @@ public class StudentProfileServiceImpl implements StudentProfileService {
         StudentProfile profile = findByCurrentUser();
 
         profile.updateProfile(request.getFirstName(), request.getLastName(), request.getPhone(),
-                request.getDateOfBirth(), request.getProfileImageUrl());
+                request.getDateOfBirth());
 
         StudentProfile saved = studentProfileRepository.save(profile);
         log.info("Updated student profile: {}", saved.getUser().getEmail());

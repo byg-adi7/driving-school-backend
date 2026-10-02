@@ -14,6 +14,7 @@ public class ConversationResponse {
     private final Long studentProfileId;
     private final Long instructorProfileId;
     private final String counterpartName;
+    private final String counterpartProfileImageUrl;
     private final String counterpartRole;
     private final String lastMessagePreview;
     private final LocalDateTime lastMessageAt;

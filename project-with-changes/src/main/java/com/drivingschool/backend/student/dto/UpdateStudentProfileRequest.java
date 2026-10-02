@@ -27,7 +27,4 @@ public class UpdateStudentProfileRequest {
 
     @Past(message = "Date of birth must be in the past")
     private final LocalDate dateOfBirth;
-
-    @Size(max = 500, message = "Profile image URL must not exceed 500 characters")
-    private final String profileImageUrl;
 }

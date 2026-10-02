@@ -17,6 +17,7 @@ public class InstructorProfileResponse {
     private final String licenseNumber;
     private final Integer yearsExperience;
     private final String bio;
+    private final String profileImageUrl;
     private final boolean active;
     private final Long schoolId;
     private final String schoolName;

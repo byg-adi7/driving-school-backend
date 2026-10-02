@@ -79,13 +79,15 @@ public class MessagingServiceImpl implements MessagingService {
             return instructorProfileRepository.findBySchoolIdExcludingDeletedUsers(me.getSchool().getId()).stream()
                     .filter(InstructorProfile::isActive)
                     .map(i -> ContactResponse.builder()
-                            .profileId(i.getId()).firstName(i.getFirstName()).lastName(i.getLastName()).build())
+                            .profileId(i.getId()).firstName(i.getFirstName()).lastName(i.getLastName())
+                            .profileImageUrl(i.getUser().getProfileImageUrl()).build())
                     .toList();
         }
         InstructorProfile me = requireInstructor();
         return studentProfileRepository.findBySchoolIdExcludingDeletedUsers(me.getSchool().getId()).stream()
                 .map(s -> ContactResponse.builder()
-                        .profileId(s.getId()).firstName(s.getFirstName()).lastName(s.getLastName()).build())
+                        .profileId(s.getId()).firstName(s.getFirstName()).lastName(s.getLastName())
+                        .profileImageUrl(s.getUser().getProfileImageUrl()).build())
                 .toList();
     }
 
@@ -242,6 +244,9 @@ public class MessagingServiceImpl implements MessagingService {
                         ? fullName(c.getInstructor().getFirstName(), c.getInstructor().getLastName())
                         : fullName(c.getStudent().getFirstName(), c.getStudent().getLastName()))
                 .counterpartRole(iAmStudent ? RoleName.INSTRUCTOR.name() : RoleName.STUDENT.name())
+                .counterpartProfileImageUrl(iAmStudent
+                        ? c.getInstructor().getUser().getProfileImageUrl()
+                        : c.getStudent().getUser().getProfileImageUrl())
                 .lastMessagePreview(c.getLastMessagePreview())
                 .lastMessageAt(c.getLastMessageAt())
                 .unreadCount(unread.getOrDefault(c.getId(), 0L))

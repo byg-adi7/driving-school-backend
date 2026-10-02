@@ -58,7 +58,7 @@ class StudentProfileControllerSecurityTest {
     private UpdateStudentProfileRequest updateRequest() {
         return UpdateStudentProfileRequest.builder()
                 .firstName("Jane").lastName("Doe").phone("123")
-                .dateOfBirth(LocalDate.of(2000, 1, 1)).profileImageUrl("http://img").build();
+                .dateOfBirth(LocalDate.of(2000, 1, 1)).build();
     }
 
     @Test

@@ -503,6 +503,29 @@ ENDPOINT("DELETE", "/users/{id}", "Delete a user account.", access="ADMIN only",
            "Target is the bootstrap admin: always 400, regardless of caller — that account "
            "can never be deleted through this endpoint (or any other)."])
 
+d.H(2, "Profile photos")
+d.P("Every account - student, instructor or admin - can have a photo. It's stored on "
+    "Cloudinary, cropped to a 400 x 400 square (centre crop), and served from a PUBLIC URL "
+    "(unlike course PDFs), so it can be used directly in an <img>. profileImageUrl now "
+    "appears in GET /auth/me, student and instructor profiles and school lists, "
+    "GET /conversations/contacts, conversations (counterpartProfileImageUrl), and the "
+    "leaderboard / gamification summary. It's absent when there's no photo - show initials.")
+ENDPOINT("POST", "/users/me/photo", "Upload or replace my photo.", access="Any logged-in user",
+    request=[["file", "file (multipart/form-data)", "yes", "JPEG, PNG or WebP, max 5 MB - the file's content is checked, not just its name"]],
+    response=[["userId / profileImageUrl", "", "the new public URL"]],
+    notes=["Let the user crop to a square before uploading (the server centre-crops "
+           "otherwise, which can cut off a face that isn't centred).",
+           "400 for a non-image or a file over 5 MB; 503 if photo storage is unavailable.",
+           "The previous photo is deleted from storage once the new one is saved."])
+ENDPOINT("DELETE", "/users/me/photo", "Remove my photo.", access="Any logged-in user")
+ENDPOINT("POST", "/users/{userId}/photo", "Upload someone else's photo.",
+    access="ADMIN for accounts of their own school (bootstrap admin: anyone); INSTRUCTOR for students of their school",
+    request=[["file", "file (multipart/form-data)", "yes", "same rules as above"]],
+    notes=["For account creation: POST /auth/register, take user.id from the response, then "
+           "POST /users/{that id}/photo - e.g. a photo step at the end of the \"add student\" form.",
+           "403 for anyone else."])
+ENDPOINT("DELETE", "/users/{userId}/photo", "Remove someone else's photo.", access="Same as uploading it")
+
 # =====================================================================
 # INSTRUCTOR PROFILES
 # =====================================================================
@@ -548,8 +571,9 @@ ENDPOINT("PUT", "/students/me", "Update the current student's own profile.", acc
         ["firstName / lastName", "string", "yes", ""],
         ["phone", "string", "no", ""],
         ["dateOfBirth", "date", "no", "must be in the past"],
-        ["profileImageUrl", "string", "no", "max 500 chars"],
-    ])
+    ],
+    notes=["profileImageUrl is no longer set here (it was a typed-in URL) - the photo is "
+           "uploaded with POST /users/me/photo. A profileImageUrl sent here is ignored."])
 
 ENDPOINT("GET", "/students/school/{schoolId}", "List students in a school.",
     access="Bootstrap admin (any school), or a regular ADMIN / INSTRUCTOR listing their OWN school only",
@@ -1601,6 +1625,16 @@ d.BULLETS([
     "the country code (+233...) - it's what makes WhatsApp codes possible.",
     "Verification may be switched off on the backend for now (login then just returns "
     "tokens). Build and keep this flow anyway - it turns on without a frontend release.",
+])
+
+d.H(2, "15. Profile photos")
+d.BULLETS([
+    "A \"Change photo\" control on each user's own profile/settings page: pick an image "
+    "(device or camera), crop to a square, upload to POST /users/me/photo; a \"Remove\" option.",
+    "An optional photo step when an admin creates a student/instructor or an instructor creates a "
+    "student: after POST /auth/register succeeds, upload to POST /users/{user.id}/photo.",
+    "Show profileImageUrl as a round avatar wherever people appear (header, lists, chat, "
+    "leaderboard, attendance lists by matching userId); initials when it's absent.",
 ])
 
 d.H(2, "14. Attendance screens")

@@ -18,7 +18,7 @@ public class StudentProfileMapper {
                 .dateOfBirth(profile.getDateOfBirth())
                 .enrollmentDate(profile.getEnrollmentDate())
                 .status(profile.getStatus())
-                .profileImageUrl(profile.getProfileImageUrl())
+                .profileImageUrl(profile.getUser().getProfileImageUrl())
                 .schoolId(profile.getSchool().getId())
                 .schoolName(profile.getSchool().getName())
                 .build();

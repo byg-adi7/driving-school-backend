@@ -15,6 +15,7 @@ public class GamificationSummaryResponse {
 
     private Long studentId;
     private String studentName;
+    private String profileImageUrl;
     private Integer totalPoints;
     private Integer currentStreakWeeks;
     private Integer longestStreakWeeks;
