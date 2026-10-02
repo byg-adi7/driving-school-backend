@@ -93,6 +93,14 @@ public class DailyAttendance extends BaseEntity {
     @Column(length = 200)
     private String topic;
 
+    // Staff roll call: who went through this day's list and settled this entry, and when.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by_user_id")
+    private User reviewedBy;
+
+    @Column(name = "reviewed_at")
+    private LocalDateTime reviewedAt;
+
     // Set when a check-in couldn't place the student at school (kept after confirmation, for the record).
     @Enumerated(EnumType.STRING)
     @Column(name = "confirmation_reason", length = 40)
@@ -126,6 +134,11 @@ public class DailyAttendance extends BaseEntity {
         this.status = DailyAttendanceStatus.PRESENT;
         this.confirmedBy = by;
         this.confirmedAt = at;
+    }
+
+    public void review(User by, LocalDateTime at) {
+        this.reviewedBy = by;
+        this.reviewedAt = at;
     }
 
     /** A staff entry or correction; keeps any check-in location for the audit trail. */

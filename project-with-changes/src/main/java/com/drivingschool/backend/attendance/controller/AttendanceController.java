@@ -3,6 +3,7 @@ package com.drivingschool.backend.attendance.controller;
 import com.drivingschool.backend.attendance.dto.CheckInRequest;
 import com.drivingschool.backend.attendance.dto.DailyAttendanceResponse;
 import com.drivingschool.backend.attendance.dto.ManualAttendanceRequest;
+import com.drivingschool.backend.attendance.dto.RollCallRequest;
 import com.drivingschool.backend.attendance.service.AttendanceExportService;
 import com.drivingschool.backend.attendance.service.AttendanceService;
 import com.drivingschool.backend.common.response.ApiResponse;
@@ -94,6 +95,14 @@ public class AttendanceController {
     @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
     public ResponseEntity<ApiResponse<DailyAttendanceResponse>> manual(@Valid @RequestBody ManualAttendanceRequest request) {
         return ResponseEntity.ok(ApiResponse.success("Attendance recorded", attendanceService.recordManually(request)));
+    }
+
+    @PutMapping("/school/{schoolId}/roll-call")
+    @Operation(summary = "Save a day's roll call: who was really there (PRESENT/LATE) and who wasn't (ABSENT)")
+    @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
+    public ResponseEntity<ApiResponse<List<DailyAttendanceResponse>>> rollCall(
+            @PathVariable Long schoolId, @Valid @RequestBody RollCallRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Roll call saved", attendanceService.rollCall(schoolId, request)));
     }
 
     @GetMapping("/school/{schoolId}/export/register")

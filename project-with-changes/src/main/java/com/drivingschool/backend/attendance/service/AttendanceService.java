@@ -3,6 +3,7 @@ package com.drivingschool.backend.attendance.service;
 import com.drivingschool.backend.attendance.dto.CheckInRequest;
 import com.drivingschool.backend.attendance.dto.DailyAttendanceResponse;
 import com.drivingschool.backend.attendance.dto.ManualAttendanceRequest;
+import com.drivingschool.backend.attendance.dto.RollCallRequest;
 import com.drivingschool.backend.attendance.dto.UpdateSchoolLocationRequest;
 import com.drivingschool.backend.attendance.entity.DailyAttendance;
 import com.drivingschool.backend.attendance.enums.AttendanceSource;
@@ -261,7 +262,10 @@ public class AttendanceService {
         if (record.getStatus() != DailyAttendanceStatus.PENDING_CONFIRMATION) {
             throw new BadRequestException("Only a check-in awaiting confirmation can be confirmed");
         }
-        record.confirm(currentUser(), LocalDateTime.now(clock));
+        User by = currentUser();
+        LocalDateTime now = LocalDateTime.now(clock);
+        record.confirm(by, now);
+        record.review(by, now);
         return toResponse(attendanceRepository.save(record), nameOf(record.getUser().getId()));
     }
 
@@ -300,10 +304,74 @@ public class AttendanceService {
                         .lessonType(request.getLessonType())
                         .topic(blankToNull(request.getTopic()))
                         .build());
+        record.review(by, LocalDateTime.now(clock));
         return toResponse(attendanceRepository.save(record), target.name());
     }
 
+    /**
+     * Roll call: staff go through a day's list and save it in one go - keeping who was
+     * really there, marking anyone who signed in and left as ABSENT (with a reason).
+     * Every entry is stamped as reviewed by the caller. Instructors do students; the
+     * school's admin does students and instructors.
+     */
+    @Transactional
+    public List<DailyAttendanceResponse> rollCall(Long schoolId, RollCallRequest request) {
+        RoleName who = rosterRole(request.getRole());
+        School school = who == RoleName.INSTRUCTOR ? adminOnlySchool(schoolId) : staffSchool(schoolId);
+        if (request.getDate().isAfter(today(school))) {
+            throw new BadRequestException("A roll call can't be saved for a future date");
+        }
+        Map<Long, Person> roster = roster(school.getId(), who).stream()
+                .collect(Collectors.toMap(Person::userId, Function.identity()));
+        Map<Long, DailyAttendance> existing = attendanceRepository
+                .findForSchool(school.getId(), who, request.getDate(), request.getDate()).stream()
+                .collect(Collectors.toMap(r -> r.getUser().getId(), Function.identity(), (a, b) -> a));
+
+        User by = currentUser();
+        LocalDateTime now = LocalDateTime.now(clock);
+        List<DailyAttendanceResponse> saved = new java.util.ArrayList<>();
+        for (RollCallRequest.Entry entry : request.getEntries()) {
+            if (!MANUAL_STATUSES.contains(entry.getStatus())) {
+                throw new BadRequestException("Roll call status must be PRESENT, LATE or ABSENT");
+            }
+            Person person = roster.get(entry.getUserId());
+            if (person == null) {
+                throw new BadRequestException("User " + entry.getUserId() + " isn't an active "
+                        + who.name().toLowerCase() + " of this school");
+            }
+            DailyAttendance record = existing.get(person.userId());
+            if (record == null) {
+                record = DailyAttendance.builder()
+                        .school(school)
+                        .user(userRepository.getReferenceById(person.userId()))
+                        .role(who)
+                        .attendanceDate(request.getDate())
+                        .status(entry.getStatus())
+                        .source(AttendanceSource.MANUAL)
+                        .recordedBy(by)
+                        .reason(blankToNull(entry.getReason()))
+                        .build();
+            } else if (record.getStatus() == DailyAttendanceStatus.PENDING_CONFIRMATION
+                    && entry.getStatus() == DailyAttendanceStatus.PRESENT) {
+                record.confirm(by, now);
+            } else if (record.getStatus() != entry.getStatus()) {
+                record.recordManually(entry.getStatus(), blankToNull(entry.getReason()), by, null, null);
+            }
+            // Unchanged entries keep their check-in as is - they're simply marked as reviewed.
+            record.review(by, now);
+            saved.add(toResponse(attendanceRepository.save(record), person.name()));
+        }
+        return saved;
+    }
+
     // ------------------------------------------------------------------ helpers
+
+    private School adminOnlySchool(Long schoolId) {
+        if (!currentUserService.hasRole(RoleName.ADMIN)) {
+            throw new ForbiddenException("Only the school's admin can take the instructors' roll call");
+        }
+        return staffSchool(schoolId);
+    }
 
     private record Membership(User user, School school, RoleName role, String name) {
     }
@@ -427,6 +495,8 @@ public class AttendanceService {
                 .confirmedAt(record.getConfirmedAt())
                 .confirmedByName(record.getConfirmedBy() != null ? displayName(record.getConfirmedBy()) : null)
                 .recordedByName(record.getRecordedBy() != null ? displayName(record.getRecordedBy()) : null)
+                .reviewedAt(record.getReviewedAt())
+                .reviewedByName(record.getReviewedBy() != null ? displayName(record.getReviewedBy()) : null)
                 .reason(record.getReason())
                 .lessonType(record.getLessonType())
                 .topic(record.getTopic())

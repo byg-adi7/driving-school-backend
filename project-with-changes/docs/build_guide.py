@@ -1262,6 +1262,7 @@ ENDPOINT("POST", "/attendance/check-in", "Check in for today from the current lo
     example_req='{\n  "latitude": 5.60391,\n  "longitude": -0.18712,\n  "accuracyMeters": 14,\n  "lessonType": "PRACTICAL",\n  "topic": "Reverse parking"\n}',
     response=[["id / date / status / checkedInAt", "", "status PRESENT when at the school; PENDING_CONFIRMATION for a student who isn't"],
               ["confirmationReason", "enum or absent", "why it needs confirming (see above)"],
+              ["reviewedByName / reviewedAt", "", "absent until staff take the day's roll call (see below)"],
               ["lessonType / topic", "", "as sent"],
               ["distanceMeters / accuracyMeters", "number", "how far from the school (absent if the school has no location), and the fix's precision"]],
     notes=["Use getCurrentPosition with { enableHighAccuracy: true }; ask for location "
@@ -1294,6 +1295,31 @@ ENDPOINT("POST", "/attendance/manual", "Record or correct someone's day.", acces
              ["lessonType / topic", "PRACTICAL | THEORY / string", "no", "kept from the check-in if left out"]],
     notes=["Overwrites a check-in for that day if there is one (the location stays on record); "
            "source becomes MANUAL and recordedByName is set."])
+d.H(2, "Roll call: confirming who was really there")
+d.P("A check-in only proves someone came onto the premises - they could sign in and leave. "
+    "So staff take a roll call: during or after the lesson they go through the day's list, "
+    "keep the people who are really there and mark anyone who left as ABSENT, then save the "
+    "whole list in one go. Every saved entry is stamped with who reviewed it and when "
+    "(reviewedByName / reviewedAt), so an unreviewed day stands out.")
+ENDPOINT("PUT", "/attendance/school/{schoolId}/roll-call", "Save a day's roll call.",
+    access="Students: an INSTRUCTOR of that school or its ADMIN. Instructors (role=INSTRUCTOR): the school's ADMIN only",
+    request=[
+        ["date", "date", "yes", "today or earlier"],
+        ["role", "STUDENT | INSTRUCTOR", "no", "default STUDENT"],
+        ["entries", "array", "yes", "one per person you checked - typically the whole day list"],
+        ["entries[].userId", "number", "yes", "userId from the day list"],
+        ["entries[].status", "PRESENT | LATE | ABSENT", "yes", "what you saw"],
+        ["entries[].reason", "string", "no", "max 500, e.g. \"Signed in and left\""],
+    ],
+    example_req='{\n  "date": "2026-10-02",\n  "role": "STUDENT",\n  "entries": [\n    { "userId": 31, "status": "PRESENT" },\n    { "userId": 34, "status": "ABSENT", "reason": "Signed in and left" },\n    { "userId": 35, "status": "LATE", "reason": "Arrived 09:40" }\n  ]\n}',
+    response=[["[] of attendance entries", "", "the saved entries, each with reviewedByName / reviewedAt"]],
+    notes=["A self check-in kept as PRESENT stays a check-in (location and time kept) and is "
+           "simply marked reviewed; one changed to ABSENT/LATE becomes a staff correction "
+           "(source MANUAL, recordedByName, reason).",
+           "A PENDING_CONFIRMATION check-in saved as PRESENT is confirmed at the same time.",
+           "Someone with no check-in can be included (e.g. ABSENT, or PRESENT if they forgot to check in).",
+           "400 if an entry isn't an active student/instructor of the school, or the date is in the future."])
+
 ENDPOINT("GET", "/attendance/users/{userId}", "One person's history.", access="The person themselves; ADMIN of their school; INSTRUCTOR for students of their school",
     params=[["from / to", "date (query)", "no", "default: the last 30 days; at most 62 days"]])
 
@@ -1310,8 +1336,8 @@ ENDPOINT("GET", "/attendance/school/{schoolId}/export/register", "Register: peop
 ENDPOINT("GET", "/attendance/school/{schoolId}/export/day", "One day's detailed list.", access="ADMIN (own school) or INSTRUCTOR of that school",
     params=[["date", "date (query)", "no", "default today"], ["role", "STUDENT | INSTRUCTOR (query)", "no", "default STUDENT"]],
     notes=["Columns: name, status (with why, if awaiting confirmation), lesson (practical/theory), "
-           "topic, check-in time (school time), distance, accuracy, confirmed by, recorded by, reason "
-           "- plus a count per status at the bottom."])
+           "topic, check-in time (school time), distance, accuracy, confirmed by, recorded by, reason, "
+           "roll call by - plus a count per status at the bottom."])
 
 d.H(1, "Notifications")
 d.P("Two things happen here: the system automatically sends notifications for certain "
@@ -1589,6 +1615,11 @@ d.BULLETS([
     "topic - Confirm on pending students (show the reason and distance so they can judge), "
     "late / absent / present corrections, a date picker for past days, and Download buttons "
     "for the register (date range) and the day list.",
+    "Roll call (the anti \"sign in and leave\" check): a \"Take roll call\" mode on the day "
+    "list - every row gets Present / Late / Absent (pre-filled from today's status) and a "
+    "reason box; one Save sends the whole list to PUT /attendance/school/{id}/roll-call. Show "
+    "a \"Reviewed by ... at ...\" badge per row and a \"Roll call not taken yet\" banner when "
+    "no row has reviewedAt. Admins get the same for instructors (role=INSTRUCTOR).",
     "Admin: a \"School location\" setting - drop a pin on a map (or use the current "
     "position while at the school), radius, time zone. Prompt for it if latitude is null.",
 ])
