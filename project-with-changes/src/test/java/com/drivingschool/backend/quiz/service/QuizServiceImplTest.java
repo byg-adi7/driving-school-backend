@@ -188,6 +188,55 @@ class QuizServiceImplTest {
         assertThatCode(() -> quizService.getById(10L, true, 999L, "STUDENT")).doesNotThrowAnyException();
     }
 
+    private QuizSubmissionRepository.AttemptSummary summary(long attempts, Integer best, int passed) {
+        return new QuizSubmissionRepository.AttemptSummary() {
+            public Long getAttempts() { return attempts; }
+            public Integer getBestScore() { return best; }
+            public Integer getPassed() { return passed; }
+        };
+    }
+
+    @Test
+    void getById_forAStudent_includesTheirAttemptsSoFar() {
+        Quiz quiz = quizFor(userWithId(1L), true);
+        when(quizRepository.findById(10L)).thenReturn(Optional.of(quiz));
+        when(quizQuestionRepository.findByQuizIdOrderByQuestionOrderAsc(10L)).thenReturn(java.util.List.of());
+        when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(studentProfile(20L, userWithId(2L))));
+        when(quizSubmissionRepository.summarizeAttempts(10L, 20L)).thenReturn(summary(1, 60, 0));
+
+        var attempts = quizService.getById(10L, true, 2L, "STUDENT").getMyAttempts();
+
+        org.assertj.core.api.Assertions.assertThat(attempts.getAttemptsUsed()).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(attempts.getAttemptsRemaining()).isEqualTo(2);
+        org.assertj.core.api.Assertions.assertThat(attempts.getBestScore()).isEqualTo(60);
+        org.assertj.core.api.Assertions.assertThat(attempts.isPassed()).isFalse();
+    }
+
+    @Test
+    void getById_forAStudentWhoHasNotStarted_showsAllAttemptsLeft_andNoBestScore() {
+        Quiz quiz = quizFor(userWithId(1L), true);
+        when(quizRepository.findById(10L)).thenReturn(Optional.of(quiz));
+        when(quizQuestionRepository.findByQuizIdOrderByQuestionOrderAsc(10L)).thenReturn(java.util.List.of());
+        when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(studentProfile(20L, userWithId(2L))));
+        when(quizSubmissionRepository.summarizeAttempts(10L, 20L)).thenReturn(summary(0, null, 0));
+
+        var attempts = quizService.getById(10L, true, 2L, "STUDENT").getMyAttempts();
+
+        org.assertj.core.api.Assertions.assertThat(attempts.getAttemptsUsed()).isZero();
+        org.assertj.core.api.Assertions.assertThat(attempts.getAttemptsRemaining()).isEqualTo(3);
+        org.assertj.core.api.Assertions.assertThat(attempts.getBestScore()).isNull();
+    }
+
+    @Test
+    void getById_forTheInstructor_hasNoMyAttempts() {
+        Quiz quiz = quizFor(userWithId(1L), true);
+        when(quizRepository.findById(10L)).thenReturn(Optional.of(quiz));
+        when(quizQuestionRepository.findByQuizIdOrderByQuestionOrderAsc(10L)).thenReturn(java.util.List.of());
+
+        org.assertj.core.api.Assertions.assertThat(quizService.getById(10L, false, 1L, "INSTRUCTOR").getMyAttempts()).isNull();
+        verify(quizSubmissionRepository, never()).summarizeAttempts(any(), any());
+    }
+
     // --- submit: the critical fix ---
 
     @Test
