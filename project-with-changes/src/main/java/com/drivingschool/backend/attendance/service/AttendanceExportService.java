@@ -146,7 +146,7 @@ public class AttendanceExportService {
             Styles styles = new Styles(workbook);
             Sheet sheet = workbook.createSheet(SHORT_DATE.format(date));
             String[] columns = {"#", "Name", "Status", "Lesson", "Topic", "Check-in time", "Distance (m)",
-                    "Accuracy (m)", "Confirmed by", "Recorded by", "Reason"};
+                    "Accuracy (m)", "Confirmed by", "Recorded by", "Reason", "Roll call by"};
             int lastCol = columns.length - 1;
 
             title(sheet, styles, school.getName(), lastCol);
@@ -184,6 +184,7 @@ public class AttendanceExportService {
                 cell(row, 8, nullToEmpty(entry.getConfirmedByName()), styles.text);
                 cell(row, 9, nullToEmpty(entry.getRecordedByName()), styles.text);
                 cell(row, 10, nullToEmpty(entry.getReason()), styles.text);
+                cell(row, 11, nullToEmpty(entry.getReviewedByName()), styles.text);
             }
 
             rowIndex++;
@@ -197,7 +198,7 @@ public class AttendanceExportService {
                 }
             }
 
-            int[] widths = {5, 28, 26, 11, 26, 13, 12, 12, 22, 22, 30};
+            int[] widths = {5, 28, 26, 11, 26, 13, 12, 12, 22, 22, 30, 22};
             for (int i = 0; i < widths.length; i++) {
                 sheet.setColumnWidth(i, widths[i] * 256);
             }

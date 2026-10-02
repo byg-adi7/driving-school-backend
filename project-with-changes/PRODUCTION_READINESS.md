@@ -489,3 +489,19 @@ An instructor of the school (or its admin) confirms it. The reason stays on the 
 **Lesson type and topic:** students must send `lessonType` (`PRACTICAL` or `THEORY`, a radio button in the app), plus an optional `topic` of up to 200 characters. Both are stored (V21), returned in lists and histories, can be set on manual entries, and appear in the one-day Excel list next to the status, which now also says why a check-in awaits confirmation.
 
 **Tests:** attendance tests were updated and extended to 24. Frontend guide updated.
+
+## Attendance Roll Call: Catching "Sign In and Leave" (2026-10-02)
+
+A self check-in only proves someone reached the premises. The product owner asked for staff to confirm who was really there.
+
+**Rule:** self check-ins still count as present immediately. Staff review the day with `PUT /attendance/school/{schoolId}/roll-call`, saving the whole list at once:
+- kept entries are just stamped as reviewed;
+- changed entries become staff corrections, with the reason kept;
+- pending ones saved as PRESENT are confirmed;
+- people with no check-in can be added.
+
+**Permissions:** instructors take the students' roll call; the school's admin takes both the students' and the instructors'.
+
+**Data:** V22 adds `reviewed_by_user_id` / `reviewed_at`. A confirmation or manual entry also counts as reviewed. Responses carry `reviewedByName` / `reviewedAt`, and the one-day Excel list has a "Roll call by" column.
+
+**Tests:** 4 new (mixed roll call; instructor roll call admin-only; unknown person; future date). Frontend guide updated.

@@ -3,6 +3,7 @@ package com.drivingschool.backend.attendance.service;
 import com.drivingschool.backend.attendance.dto.CheckInRequest;
 import com.drivingschool.backend.attendance.dto.DailyAttendanceResponse;
 import com.drivingschool.backend.attendance.dto.ManualAttendanceRequest;
+import com.drivingschool.backend.attendance.dto.RollCallRequest;
 import com.drivingschool.backend.attendance.dto.UpdateSchoolLocationRequest;
 import com.drivingschool.backend.attendance.entity.DailyAttendance;
 import com.drivingschool.backend.attendance.enums.AttendanceSource;
@@ -402,5 +403,90 @@ class AttendanceServiceTest {
         assertThat(saved.getValue().getCheckedInAt()).isNotNull();
         assertThat(saved.getValue().getLessonType()).isEqualTo(LessonType.THEORY);
         assertThat(saved.getValue().getTopic()).isEqualTo("Road signs");
+    }
+
+    // ------------------------------------------------------------------ roll call
+
+    private DailyAttendance checkIn(StudentProfile who, DailyAttendanceStatus status) {
+        return DailyAttendance.builder().school(school).user(who.getUser()).role(RoleName.STUDENT)
+                .attendanceDate(TODAY).status(status).source(AttendanceSource.CHECK_IN)
+                .lessonType(LessonType.PRACTICAL).build();
+    }
+
+    private RollCallRequest.Entry entry(Long userId, DailyAttendanceStatus status, String reason) {
+        return RollCallRequest.Entry.builder().userId(userId).status(status).reason(reason).build();
+    }
+
+    @Test
+    void rollCall_keepsWhoWasThere_marksWhoSignedInAndLeft_andStampsEveryoneAsReviewed() {
+        callerIs(3L, RoleName.INSTRUCTOR);
+        InstructorProfile ina = instructor(3L, school);
+        StudentProfile ama = student(2L, "Ama", "Mensah", school);    // checked in, really there
+        StudentProfile kofi = student(4L, "Kofi", "Boateng", school); // checked in, then left
+        StudentProfile esi = student(5L, "Esi", "Owusu", school);     // checked in from outside, really there
+        StudentProfile yaw = student(6L, "Yaw", "Asante", school);    // never checked in
+        DailyAttendance amaIn = checkIn(ama, DailyAttendanceStatus.PRESENT);
+        DailyAttendance kofiIn = checkIn(kofi, DailyAttendanceStatus.PRESENT);
+        DailyAttendance esiIn = checkIn(esi, DailyAttendanceStatus.PENDING_CONFIRMATION);
+        when(instructorProfileRepository.findByUserId(3L)).thenReturn(Optional.of(ina));
+        when(schoolRepository.findById(5L)).thenReturn(Optional.of(school));
+        when(userRepository.findById(3L)).thenReturn(Optional.of(ina.getUser()));
+        when(studentProfileRepository.findBySchoolIdExcludingDeletedUsers(5L)).thenReturn(List.of(ama, kofi, esi, yaw));
+        when(attendanceRepository.findForSchool(5L, RoleName.STUDENT, TODAY, TODAY)).thenReturn(List.of(amaIn, kofiIn, esiIn));
+        when(userRepository.getReferenceById(6L)).thenReturn(yaw.getUser());
+
+        List<DailyAttendanceResponse> saved = service.rollCall(5L, RollCallRequest.builder().date(TODAY).entries(List.of(
+                entry(2L, DailyAttendanceStatus.PRESENT, null),
+                entry(4L, DailyAttendanceStatus.ABSENT, "Signed in and left"),
+                entry(5L, DailyAttendanceStatus.PRESENT, null),
+                entry(6L, DailyAttendanceStatus.ABSENT, null))).build());
+
+        assertThat(saved).extracting(DailyAttendanceResponse::getStatus).containsExactly(
+                DailyAttendanceStatus.PRESENT, DailyAttendanceStatus.ABSENT, DailyAttendanceStatus.PRESENT, DailyAttendanceStatus.ABSENT);
+        assertThat(saved).allSatisfy(r -> {
+            assertThat(r.getReviewedAt()).isNotNull();
+            assertThat(r.getReviewedByName()).isEqualTo("u3@example.com");
+        });
+        // Ama's check-in is untouched apart from the review; Kofi's became a staff correction.
+        assertThat(amaIn.getSource()).isEqualTo(AttendanceSource.CHECK_IN);
+        assertThat(kofiIn.getSource()).isEqualTo(AttendanceSource.MANUAL);
+        assertThat(kofiIn.getReason()).isEqualTo("Signed in and left");
+        // Esi's pending check-in counts as confirmed.
+        assertThat(esiIn.getConfirmedBy()).isNotNull();
+        assertThat(esiIn.getSource()).isEqualTo(AttendanceSource.CHECK_IN);
+    }
+
+    @Test
+    void onlyTheAdmin_takesTheInstructorsRollCall() {
+        callerIs(3L, RoleName.INSTRUCTOR);
+
+        assertThatThrownBy(() -> service.rollCall(5L, RollCallRequest.builder().date(TODAY).role(RoleName.INSTRUCTOR)
+                .entries(List.of(entry(7L, DailyAttendanceStatus.ABSENT, null))).build()))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void rollCall_rejectsSomeoneWhoIsNotOnTheSchoolsList() {
+        callerIs(9L, RoleName.ADMIN);
+        when(schoolRepository.findById(5L)).thenReturn(Optional.of(school));
+        when(studentProfileRepository.findBySchoolIdExcludingDeletedUsers(5L)).thenReturn(List.of(student(2L, "Ama", "Mensah", school)));
+        when(attendanceRepository.findForSchool(5L, RoleName.STUDENT, TODAY, TODAY)).thenReturn(List.of());
+        when(userRepository.findById(9L)).thenReturn(Optional.of(user(9L)));
+
+        assertThatThrownBy(() -> service.rollCall(5L, RollCallRequest.builder().date(TODAY)
+                .entries(List.of(entry(99L, DailyAttendanceStatus.ABSENT, null))).build()))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("isn't an active student of this school");
+    }
+
+    @Test
+    void rollCall_forAFutureDate_isRejected() {
+        callerIs(9L, RoleName.ADMIN);
+        when(schoolRepository.findById(5L)).thenReturn(Optional.of(school));
+
+        assertThatThrownBy(() -> service.rollCall(5L, RollCallRequest.builder().date(TODAY.plusDays(1))
+                .entries(List.of(entry(2L, DailyAttendanceStatus.PRESENT, null))).build()))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("future");
     }
 }

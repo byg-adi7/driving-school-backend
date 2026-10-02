@@ -33,6 +33,9 @@ public class DailyAttendanceResponse {
     private final LocalDateTime confirmedAt;
     private final String confirmedByName;
     private final String recordedByName;
+    // Roll call: who reviewed this entry and when (absent until staff review the day).
+    private final LocalDateTime reviewedAt;
+    private final String reviewedByName;
     private final String reason;
     private final LessonType lessonType;
     private final String topic;
