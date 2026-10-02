@@ -743,7 +743,11 @@ ENDPOINT("GET", "/quizzes/{quizId}", "Get a quiz by ID.", access="ADMIN, INSTRUC
            "responsibility to always pass forStudent=true (or omit it, since that's the "
            "default) in any student-facing quiz-taking screen, and forStudent=false only in "
            "an instructor/admin authoring screen. Getting this backwards leaks answers to "
-           "students."])
+           "students.",
+           "For a STUDENT caller the response also has myAttempts: { attemptsUsed, "
+           "attemptsRemaining, bestScore (absent before the first attempt), passed }. Show "
+           "\"Attempts: 1 of 3 used - Best 60%\" and disable Start when attemptsRemaining is 0. "
+           "Instructors and admins don't get myAttempts."])
 
 ENDPOINT("GET", "/quizzes/course/{courseId}", "List published quizzes for a course.", access="ADMIN, INSTRUCTOR, or STUDENT of the course's school",
     notes=["A course from another school gets 403; an unknown course ID gets 404.",
@@ -1188,6 +1192,92 @@ d.P("The REST endpoints stay the source of truth - events are a signal to update
 # =====================================================================
 # NOTIFICATIONS
 # =====================================================================
+# =====================================================================
+# DAILY ATTENDANCE
+# =====================================================================
+d.H(1, "Daily Attendance (location check-in)")
+d.P("Students and instructors check in once a day from their phone; the server checks they "
+    "are at the school. A student's check-in waits for an instructor or the admin to confirm "
+    "it; an instructor's counts straight away. Staff can record or correct any day by hand, "
+    "see a day's list (including who didn't check in), and download printable Excel sheets.")
+d.BULLETS([
+    "\"A day\" is the school's local calendar day (its timeZone, default Africa/Accra). "
+    "date fields are plain dates (2026-10-02); checkedInAt/confirmedAt follow the API-wide "
+    "date-time convention.",
+    "Statuses: PENDING_CONFIRMATION (student checked in, not confirmed yet), PRESENT, LATE, "
+    "ABSENT, and in day lists only NOT_CHECKED_IN (no record yet today - from tomorrow on that "
+    "day shows as ABSENT).",
+    "Admins don't check in (403). Attendance is kept for students and instructors only.",
+])
+
+d.H(2, "School setup (admin)")
+ENDPOINT("PUT", "/schools/me/location", "Set my school's location, check-in radius and time zone.", access="ADMIN (a school's own admin)",
+    request=[
+        ["latitude / longitude", "number", "yes", "the school's position - e.g. from a map pin the admin drops"],
+        ["attendanceRadiusMeters", "number", "no", "20-2000, default 150: how close a check-in must be"],
+        ["timeZone", "string", "no", "IANA zone, default Africa/Accra"],
+    ],
+    example_req='{\n  "latitude": 5.6037,\n  "longitude": -0.1870,\n  "attendanceRadiusMeters": 150\n}',
+    response=[["the school", "", "same shape as GET /schools/{id}, which now also has latitude, longitude, attendanceRadiusMeters, timeZone"]],
+    notes=["Nobody can check in until this is set (check-in answers 400 \"Your school hasn't set "
+           "its attendance location yet\").",
+           "The bootstrap admin uses PUT /schools/{schoolId}/location with the same body."])
+ENDPOINT("PUT", "/schools/{schoolId}/location", "Same, for a given school.", access="ADMIN (bootstrap: any school; regular admin: their own)")
+
+d.H(2, "Checking in (student / instructor)")
+ENDPOINT("POST", "/attendance/check-in", "Check in for today from the current location.", access="STUDENT or INSTRUCTOR",
+    request=[
+        ["latitude / longitude", "number", "yes", "from navigator.geolocation (coords.latitude / coords.longitude)"],
+        ["accuracyMeters", "number", "yes", "coords.accuracy"],
+    ],
+    example_req='{\n  "latitude": 5.60391,\n  "longitude": -0.18712,\n  "accuracyMeters": 14\n}',
+    response=[["id / date / status / checkedInAt", "", "status PENDING_CONFIRMATION for a student, PRESENT for an instructor"],
+              ["distanceMeters / accuracyMeters", "number", "how far from the school, and the fix's precision"]],
+    notes=["Use getCurrentPosition with { enableHighAccuracy: true }; ask for location "
+           "permission with a short explanation first.",
+           "400 with data { accuracyMeters, maxAccuracyMeters } if accuracy is worse than 100 m - "
+           "tell the user to turn on precise location / move outdoors and retry.",
+           "400 with data { distanceMeters, radiusMeters } if they're too far - show \"You're "
+           "about 420 m from school\".",
+           "400 \"You've already checked in today\" on a second try - show today's record "
+           "(GET /attendance/me) instead of the button."])
+ENDPOINT("GET", "/attendance/me", "My attendance history, newest first.", access="STUDENT or INSTRUCTOR",
+    params=[["from / to", "date (query)", "no", "default: the last 30 days; at most 62 days"]])
+
+d.H(2, "Staff: lists, confirming, corrections")
+ENDPOINT("GET", "/attendance/school/{schoolId}", "One day's attendance for everyone at the school.", access="ADMIN (own school) or INSTRUCTOR of that school",
+    params=[["date", "date (query)", "no", "default today (school time)"],
+            ["role", "STUDENT | INSTRUCTOR (query)", "no", "default STUDENT"]],
+    response=[["[] of attendance entries", "", "one per active student (or instructor), sorted by surname; someone with no record has no id and status NOT_CHECKED_IN / ABSENT"]],
+    notes=["This is the \"today's register\" screen: a Confirm button on PENDING_CONFIRMATION "
+           "rows, and a Mark late / absent / present action on every row (POST /attendance/manual)."])
+ENDPOINT("PUT", "/attendance/{attendanceId}/confirm", "Confirm a student's check-in.", access="ADMIN (own school) or INSTRUCTOR of that school",
+    notes=["Only for status PENDING_CONFIRMATION (400 otherwise); it becomes PRESENT with confirmedAt / confirmedByName."])
+ENDPOINT("POST", "/attendance/manual", "Record or correct someone's day.", access="ADMIN (anyone at their school) or INSTRUCTOR (students of their school)",
+    request=[["userId", "number", "yes", "the person's User.id (userId in the day list)"],
+             ["date", "date", "yes", "today or earlier"],
+             ["status", "PRESENT | LATE | ABSENT", "yes", ""],
+             ["reason", "string", "no", "max 500, e.g. \"Arrived 09:40\" or \"Sick note\""]],
+    notes=["Overwrites a check-in for that day if there is one (the location stays on record); "
+           "source becomes MANUAL and recordedByName is set."])
+ENDPOINT("GET", "/attendance/users/{userId}", "One person's history.", access="The person themselves; ADMIN of their school; INSTRUCTOR for students of their school",
+    params=[["from / to", "date (query)", "no", "default: the last 30 days; at most 62 days"]])
+
+d.H(2, "Printable Excel sheets")
+d.P("Both return an .xlsx file (not JSON) - fetch with the access token, then save it "
+    "(e.g. create a blob URL and click a download link). They're laid out to print: "
+    "landscape, fitted to the page width, header repeated on every page, page numbers.")
+ENDPOINT("GET", "/attendance/school/{schoolId}/export/register", "Register: people x days for a date range.", access="ADMIN (own school) or INSTRUCTOR of that school",
+    params=[["from / to", "date (query)", "no", "default: the last 30 days; at most 62 days"],
+            ["role", "STUDENT | INSTRUCTOR (query)", "no", "default STUDENT"]],
+    notes=["One row per person, one column per day with P (present), L (late), A (absent), "
+           "? (awaiting confirmation) or blank (today/future with nothing yet), then totals.",
+           "File name e.g. attendance-register-student-2026-09-01-to-2026-09-30.xlsx (from Content-Disposition)."])
+ENDPOINT("GET", "/attendance/school/{schoolId}/export/day", "One day's detailed list.", access="ADMIN (own school) or INSTRUCTOR of that school",
+    params=[["date", "date (query)", "no", "default today"], ["role", "STUDENT | INSTRUCTOR (query)", "no", "default STUDENT"]],
+    notes=["Columns: name, status, check-in time (school time), distance, accuracy, confirmed by, "
+           "recorded by, reason - plus a count per status at the bottom."])
+
 d.H(1, "Notifications")
 d.P("Two things happen here: the system automatically sends notifications for certain "
     "events, and admins/instructors can manually send an arbitrary notification via "
@@ -1449,6 +1539,18 @@ d.BULLETS([
     "the country code (+233...) - it's what makes WhatsApp codes possible.",
     "Verification may be switched off on the backend for now (login then just returns "
     "tokens). Build and keep this flow anyway - it turns on without a frontend release.",
+])
+
+d.H(2, "14. Attendance screens")
+d.BULLETS([
+    "Student / instructor: a \"Check in\" button that gets the location (high accuracy), "
+    "posts it, and shows the result - including the distance message when they're too far "
+    "or the precision message when GPS is poor - and their recent history.",
+    "Instructor / admin: today's list for the school with Confirm on pending students and "
+    "late / absent / present corrections, a date picker for past days, and Download buttons "
+    "for the register (date range) and the day list.",
+    "Admin: a \"School location\" setting - drop a pin on a map (or use the current "
+    "position while at the school), radius, time zone. Prompt for it if latitude is null.",
 ])
 
 d.save("Frontend_API_Guide.docx")

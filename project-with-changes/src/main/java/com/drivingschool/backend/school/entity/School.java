@@ -38,6 +38,20 @@ public class School extends BaseEntity {
     @Column(nullable = false)
     private boolean active;
 
+    // Daily attendance (V20): where check-ins are measured from, how close they must be,
+    // and the time zone that decides which calendar day a check-in belongs to.
+    @Column(name = "latitude")
+    private Double latitude;
+
+    @Column(name = "longitude")
+    private Double longitude;
+
+    @Column(name = "attendance_radius_meters", nullable = false)
+    private int attendanceRadiusMeters = 150;
+
+    @Column(name = "time_zone", nullable = false, length = 64)
+    private String timeZone = "Africa/Accra";
+
     // Every school has exactly one owning admin, mandatory and unique in both
     // directions - a school can't exist without its admin and an admin can't
     // own more than one school. The bootstrap admin never appears here (it
@@ -73,5 +87,20 @@ public class School extends BaseEntity {
         if (active != null) {
             this.active = active;
         }
+    }
+
+    public void updateAttendanceSettings(double latitude, double longitude, Integer radiusMeters, String timeZone) {
+        this.latitude = latitude;
+        this.longitude = longitude;
+        if (radiusMeters != null) {
+            this.attendanceRadiusMeters = radiusMeters;
+        }
+        if (timeZone != null) {
+            this.timeZone = timeZone;
+        }
+    }
+
+    public boolean hasLocation() {
+        return latitude != null && longitude != null;
     }
 }

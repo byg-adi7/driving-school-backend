@@ -15,6 +15,10 @@ public class SchoolMapper {
                 .phone(school.getPhone())
                 .email(school.getEmail())
                 .active(school.isActive())
+                .latitude(school.getLatitude())
+                .longitude(school.getLongitude())
+                .attendanceRadiusMeters(school.getAttendanceRadiusMeters())
+                .timeZone(school.getTimeZone())
                 .createdAt(school.getCreatedAt())
                 .updatedAt(school.getUpdatedAt())
                 .build();
