@@ -470,3 +470,22 @@ Frontend tracker #10. Logins used to last up to 7 days on any computer (a 7-day 
 - All four limits are configurable (`JWT_REFRESH_EXPIRATION_MS`, `JWT_IDLE_TIMEOUT_MS`, `JWT_SESSION_MAX_MS`, `JWT_ADMIN_SESSION_MAX_MS`).
 
 **Tests:** five `JwtTokenProviderTest` cases (idle expiry, the 12-hour and admin caps, the session travelling in the token, old tokens), plus `AuthServiceImplTest` checks that login starts a "remember me" session and that a refresh continues the same session.
+
+## Attendance: Automatic When at School, Lesson Type and Topic (2026-10-02)
+
+Product owner's change to daily attendance.
+
+**Students at school:** a check-in within the school's radius, with a precise enough fix, is `PRESENT` immediately. No confirmation step.
+
+**Students not shown to be at school:** the check-in is no longer rejected. It's recorded as `PENDING_CONFIRMATION` with a `confirmationReason`:
+- `OUTSIDE_SCHOOL_AREA`
+- `LOCATION_NOT_PRECISE` (accuracy worse than 100 m)
+- `SCHOOL_LOCATION_NOT_SET`
+
+An instructor of the school (or its admin) confirms it. The reason stays on the record.
+
+**Instructors:** unchanged. They must be at the school, and are rejected with the distance or precision details otherwise.
+
+**Lesson type and topic:** students must send `lessonType` (`PRACTICAL` or `THEORY`, a radio button in the app), plus an optional `topic` of up to 200 characters. Both are stored (V21), returned in lists and histories, can be set on manual entries, and appear in the one-day Excel list next to the status, which now also says why a check-in awaits confirmation.
+
+**Tests:** attendance tests were updated and extended to 24. Frontend guide updated.

@@ -4,6 +4,8 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
+import com.drivingschool.backend.attendance.enums.LessonType;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.jackson.Jacksonized;
@@ -27,4 +29,11 @@ public class CheckInRequest {
     @NotNull(message = "Accuracy is required")
     @Positive(message = "Accuracy must be positive")
     private final Double accuracyMeters;
+
+    /** Required for students: today's lesson is PRACTICAL or THEORY. */
+    private final LessonType lessonType;
+
+    /** Optional, e.g. "Reverse parking" or "Road signs". */
+    @Size(max = 200, message = "Topic must not exceed 200 characters")
+    private final String topic;
 }

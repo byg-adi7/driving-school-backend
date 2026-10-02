@@ -3,6 +3,7 @@ package com.drivingschool.backend.attendance.service;
 import com.drivingschool.backend.attendance.dto.DailyAttendanceResponse;
 import com.drivingschool.backend.attendance.entity.DailyAttendance;
 import com.drivingschool.backend.attendance.enums.DailyAttendanceStatus;
+import com.drivingschool.backend.attendance.enums.LessonType;
 import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.school.entity.School;
 import org.apache.poi.ss.usermodel.BorderStyle;
@@ -144,8 +145,8 @@ public class AttendanceExportService {
         try (Workbook workbook = new XSSFWorkbook()) {
             Styles styles = new Styles(workbook);
             Sheet sheet = workbook.createSheet(SHORT_DATE.format(date));
-            String[] columns = {"#", "Name", "Status", "Check-in time", "Distance (m)", "Accuracy (m)",
-                    "Confirmed by", "Recorded by", "Reason"};
+            String[] columns = {"#", "Name", "Status", "Lesson", "Topic", "Check-in time", "Distance (m)",
+                    "Accuracy (m)", "Confirmed by", "Recorded by", "Reason"};
             int lastCol = columns.length - 1;
 
             title(sheet, styles, school.getName(), lastCol);
@@ -166,25 +167,28 @@ public class AttendanceExportService {
                 Row row = sheet.createRow(rowIndex++);
                 cell(row, 0, String.valueOf(number++), styles.center);
                 cell(row, 1, entry.getName(), styles.text);
-                cell(row, 2, label(entry.getStatus()), statusStyle(styles, entry.getStatus()));
-                cell(row, 3, entry.getCheckedInAt() != null ? TIME.format(inSchoolTime(entry.getCheckedInAt(), school)) : "", styles.center);
+                cell(row, 2, statusText(entry), statusStyle(styles, entry.getStatus()));
+                cell(row, 3, entry.getLessonType() == null ? "" : entry.getLessonType() == LessonType.PRACTICAL ? "Practical" : "Theory", styles.center);
+                cell(row, 4, nullToEmpty(entry.getTopic()), styles.text);
+                cell(row, 5, entry.getCheckedInAt() != null ? TIME.format(inSchoolTime(entry.getCheckedInAt(), school)) : "", styles.center);
                 if (entry.getDistanceMeters() != null) {
-                    number(row, 4, Math.round(entry.getDistanceMeters()), styles.center);
+                    number(row, 6, Math.round(entry.getDistanceMeters()), styles.center);
                 } else {
-                    cell(row, 4, "", styles.center);
+                    cell(row, 6, "", styles.center);
                 }
                 if (entry.getAccuracyMeters() != null) {
-                    number(row, 5, Math.round(entry.getAccuracyMeters()), styles.center);
+                    number(row, 7, Math.round(entry.getAccuracyMeters()), styles.center);
                 } else {
-                    cell(row, 5, "", styles.center);
+                    cell(row, 7, "", styles.center);
                 }
-                cell(row, 6, nullToEmpty(entry.getConfirmedByName()), styles.text);
-                cell(row, 7, nullToEmpty(entry.getRecordedByName()), styles.text);
-                cell(row, 8, nullToEmpty(entry.getReason()), styles.text);
+                cell(row, 8, nullToEmpty(entry.getConfirmedByName()), styles.text);
+                cell(row, 9, nullToEmpty(entry.getRecordedByName()), styles.text);
+                cell(row, 10, nullToEmpty(entry.getReason()), styles.text);
             }
 
             rowIndex++;
-            for (DailyAttendanceStatus status : DailyAttendanceStatus.values()) {
+            for (DailyAttendanceStatus status : List.of(DailyAttendanceStatus.PRESENT, DailyAttendanceStatus.LATE,
+                    DailyAttendanceStatus.ABSENT, DailyAttendanceStatus.PENDING_CONFIRMATION, DailyAttendanceStatus.NOT_CHECKED_IN)) {
                 Integer count = counts.get(status);
                 if (count != null) {
                     Row row = sheet.createRow(rowIndex++);
@@ -193,7 +197,7 @@ public class AttendanceExportService {
                 }
             }
 
-            int[] widths = {5, 28, 22, 13, 13, 13, 22, 22, 36};
+            int[] widths = {5, 28, 26, 11, 26, 13, 12, 12, 22, 22, 30};
             for (int i = 0; i < widths.length; i++) {
                 sheet.setColumnWidth(i, widths[i] * 256);
             }
@@ -265,6 +269,19 @@ public class AttendanceExportService {
             case PENDING_CONFIRMATION -> "Awaiting confirmation";
             case NOT_CHECKED_IN -> "Not checked in";
         };
+    }
+
+    // "Awaiting confirmation (outside school area)" - so staff see why at a glance.
+    private static String statusText(DailyAttendanceResponse entry) {
+        String text = label(entry.getStatus());
+        if (entry.getStatus() == DailyAttendanceStatus.PENDING_CONFIRMATION && entry.getConfirmationReason() != null) {
+            text += switch (entry.getConfirmationReason()) {
+                case OUTSIDE_SCHOOL_AREA -> " (outside school area)";
+                case LOCATION_NOT_PRECISE -> " (location imprecise)";
+                case SCHOOL_LOCATION_NOT_SET -> " (school location not set)";
+            };
+        }
+        return text;
     }
 
     private static CellStyle statusStyle(Styles styles, DailyAttendanceStatus status) {

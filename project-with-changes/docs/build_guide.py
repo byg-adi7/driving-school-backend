@@ -1216,17 +1216,24 @@ d.P("The REST endpoints stay the source of truth - events are a signal to update
 # DAILY ATTENDANCE
 # =====================================================================
 d.H(1, "Daily Attendance (location check-in)")
-d.P("Students and instructors check in once a day from their phone; the server checks they "
-    "are at the school. A student's check-in waits for an instructor or the admin to confirm "
-    "it; an instructor's counts straight away. Staff can record or correct any day by hand, "
-    "see a day's list (including who didn't check in), and download printable Excel sheets.")
+d.P("Students and instructors check in once a day from their phone, and students say "
+    "whether it's a practical or theory lesson (plus an optional topic). A student inside "
+    "the school area is marked present automatically; a student who can't be placed at the "
+    "school is still recorded, but waits for an instructor (or the admin) to confirm. "
+    "Instructors must be at the school to check in. Staff can record or correct any day by "
+    "hand, see a day's list (including who didn't check in), and download printable Excel "
+    "sheets.")
 d.BULLETS([
     "\"A day\" is the school's local calendar day (its timeZone, default Africa/Accra). "
     "date fields are plain dates (2026-10-02); checkedInAt/confirmedAt follow the API-wide "
     "date-time convention.",
-    "Statuses: PENDING_CONFIRMATION (student checked in, not confirmed yet), PRESENT, LATE, "
-    "ABSENT, and in day lists only NOT_CHECKED_IN (no record yet today - from tomorrow on that "
-    "day shows as ABSENT).",
+    "Statuses: PRESENT, PENDING_CONFIRMATION (a student's check-in from outside the school "
+    "area - see confirmationReason - waiting for an instructor), LATE, ABSENT, and in day lists "
+    "only NOT_CHECKED_IN (no record yet today - from tomorrow on that day shows as ABSENT).",
+    "confirmationReason (only on check-ins that needed confirming): OUTSIDE_SCHOOL_AREA, "
+    "LOCATION_NOT_PRECISE (the phone's fix was worse than 100 m) or SCHOOL_LOCATION_NOT_SET. "
+    "It stays on the record after confirmation, for the history.",
+    "lessonType: PRACTICAL or THEORY (always set on a student's check-in); topic: optional text.",
     "Admins don't check in (403). Attendance is kept for students and instructors only.",
 ])
 
@@ -1249,16 +1256,22 @@ ENDPOINT("POST", "/attendance/check-in", "Check in for today from the current lo
     request=[
         ["latitude / longitude", "number", "yes", "from navigator.geolocation (coords.latitude / coords.longitude)"],
         ["accuracyMeters", "number", "yes", "coords.accuracy"],
+        ["lessonType", "PRACTICAL | THEORY", "yes for students", "the radio button - 400 if a student leaves it out; instructors can omit it"],
+        ["topic", "string", "no", "max 200, e.g. \"Reverse parking\" or \"Road signs\""],
     ],
-    example_req='{\n  "latitude": 5.60391,\n  "longitude": -0.18712,\n  "accuracyMeters": 14\n}',
-    response=[["id / date / status / checkedInAt", "", "status PENDING_CONFIRMATION for a student, PRESENT for an instructor"],
-              ["distanceMeters / accuracyMeters", "number", "how far from the school, and the fix's precision"]],
+    example_req='{\n  "latitude": 5.60391,\n  "longitude": -0.18712,\n  "accuracyMeters": 14,\n  "lessonType": "PRACTICAL",\n  "topic": "Reverse parking"\n}',
+    response=[["id / date / status / checkedInAt", "", "status PRESENT when at the school; PENDING_CONFIRMATION for a student who isn't"],
+              ["confirmationReason", "enum or absent", "why it needs confirming (see above)"],
+              ["lessonType / topic", "", "as sent"],
+              ["distanceMeters / accuracyMeters", "number", "how far from the school (absent if the school has no location), and the fix's precision"]],
     notes=["Use getCurrentPosition with { enableHighAccuracy: true }; ask for location "
            "permission with a short explanation first.",
-           "400 with data { accuracyMeters, maxAccuracyMeters } if accuracy is worse than 100 m - "
-           "tell the user to turn on precise location / move outdoors and retry.",
-           "400 with data { distanceMeters, radiusMeters } if they're too far - show \"You're "
-           "about 420 m from school\".",
+           "Student, status PRESENT: show \"You're checked in\". Status PENDING_CONFIRMATION: show "
+           "\"Checked in - an instructor needs to confirm it because you're about 420 m from "
+           "school\" (use confirmationReason and distanceMeters).",
+           "Instructors are rejected instead: 400 with data { accuracyMeters, maxAccuracyMeters } if "
+           "accuracy is worse than 100 m, 400 with data { distanceMeters, radiusMeters } if too far, "
+           "400 if the school has no location yet.",
            "400 \"You've already checked in today\" on a second try - show today's record "
            "(GET /attendance/me) instead of the button."])
 ENDPOINT("GET", "/attendance/me", "My attendance history, newest first.", access="STUDENT or INSTRUCTOR",
@@ -1277,7 +1290,8 @@ ENDPOINT("POST", "/attendance/manual", "Record or correct someone's day.", acces
     request=[["userId", "number", "yes", "the person's User.id (userId in the day list)"],
              ["date", "date", "yes", "today or earlier"],
              ["status", "PRESENT | LATE | ABSENT", "yes", ""],
-             ["reason", "string", "no", "max 500, e.g. \"Arrived 09:40\" or \"Sick note\""]],
+             ["reason", "string", "no", "max 500, e.g. \"Arrived 09:40\" or \"Sick note\""],
+             ["lessonType / topic", "PRACTICAL | THEORY / string", "no", "kept from the check-in if left out"]],
     notes=["Overwrites a check-in for that day if there is one (the location stays on record); "
            "source becomes MANUAL and recordedByName is set."])
 ENDPOINT("GET", "/attendance/users/{userId}", "One person's history.", access="The person themselves; ADMIN of their school; INSTRUCTOR for students of their school",
@@ -1295,8 +1309,9 @@ ENDPOINT("GET", "/attendance/school/{schoolId}/export/register", "Register: peop
            "File name e.g. attendance-register-student-2026-09-01-to-2026-09-30.xlsx (from Content-Disposition)."])
 ENDPOINT("GET", "/attendance/school/{schoolId}/export/day", "One day's detailed list.", access="ADMIN (own school) or INSTRUCTOR of that school",
     params=[["date", "date (query)", "no", "default today"], ["role", "STUDENT | INSTRUCTOR (query)", "no", "default STUDENT"]],
-    notes=["Columns: name, status, check-in time (school time), distance, accuracy, confirmed by, "
-           "recorded by, reason - plus a count per status at the bottom."])
+    notes=["Columns: name, status (with why, if awaiting confirmation), lesson (practical/theory), "
+           "topic, check-in time (school time), distance, accuracy, confirmed by, recorded by, reason "
+           "- plus a count per status at the bottom."])
 
 d.H(1, "Notifications")
 d.P("Two things happen here: the system automatically sends notifications for certain "
@@ -1564,10 +1579,14 @@ d.BULLETS([
 
 d.H(2, "14. Attendance screens")
 d.BULLETS([
-    "Student / instructor: a \"Check in\" button that gets the location (high accuracy), "
-    "posts it, and shows the result - including the distance message when they're too far "
-    "or the precision message when GPS is poor - and their recent history.",
-    "Instructor / admin: today's list for the school with Confirm on pending students and "
+    "Student: before the \"Check in\" button, a required radio choice - Practical lesson / "
+    "Theory lesson - and an optional \"Topic\" text field; then get the location (high "
+    "accuracy), post everything, and show the result: \"checked in\", or \"waiting for an "
+    "instructor to confirm\" with the reason. Plus their recent history.",
+    "Instructor: the same button without the lesson fields; show the distance / precision "
+    "message when they're rejected.",
+    "Instructor / admin: today's list for the school - with each student's lesson type and "
+    "topic - Confirm on pending students (show the reason and distance so they can judge), "
     "late / absent / present corrections, a date picker for past days, and Download buttons "
     "for the register (date range) and the day list.",
     "Admin: a \"School location\" setting - drop a pin on a map (or use the current "
