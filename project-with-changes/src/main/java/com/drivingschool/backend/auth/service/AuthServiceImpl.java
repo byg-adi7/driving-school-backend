@@ -16,6 +16,8 @@ import com.drivingschool.backend.auth.mapper.CurrentUserMapper;
 import com.drivingschool.backend.auth.repository.PasswordResetTokenRepository;
 import com.drivingschool.backend.common.exception.ForbiddenException;
 import com.drivingschool.backend.security.CurrentUserService;
+import com.drivingschool.backend.common.exception.TooManyRequestsException;
+import com.drivingschool.backend.security.RateLimiter;
 import com.drivingschool.backend.security.RefreshTokenRevocationService;
 import com.drivingschool.backend.common.exception.AuthenticationException;
 import com.drivingschool.backend.common.exception.BadRequestException;
@@ -76,6 +78,9 @@ public class AuthServiceImpl implements AuthService {
     private final NotificationService notificationService;
     private final AdminSchoolScope adminSchoolScope;
     private final AccountVerificationService accountVerificationService;
+    private final RateLimiter rateLimiter;
+    static final int LOGIN_ATTEMPTS_PER_ACCOUNT = 10;
+    static final java.time.Duration LOGIN_WINDOW = java.time.Duration.ofMinutes(15);
     private final long passwordResetTokenExpirationMs;
     private final boolean verificationRequired;
 
@@ -98,6 +103,7 @@ public class AuthServiceImpl implements AuthService {
                            NotificationService notificationService,
                            AdminSchoolScope adminSchoolScope,
                            AccountVerificationService accountVerificationService,
+                           RateLimiter rateLimiter,
                            @Value("${app.password-reset.token-expiration-ms}") long passwordResetTokenExpirationMs,
                            @Value("${app.verification.required:true}") boolean verificationRequired) {
         this.authenticationManager = authenticationManager;
@@ -119,6 +125,7 @@ public class AuthServiceImpl implements AuthService {
         this.notificationService = notificationService;
         this.adminSchoolScope = adminSchoolScope;
         this.accountVerificationService = accountVerificationService;
+        this.rateLimiter = rateLimiter;
         this.passwordResetTokenExpirationMs = passwordResetTokenExpirationMs;
         this.verificationRequired = verificationRequired;
         if (!verificationRequired) {
@@ -130,6 +137,14 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponse login(LoginRequest request) {
+        // Per account, not per address: a class shares one Wi-Fi address, but guessing one
+        // person's password is still capped.
+        RateLimiter.RateLimitResult attempt = rateLimiter.tryConsume(
+                "ratelimit:login:" + request.getEmail().trim().toLowerCase(), LOGIN_ATTEMPTS_PER_ACCOUNT, LOGIN_WINDOW);
+        if (!attempt.allowed()) {
+            throw new TooManyRequestsException("Too many login attempts for this account - try again in a few minutes",
+                    attempt.retryAfterSeconds());
+        }
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
 

@@ -1,5 +1,6 @@
 package com.drivingschool.backend.security;
 
+import com.drivingschool.backend.security.jwt.JwtTokenProvider;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -13,27 +14,33 @@ import java.io.IOException;
 import java.time.Duration;
 
 /**
- * Rate limits every request by client IP: a tight bucket for the auth
- * endpoints (login/register/refresh/forgot-password/reset-password, the
- * classic credential-stuffing/brute-force targets) and a looser one for
- * everything else, so no endpoint is completely unthrottled. Health-check
- * paths are exempt - those are hit on a fixed interval by the platform
- * (Docker/Render) and must never 429.
+ * Rate limits every request. A whole school's Wi-Fi shares ONE internet address, so
+ * counting per address throttled a busy class together:
+ * - a request carrying a valid access token is counted per USER;
+ * - auth endpoints (login, refresh, password reset, verification) per address, with
+ *   room for a classroom logging in at once - password guessing is limited per
+ *   account in AuthServiceImpl instead;
+ * - any other anonymous request per address.
+ * Health-check paths are exempt - the platform hits them on a fixed interval.
  */
 @Slf4j
 @Component
 public class RateLimitingFilter extends OncePerRequestFilter {
 
     private static final Duration WINDOW = Duration.ofMinutes(1);
-    private static final int AUTH_LIMIT = 10;
-    private static final int API_LIMIT = 100;
+    static final int AUTH_LIMIT = 60;
+    static final int ANONYMOUS_LIMIT = 100;
+    static final int USER_LIMIT = 300;
 
     private final RateLimiter rateLimiter;
     private final ClientIpResolver clientIpResolver;
+    private final JwtTokenProvider jwtTokenProvider;
 
-    public RateLimitingFilter(RateLimiter rateLimiter, ClientIpResolver clientIpResolver) {
+    public RateLimitingFilter(RateLimiter rateLimiter, ClientIpResolver clientIpResolver,
+                              JwtTokenProvider jwtTokenProvider) {
         this.rateLimiter = rateLimiter;
         this.clientIpResolver = clientIpResolver;
+        this.jwtTokenProvider = jwtTokenProvider;
     }
 
     @Override
@@ -49,8 +56,19 @@ public class RateLimitingFilter extends OncePerRequestFilter {
 
         boolean isAuthEndpoint = isAuthEndpoint(requestURI);
         String clientIp = clientIpResolver.resolve(request);
-        String key = "ratelimit:" + (isAuthEndpoint ? "auth:" : "api:") + clientIp;
-        int limit = isAuthEndpoint ? AUTH_LIMIT : API_LIMIT;
+        Long userId = isAuthEndpoint ? null : authenticatedUserId(request);
+        String key;
+        int limit;
+        if (isAuthEndpoint) {
+            key = "ratelimit:auth:" + clientIp;
+            limit = AUTH_LIMIT;
+        } else if (userId != null) {
+            key = "ratelimit:user:" + userId;
+            limit = USER_LIMIT;
+        } else {
+            key = "ratelimit:api:" + clientIp;
+            limit = ANONYMOUS_LIMIT;
+        }
 
         RateLimiter.RateLimitResult result = rateLimiter.tryConsume(key, limit, WINDOW);
 
@@ -58,12 +76,30 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             response.addHeader("X-Rate-Limit-Remaining", String.valueOf(result.remaining()));
             filterChain.doFilter(request, response);
         } else {
-            log.warn("Rate limit exceeded for {} on {}", clientIp, requestURI);
+            log.warn("Rate limit exceeded for {} on {}", userId != null ? "user " + userId : clientIp, requestURI);
             response.setStatus(429);
             response.addHeader("X-Rate-Limit-Retry-After-Seconds", String.valueOf(result.retryAfterSeconds()));
             response.setContentType("application/json");
             response.getWriter().write("{\"success\":false,\"message\":\"Too many requests. Please try again later.\"}");
         }
+    }
+
+    // The JWT filter runs after this one, so read the token here; an expired or invalid
+    // one just falls back to the per-address bucket.
+    private Long authenticatedUserId(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        if (header == null || !header.startsWith("Bearer ")) {
+            return null;
+        }
+        String token = header.substring(7);
+        try {
+            if (jwtTokenProvider.validateToken(token) && jwtTokenProvider.isAccessToken(token)) {
+                return jwtTokenProvider.getUserIdFromToken(token);
+            }
+        } catch (RuntimeException ignored) {
+            // malformed - treat as anonymous
+        }
+        return null;
     }
 
     private boolean isAuthEndpoint(String requestURI) {

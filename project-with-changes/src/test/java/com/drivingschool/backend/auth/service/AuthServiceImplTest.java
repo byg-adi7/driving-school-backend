@@ -83,6 +83,7 @@ class AuthServiceImplTest {
     @Mock private NotificationService notificationService;
     @Mock private AdminSchoolScope adminSchoolScope;
     @Mock private AccountVerificationService accountVerificationService;
+    @Mock private com.drivingschool.backend.security.RateLimiter rateLimiter;
 
     private AuthServiceImpl authService;
 
@@ -100,11 +101,13 @@ class AuthServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        org.mockito.Mockito.lenient().when(rateLimiter.tryConsume(any(), org.mockito.ArgumentMatchers.anyInt(), any()))
+                .thenReturn(new com.drivingschool.backend.security.RateLimiter.RateLimitResult(true, 9, 0));
         authService = new AuthServiceImpl(authenticationManager, userRepository, roleRepository,
                 schoolRepository, studentProfileRepository, instructorProfileRepository,
                 passwordEncoder, jwtTokenProvider, authMapper, currentUserMapper, currentUserService,
                 passwordResetTokenRepository, emailService, userService, refreshTokenRevocationService,
-                schoolDeletionRequestService, notificationService, adminSchoolScope, accountVerificationService, 3_600_000L, true);
+                schoolDeletionRequestService, notificationService, adminSchoolScope, accountVerificationService, rateLimiter, 3_600_000L, true);
     }
 
     // --- login ---
@@ -651,7 +654,7 @@ class AuthServiceImplTest {
                 passwordEncoder, jwtTokenProvider, authMapper, currentUserMapper, currentUserService,
                 passwordResetTokenRepository, emailService, userService, refreshTokenRevocationService,
                 schoolDeletionRequestService, notificationService, adminSchoolScope, accountVerificationService,
-                3_600_000L, false);
+                rateLimiter, 3_600_000L, false);
         User user = User.builder().email("new@example.com").password("encoded").enabled(true).emailVerified(false).build();
         ReflectionTestUtils.setField(user, "id", 1L);
         user.addRole(Role.builder().name(RoleName.STUDENT).build());
@@ -684,5 +687,15 @@ class AuthServiceImplTest {
         org.mockito.ArgumentCaptor<JwtTokenProvider.Session> session = org.mockito.ArgumentCaptor.forClass(JwtTokenProvider.Session.class);
         verify(jwtTokenProvider).generateRefreshToken(eq(principal), session.capture());
         assertThat(session.getValue().rememberMe()).isTrue();
+    }
+
+    @Test
+    void login_tooManyAttemptsForOneAccount_isRefusedBeforeCheckingThePassword() {
+        when(rateLimiter.tryConsume(eq("ratelimit:login:user@example.com"), eq(10), any()))
+                .thenReturn(new com.drivingschool.backend.security.RateLimiter.RateLimitResult(false, 0, 420));
+
+        assertThatThrownBy(() -> authService.login(LoginRequest.builder().email(" User@Example.com ").password("password123").build()))
+                .isInstanceOf(com.drivingschool.backend.common.exception.TooManyRequestsException.class);
+        verify(authenticationManager, never()).authenticate(any());
     }
 }

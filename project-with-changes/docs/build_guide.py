@@ -76,9 +76,24 @@ d.T(["Code", "Meaning in this API"], [
     ["405", "HTTP method not supported on this path (the Allow header lists the ones that are)"],
     ["413", "Uploaded file too large (max 50 MB)"],
     ["415", "Wrong Content-Type (e.g. JSON sent to a multipart upload)"],
-    ["429", "Too many requests - rate limit, or a verification code resent too soon (see the Retry-After header)"],
+    ["429", "Too many requests - see \"Rate limits\" below, or a verification code resent too soon (Retry-After header)"],
     ["500", "Unexpected server error — report these, they're bugs"],
     ["503", "An outside provider (email, WhatsApp) failed or isn't configured - safe to retry"],
+])
+
+d.H(2, "Rate limits")
+d.BULLETS([
+    "Logged-in requests (with a valid access token): 300 per minute PER USER - students "
+    "sharing the school Wi-Fi don't share a limit.",
+    "Login, token refresh, password reset and verification: 60 per minute per internet "
+    "address (a whole class can log in at once), plus at most 10 login attempts per account "
+    "per 15 minutes - the 11th gets 429 \"Too many login attempts for this account\".",
+    "Any other request without a token: 100 per minute per address.",
+    "A 429 from the general limit carries X-Rate-Limit-Retry-After-Seconds; the per-account "
+    "login one carries Retry-After. Show \"Please wait a moment\" and retry after that - "
+    "don't retry in a tight loop. X-Rate-Limit-Remaining is on every allowed response.",
+    "Keep polling modest (prefer the WebSocket events) so one open tab doesn't use a user's "
+    "budget.",
 ])
 
 d.H(2, "Pagination")
@@ -229,9 +244,9 @@ d.BULLETS([
     "Retry-After header (seconds) - disable the Resend button with a countdown.",
     "503 from send means the email/WhatsApp provider failed or isn't configured - show the "
     "message and let the user retry or pick the other channel.",
-    "These endpoints share the auth rate limit (10 requests per minute per IP with login, "
-    "register, refresh, forgot/reset password) - another reason to disable buttons while a "
-    "request is in flight.",
+    "These endpoints share the auth rate limit (60 requests per minute per internet address, "
+    "with login, refresh and forgot/reset password) - another reason to disable buttons while "
+    "a request is in flight.",
 ])
 
 ENDPOINT("POST", "/auth/verification/send", "Send a one-time code for an unverified account.",
