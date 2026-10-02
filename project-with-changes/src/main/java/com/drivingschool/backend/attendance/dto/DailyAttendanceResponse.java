@@ -1,6 +1,8 @@
 package com.drivingschool.backend.attendance.dto;
 
 import com.drivingschool.backend.attendance.enums.AttendanceSource;
+import com.drivingschool.backend.attendance.enums.ConfirmationReason;
+import com.drivingschool.backend.attendance.enums.LessonType;
 import com.drivingschool.backend.attendance.enums.DailyAttendanceStatus;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Builder;
@@ -32,4 +34,8 @@ public class DailyAttendanceResponse {
     private final String confirmedByName;
     private final String recordedByName;
     private final String reason;
+    private final LessonType lessonType;
+    private final String topic;
+    // Present on a check-in that needed (or needs) an instructor's confirmation.
+    private final ConfirmationReason confirmationReason;
 }

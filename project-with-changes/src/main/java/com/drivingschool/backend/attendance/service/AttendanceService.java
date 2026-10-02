@@ -6,6 +6,7 @@ import com.drivingschool.backend.attendance.dto.ManualAttendanceRequest;
 import com.drivingschool.backend.attendance.dto.UpdateSchoolLocationRequest;
 import com.drivingschool.backend.attendance.entity.DailyAttendance;
 import com.drivingschool.backend.attendance.enums.AttendanceSource;
+import com.drivingschool.backend.attendance.enums.ConfirmationReason;
 import com.drivingschool.backend.attendance.enums.DailyAttendanceStatus;
 import com.drivingschool.backend.attendance.repository.DailyAttendanceRepository;
 import com.drivingschool.backend.common.exception.BadRequestException;
@@ -127,22 +128,23 @@ public class AttendanceService {
         Long userId = currentUserService.requireUserId();
         Membership me = membershipOf(userId);
         School school = me.school();
-        if (!school.hasLocation()) {
-            throw new BadRequestException("Your school hasn't set its attendance location yet - ask your school's admin");
+        boolean student = me.role() == RoleName.STUDENT;
+        if (student && request.getLessonType() == null) {
+            throw new BadRequestException("Choose whether today is a practical or a theory lesson");
         }
-        if (request.getAccuracyMeters() > MAX_ACCURACY_METERS) {
-            throw new DetailedBadRequestException(
-                    "Your location isn't precise enough (about " + Math.round(request.getAccuracyMeters())
-                            + " m). Turn on precise location or move outdoors and try again.",
-                    Map.of("accuracyMeters", round(request.getAccuracyMeters()), "maxAccuracyMeters", MAX_ACCURACY_METERS));
-        }
-        double distance = distanceMeters(request.getLatitude(), request.getLongitude(),
-                school.getLatitude(), school.getLongitude());
-        if (distance > school.getAttendanceRadiusMeters()) {
-            throw new DetailedBadRequestException(
-                    "You're about " + Math.round(distance) + " m from your school - you need to be within "
-                            + school.getAttendanceRadiusMeters() + " m to check in.",
-                    Map.of("distanceMeters", round(distance), "radiusMeters", school.getAttendanceRadiusMeters()));
+
+        Double distance = school.hasLocation()
+                ? distanceMeters(request.getLatitude(), request.getLongitude(), school.getLatitude(), school.getLongitude())
+                : null;
+        // Why this check-in can't be counted as "at school" automatically, if it can't.
+        ConfirmationReason unverified = !school.hasLocation() ? ConfirmationReason.SCHOOL_LOCATION_NOT_SET
+                : request.getAccuracyMeters() > MAX_ACCURACY_METERS ? ConfirmationReason.LOCATION_NOT_PRECISE
+                : distance > school.getAttendanceRadiusMeters() ? ConfirmationReason.OUTSIDE_SCHOOL_AREA
+                : null;
+
+        if (!student && unverified != null) {
+            // Instructors still have to be at the school to check in.
+            rejectInstructor(unverified, school, request, distance);
         }
 
         LocalDate today = today(school);
@@ -154,16 +156,39 @@ public class AttendanceService {
                 .user(me.user())
                 .role(me.role())
                 .attendanceDate(today)
-                // Students wait for an instructor or the admin to confirm; instructors count straight away.
-                .status(me.role() == RoleName.STUDENT ? DailyAttendanceStatus.PENDING_CONFIRMATION : DailyAttendanceStatus.PRESENT)
+                // At school: present straight away. A student who can't be placed at the
+                // school is still recorded, for an instructor (or the admin) to confirm.
+                .status(unverified == null ? DailyAttendanceStatus.PRESENT : DailyAttendanceStatus.PENDING_CONFIRMATION)
+                .confirmationReason(unverified)
                 .source(AttendanceSource.CHECK_IN)
                 .checkedInAt(LocalDateTime.now(clock))
                 .latitude(request.getLatitude())
                 .longitude(request.getLongitude())
                 .accuracyMeters(round(request.getAccuracyMeters()))
-                .distanceMeters(round(distance))
+                .distanceMeters(distance != null ? round(distance) : null)
+                .lessonType(request.getLessonType())
+                .topic(blankToNull(request.getTopic()))
                 .build();
         return toResponse(attendanceRepository.save(record), me.name());
+    }
+
+    private void rejectInstructor(ConfirmationReason reason, School school, CheckInRequest request, Double distance) {
+        switch (reason) {
+            case SCHOOL_LOCATION_NOT_SET -> throw new BadRequestException(
+                    "Your school hasn't set its attendance location yet - ask your school's admin");
+            case LOCATION_NOT_PRECISE -> throw new DetailedBadRequestException(
+                    "Your location isn't precise enough (about " + Math.round(request.getAccuracyMeters())
+                            + " m). Turn on precise location or move outdoors and try again.",
+                    Map.of("accuracyMeters", round(request.getAccuracyMeters()), "maxAccuracyMeters", MAX_ACCURACY_METERS));
+            case OUTSIDE_SCHOOL_AREA -> throw new DetailedBadRequestException(
+                    "You're about " + Math.round(distance) + " m from your school - you need to be within "
+                            + school.getAttendanceRadiusMeters() + " m to check in.",
+                    Map.of("distanceMeters", round(distance), "radiusMeters", school.getAttendanceRadiusMeters()));
+        }
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     // ------------------------------------------------------------------ reading
@@ -259,7 +284,8 @@ public class AttendanceService {
         User by = currentUser();
         DailyAttendance record = attendanceRepository.findByUserIdAndAttendanceDate(target.user().getId(), request.getDate())
                 .map(existing -> {
-                    existing.recordManually(request.getStatus(), request.getReason(), by);
+                    existing.recordManually(request.getStatus(), request.getReason(), by,
+                            request.getLessonType(), blankToNull(request.getTopic()));
                     return existing;
                 })
                 .orElseGet(() -> DailyAttendance.builder()
@@ -271,6 +297,8 @@ public class AttendanceService {
                         .source(AttendanceSource.MANUAL)
                         .recordedBy(by)
                         .reason(request.getReason())
+                        .lessonType(request.getLessonType())
+                        .topic(blankToNull(request.getTopic()))
                         .build());
         return toResponse(attendanceRepository.save(record), target.name());
     }
@@ -400,6 +428,9 @@ public class AttendanceService {
                 .confirmedByName(record.getConfirmedBy() != null ? displayName(record.getConfirmedBy()) : null)
                 .recordedByName(record.getRecordedBy() != null ? displayName(record.getRecordedBy()) : null)
                 .reason(record.getReason())
+                .lessonType(record.getLessonType())
+                .topic(record.getTopic())
+                .confirmationReason(record.getConfirmationReason())
                 .build();
     }
 

@@ -86,16 +86,22 @@ class AttendanceExportServiceTest {
         List<DailyAttendanceResponse> rows = List.of(
                 DailyAttendanceResponse.builder().name("Ama Mensah").status(DailyAttendanceStatus.PRESENT)
                         .checkedInAt(LocalDateTime.of(2026, 10, 1, 8, 5)).distanceMeters(42.4).accuracyMeters(9.0)
+                        .lessonType(com.drivingschool.backend.attendance.enums.LessonType.THEORY).topic("Road signs")
                         .confirmedByName("Ina Instructor").build(),
+                DailyAttendanceResponse.builder().name("Esi Owusu").status(DailyAttendanceStatus.PENDING_CONFIRMATION)
+                        .confirmationReason(com.drivingschool.backend.attendance.enums.ConfirmationReason.OUTSIDE_SCHOOL_AREA)
+                        .lessonType(com.drivingschool.backend.attendance.enums.LessonType.PRACTICAL).build(),
                 DailyAttendanceResponse.builder().name("Kofi Boateng").status(DailyAttendanceStatus.NOT_CHECKED_IN).build());
 
         try (XSSFWorkbook book = new XSSFWorkbook(new ByteArrayInputStream(export.day(school(), day, RoleName.STUDENT, rows)))) {
             Sheet sheet = book.getSheetAt(0);
             assertThat(at(sheet, 1, 0)).contains("Thursday 1 October 2026");
-            assertThat(List.of(at(sheet, 5, 1), at(sheet, 5, 2), at(sheet, 5, 4), at(sheet, 5, 6)))
-                    .containsExactly("Ama Mensah", "Present", "42", "Ina Instructor");
-            assertThat(at(sheet, 6, 2)).isEqualTo("Not checked in");
-            assertThat(List.of(at(sheet, 8, 1), at(sheet, 8, 2))).containsExactly("Present", "1");
+            assertThat(List.of(at(sheet, 5, 1), at(sheet, 5, 2), at(sheet, 5, 3), at(sheet, 5, 4), at(sheet, 5, 6), at(sheet, 5, 8)))
+                    .containsExactly("Ama Mensah", "Present", "Theory", "Road signs", "42", "Ina Instructor");
+            assertThat(List.of(at(sheet, 6, 2), at(sheet, 6, 3)))
+                    .containsExactly("Awaiting confirmation (outside school area)", "Practical");
+            assertThat(at(sheet, 7, 2)).isEqualTo("Not checked in");
+            assertThat(List.of(at(sheet, 9, 1), at(sheet, 9, 2))).containsExactly("Present", "1");
         }
     }
 }

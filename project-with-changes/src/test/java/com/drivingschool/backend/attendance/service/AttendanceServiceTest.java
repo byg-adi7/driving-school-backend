@@ -7,6 +7,8 @@ import com.drivingschool.backend.attendance.dto.UpdateSchoolLocationRequest;
 import com.drivingschool.backend.attendance.entity.DailyAttendance;
 import com.drivingschool.backend.attendance.enums.AttendanceSource;
 import com.drivingschool.backend.attendance.enums.DailyAttendanceStatus;
+import com.drivingschool.backend.attendance.enums.LessonType;
+import com.drivingschool.backend.attendance.enums.ConfirmationReason;
 import com.drivingschool.backend.attendance.repository.DailyAttendanceRepository;
 import com.drivingschool.backend.common.exception.BadRequestException;
 import com.drivingschool.backend.common.exception.DetailedBadRequestException;
@@ -106,22 +108,36 @@ class AttendanceServiceTest {
     }
 
     private CheckInRequest at(double lat, double lon, double accuracy) {
-        return CheckInRequest.builder().latitude(lat).longitude(lon).accuracyMeters(accuracy).build();
+        return CheckInRequest.builder().latitude(lat).longitude(lon).accuracyMeters(accuracy)
+                .lessonType(LessonType.PRACTICAL).build();
     }
 
     // ------------------------------------------------------------------ check-in
 
     @Test
-    void aStudentCheckingInAtSchool_isPendingConfirmation_withTheDistanceKept() {
+    void aStudentCheckingInAtSchool_isPresentStraightAway_withTheDistanceKept() {
         callerIs(2L, RoleName.STUDENT);
         when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student(2L, "Ama", "Mensah", school)));
 
         DailyAttendanceResponse response = service.checkIn(at(SCHOOL_LAT + 0.0005, SCHOOL_LON, 12));
 
-        assertThat(response.getStatus()).isEqualTo(DailyAttendanceStatus.PENDING_CONFIRMATION);
+        assertThat(response.getStatus()).isEqualTo(DailyAttendanceStatus.PRESENT);
+        assertThat(response.getConfirmationReason()).isNull();
         assertThat(response.getDate()).isEqualTo(TODAY);
         assertThat(response.getDistanceMeters()).isBetween(50.0, 60.0);
         assertThat(response.getSource()).isEqualTo(AttendanceSource.CHECK_IN);
+        assertThat(response.getLessonType()).isEqualTo(LessonType.PRACTICAL);
+    }
+
+    @Test
+    void aStudentMustSayWhetherItIsAPracticalOrTheoryLesson() {
+        callerIs(2L, RoleName.STUDENT);
+        when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student(2L, "Ama", "Mensah", school)));
+
+        assertThatThrownBy(() -> service.checkIn(CheckInRequest.builder()
+                .latitude(SCHOOL_LAT).longitude(SCHOOL_LON).accuracyMeters(10.0).build()))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("practical or a theory");
     }
 
     @Test
@@ -134,9 +150,22 @@ class AttendanceServiceTest {
     }
 
     @Test
-    void checkingInTooFarAway_isRejected_withTheDistanceInTheResponse() {
+    void aStudentOutsideTheSchoolArea_isRecordedForAnInstructorToConfirm() {
         callerIs(2L, RoleName.STUDENT);
         when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student(2L, "Ama", "Mensah", school)));
+
+        DailyAttendanceResponse response = service.checkIn(at(SCHOOL_LAT + 0.01, SCHOOL_LON, 10));
+
+        assertThat(response.getStatus()).isEqualTo(DailyAttendanceStatus.PENDING_CONFIRMATION);
+        assertThat(response.getConfirmationReason()).isEqualTo(ConfirmationReason.OUTSIDE_SCHOOL_AREA);
+        assertThat(response.getDistanceMeters()).isBetween(1100.0, 1120.0);
+    }
+
+    @Test
+    void anInstructorCheckingInTooFarAway_isRejected_withTheDistanceInTheResponse() {
+        callerIs(3L, RoleName.INSTRUCTOR);
+        when(studentProfileRepository.findByUserId(3L)).thenReturn(Optional.empty());
+        when(instructorProfileRepository.findByUserId(3L)).thenReturn(Optional.of(instructor(3L, school)));
 
         assertThatThrownBy(() -> service.checkIn(at(SCHOOL_LAT + 0.01, SCHOOL_LON, 10)))
                 .isInstanceOf(DetailedBadRequestException.class)
@@ -149,24 +178,33 @@ class AttendanceServiceTest {
     }
 
     @Test
-    void anImpreciseLocation_isRejected() {
+    void aStudentWithAnImpreciseLocation_waitsForConfirmation_butAnInstructorIsRejected() {
         callerIs(2L, RoleName.STUDENT);
         when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student(2L, "Ama", "Mensah", school)));
 
+        DailyAttendanceResponse student = service.checkIn(at(SCHOOL_LAT, SCHOOL_LON, 450));
+        assertThat(student.getStatus()).isEqualTo(DailyAttendanceStatus.PENDING_CONFIRMATION);
+        assertThat(student.getConfirmationReason()).isEqualTo(ConfirmationReason.LOCATION_NOT_PRECISE);
+
+        callerIs(3L, RoleName.INSTRUCTOR);
+        when(studentProfileRepository.findByUserId(3L)).thenReturn(Optional.empty());
+        when(instructorProfileRepository.findByUserId(3L)).thenReturn(Optional.of(instructor(3L, school)));
         assertThatThrownBy(() -> service.checkIn(at(SCHOOL_LAT, SCHOOL_LON, 450)))
                 .isInstanceOf(DetailedBadRequestException.class)
                 .hasMessageContaining("isn't precise enough");
     }
 
     @Test
-    void checkingIn_beforeTheSchoolHasALocation_isRejected() {
+    void beforeTheSchoolHasALocation_aStudentWaitsForConfirmation() {
         School noLocation = schoolWithId(6L);
         callerIs(2L, RoleName.STUDENT);
         when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student(2L, "Ama", "Mensah", noLocation)));
 
-        assertThatThrownBy(() -> service.checkIn(at(SCHOOL_LAT, SCHOOL_LON, 10)))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("hasn't set its attendance location");
+        DailyAttendanceResponse response = service.checkIn(at(SCHOOL_LAT, SCHOOL_LON, 10));
+
+        assertThat(response.getStatus()).isEqualTo(DailyAttendanceStatus.PENDING_CONFIRMATION);
+        assertThat(response.getConfirmationReason()).isEqualTo(ConfirmationReason.SCHOOL_LOCATION_NOT_SET);
+        assertThat(response.getDistanceMeters()).isNull();
     }
 
     @Test
@@ -354,12 +392,15 @@ class AttendanceServiceTest {
         callerIs(2L, RoleName.STUDENT);
         when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(student(2L, "Ama", "Mensah", school)));
 
-        service.checkIn(at(SCHOOL_LAT + 0.0003, SCHOOL_LON, 8));
+        service.checkIn(CheckInRequest.builder().latitude(SCHOOL_LAT + 0.0003).longitude(SCHOOL_LON).accuracyMeters(8.0)
+                .lessonType(LessonType.THEORY).topic("  Road signs  ").build());
 
         ArgumentCaptor<DailyAttendance> saved = ArgumentCaptor.forClass(DailyAttendance.class);
         verify(attendanceRepository).save(saved.capture());
         assertThat(saved.getValue().getLatitude()).isEqualTo(SCHOOL_LAT + 0.0003);
         assertThat(saved.getValue().getAccuracyMeters()).isEqualTo(8.0);
         assertThat(saved.getValue().getCheckedInAt()).isNotNull();
+        assertThat(saved.getValue().getLessonType()).isEqualTo(LessonType.THEORY);
+        assertThat(saved.getValue().getTopic()).isEqualTo("Road signs");
     }
 }

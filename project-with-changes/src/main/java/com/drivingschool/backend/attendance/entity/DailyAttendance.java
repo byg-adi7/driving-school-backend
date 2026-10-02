@@ -1,6 +1,8 @@
 package com.drivingschool.backend.attendance.entity;
 
 import com.drivingschool.backend.attendance.enums.AttendanceSource;
+import com.drivingschool.backend.attendance.enums.ConfirmationReason;
+import com.drivingschool.backend.attendance.enums.LessonType;
 import com.drivingschool.backend.attendance.enums.DailyAttendanceStatus;
 import com.drivingschool.backend.common.base.BaseEntity;
 import com.drivingschool.backend.role.enums.RoleName;
@@ -84,11 +86,24 @@ public class DailyAttendance extends BaseEntity {
     @Column(length = 500)
     private String reason;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "lesson_type", length = 20)
+    private LessonType lessonType;
+
+    @Column(length = 200)
+    private String topic;
+
+    // Set when a check-in couldn't place the student at school (kept after confirmation, for the record).
+    @Enumerated(EnumType.STRING)
+    @Column(name = "confirmation_reason", length = 40)
+    private ConfirmationReason confirmationReason;
+
     @Builder
     public DailyAttendance(School school, User user, RoleName role, LocalDate attendanceDate,
                            DailyAttendanceStatus status, AttendanceSource source, LocalDateTime checkedInAt,
                            Double latitude, Double longitude, Double accuracyMeters, Double distanceMeters,
-                           User recordedBy, String reason) {
+                           User recordedBy, String reason, LessonType lessonType, String topic,
+                           ConfirmationReason confirmationReason) {
         this.school = school;
         this.user = user;
         this.role = role;
@@ -102,6 +117,9 @@ public class DailyAttendance extends BaseEntity {
         this.distanceMeters = distanceMeters;
         this.recordedBy = recordedBy;
         this.reason = reason;
+        this.lessonType = lessonType;
+        this.topic = topic;
+        this.confirmationReason = confirmationReason;
     }
 
     public void confirm(User by, LocalDateTime at) {
@@ -111,8 +129,15 @@ public class DailyAttendance extends BaseEntity {
     }
 
     /** A staff entry or correction; keeps any check-in location for the audit trail. */
-    public void recordManually(DailyAttendanceStatus status, String reason, User by) {
+    public void recordManually(DailyAttendanceStatus status, String reason, User by,
+                               LessonType lessonType, String topic) {
         this.status = status;
+        if (lessonType != null) {
+            this.lessonType = lessonType;
+        }
+        if (topic != null) {
+            this.topic = topic;
+        }
         this.reason = reason;
         this.recordedBy = by;
         this.source = AttendanceSource.MANUAL;
