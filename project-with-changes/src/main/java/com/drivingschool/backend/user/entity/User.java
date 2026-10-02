@@ -50,6 +50,13 @@ public class User extends BaseEntity {
     @Column(name = "phone_verified", nullable = false)
     private boolean phoneVerified;
 
+    // Profile photo (V23): a public Cloudinary URL, and Cloudinary's id for deleting it.
+    @Column(name = "profile_image_url", length = 500)
+    private String profileImageUrl;
+
+    @Column(name = "profile_image_public_id", length = 255)
+    private String profileImagePublicId;
+
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
 
@@ -92,6 +99,16 @@ public class User extends BaseEntity {
 
     public void updatePassword(String encodedPassword) {
         this.password = encodedPassword;
+    }
+
+    public void setProfilePhoto(String url, String publicId) {
+        this.profileImageUrl = url;
+        this.profileImagePublicId = publicId;
+    }
+
+    public void clearProfilePhoto() {
+        this.profileImageUrl = null;
+        this.profileImagePublicId = null;
     }
 
     public void recordLogin() {

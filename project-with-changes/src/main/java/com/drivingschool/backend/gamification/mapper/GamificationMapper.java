@@ -16,6 +16,7 @@ public class GamificationMapper {
         return GamificationSummaryResponse.builder()
                 .studentId(stats.getStudent().getId())
                 .studentName(stats.getStudent().getFirstName() + " " + stats.getStudent().getLastName())
+                .profileImageUrl(stats.getStudent().getUser().getProfileImageUrl())
                 .totalPoints(stats.getTotalPoints())
                 .currentStreakWeeks(stats.getCurrentStreakWeeks())
                 .longestStreakWeeks(stats.getLongestStreakWeeks())
@@ -38,6 +39,7 @@ public class GamificationMapper {
                 .rank(rank)
                 .studentId(stats.getStudent().getId())
                 .studentName(stats.getStudent().getFirstName() + " " + stats.getStudent().getLastName())
+                .profileImageUrl(stats.getStudent().getUser().getProfileImageUrl())
                 .totalPoints(stats.getTotalPoints())
                 .currentStreakWeeks(stats.getCurrentStreakWeeks())
                 .build();

@@ -15,6 +15,7 @@ public class CurrentUserResponse {
     private final Long studentProfileId;
     private final Long instructorProfileId;
     private final Long schoolId;
+    private final String profileImageUrl;
     private final boolean enabled;
     private final boolean emailVerified;
     private final boolean bootstrapAdmin;

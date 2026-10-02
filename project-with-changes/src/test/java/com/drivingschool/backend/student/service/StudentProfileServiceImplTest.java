@@ -118,7 +118,7 @@ class StudentProfileServiceImplTest {
         when(studentProfileRepository.save(any(StudentProfile.class))).thenReturn(profile);
         UpdateStudentProfileRequest request = UpdateStudentProfileRequest.builder()
                 .firstName("Janet").lastName("Smith").phone("999")
-                .dateOfBirth(LocalDate.of(1999, 5, 5)).profileImageUrl("http://img").build();
+                .dateOfBirth(LocalDate.of(1999, 5, 5)).build();
 
         StudentProfileResponse response = studentProfileService.updateMyProfile(request);
 

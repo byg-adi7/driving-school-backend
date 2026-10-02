@@ -14,6 +14,7 @@ public class LeaderboardEntryResponse {
     private Integer rank;
     private Long studentId;
     private String studentName;
+    private String profileImageUrl;
     private Integer totalPoints;
     private Integer currentStreakWeeks;
 }

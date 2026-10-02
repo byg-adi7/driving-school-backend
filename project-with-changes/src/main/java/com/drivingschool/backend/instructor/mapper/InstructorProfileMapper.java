@@ -19,6 +19,7 @@ public class InstructorProfileMapper {
                 .licenseNumber(profile.getLicenseNumber())
                 .yearsExperience(profile.getYearsExperience())
                 .bio(profile.getBio())
+                .profileImageUrl(profile.getUser().getProfileImageUrl())
                 .active(profile.isActive())
                 .schoolId(profile.getSchool().getId())
                 .schoolName(profile.getSchool().getName())

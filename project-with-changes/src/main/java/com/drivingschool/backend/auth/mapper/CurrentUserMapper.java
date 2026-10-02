@@ -31,6 +31,7 @@ public class CurrentUserMapper {
                 .studentProfileId(student != null ? student.getId() : null)
                 .instructorProfileId(instructor != null ? instructor.getId() : null)
                 .schoolId(schoolId)
+                .profileImageUrl(user.getProfileImageUrl())
                 .enabled(user.isEnabled())
                 .emailVerified(user.isEmailVerified())
                 .bootstrapAdmin(user.isBootstrapAdmin())

@@ -505,3 +505,23 @@ A self check-in only proves someone reached the premises. The product owner aske
 **Data:** V22 adds `reviewed_by_user_id` / `reviewed_at`. A confirmation or manual entry also counts as reviewed. Responses carry `reviewedByName` / `reviewedAt`, and the one-day Excel list has a "Roll call by" column.
 
 **Tests:** 4 new (mixed roll call; instructor roll call admin-only; unknown person; future date). Frontend guide updated.
+
+## Profile Photos (2026-10-03)
+
+Frontend tracker #6, previously deferred.
+
+**Storage:** every account (student, instructor or admin) can have a photo, stored on the account itself (V23: `users.profile_image_url`, `users.profile_image_public_id`).
+- Students used to have a free-text `profile_image_url` that anyone could set to any URL. V23 copies existing values to their account and drops that column, and `PUT /students/me` no longer accepts it.
+
+**Upload:**
+- Endpoints: `POST/DELETE /users/me/photo` and `/users/{userId}/photo`, as multipart `file`.
+- Accepts JPEG, PNG or WebP, detected from the file's own bytes, up to 5 MB.
+- Uploaded to Cloudinary as a public image, centre-cropped to 400x400 on upload. Face-aware cropping wasn't used because Cloudinary's docs don't say what it does when no face is found.
+- A replaced or removed photo is deleted from Cloudinary after the database change commits.
+- A Cloudinary failure returns 503 and leaves the old photo unchanged.
+
+**Permissions:** yourself; an admin for accounts of their school (the bootstrap admin for anyone); an instructor for students of their school.
+
+**Where it appears:** `profileImageUrl` is returned in `/auth/me`, student and instructor profiles and lists, conversation contacts and conversations (`counterpartProfileImageUrl`), and the leaderboard and gamification summary.
+
+**Tests:** 9 new (`ProfilePhotoServiceTest`). Unit suite: 874 tests, green.

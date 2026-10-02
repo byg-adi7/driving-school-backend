@@ -52,8 +52,6 @@ public class StudentProfile extends BaseEntity {
     @Column(nullable = false, length = 30)
     private StudentStatus status;
 
-    @Column(name = "profile_image_url", length = 500)
-    private String profileImageUrl;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "school_id", nullable = false)
@@ -65,7 +63,7 @@ public class StudentProfile extends BaseEntity {
 
     @Builder
     public StudentProfile(String firstName, String lastName, String phone, LocalDate dateOfBirth,
-                          LocalDate enrollmentDate, StudentStatus status, String profileImageUrl,
+                          LocalDate enrollmentDate, StudentStatus status,
                           School school, User user) {
         this.firstName = firstName;
         this.lastName = lastName;
@@ -73,7 +71,6 @@ public class StudentProfile extends BaseEntity {
         this.dateOfBirth = dateOfBirth;
         this.enrollmentDate = enrollmentDate;
         this.status = status;
-        this.profileImageUrl = profileImageUrl;
         this.school = school;
         this.user = user;
     }
@@ -82,12 +79,10 @@ public class StudentProfile extends BaseEntity {
         this.status = status;
     }
 
-    public void updateProfile(String firstName, String lastName, String phone, LocalDate dateOfBirth,
-                               String profileImageUrl) {
+    public void updateProfile(String firstName, String lastName, String phone, LocalDate dateOfBirth) {
         this.firstName = firstName;
         this.lastName = lastName;
         this.phone = phone;
         this.dateOfBirth = dateOfBirth;
-        this.profileImageUrl = profileImageUrl;
     }
 }
