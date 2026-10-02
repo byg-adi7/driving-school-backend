@@ -159,7 +159,26 @@ public class QuizServiceImpl implements QuizService {
         Quiz quiz = findQuiz(quizId);
         validator.validateQuizReadAccess(quiz, userId, role);
         List<QuizQuestion> questions = quizQuestionRepository.findByQuizIdOrderByQuestionOrderAsc(quizId);
-        return quizMapper.toResponse(quiz, questions, !forStudent);
+        QuizResponse response = quizMapper.toResponse(quiz, questions, !forStudent);
+        if (!"STUDENT".equals(role)) {
+            return response;
+        }
+        // So the app can show "Attempts: 1 of 3 used - Best 60%" and lock Start before
+        // the student answers anything, instead of failing on submit.
+        return studentProfileRepository.findByUserId(userId)
+                .map(student -> response.toBuilder().myAttempts(myAttempts(quiz, student.getId())).build())
+                .orElse(response);
+    }
+
+    private QuizResponse.MyAttempts myAttempts(Quiz quiz, Long studentId) {
+        QuizSubmissionRepository.AttemptSummary summary = quizSubmissionRepository.summarizeAttempts(quiz.getId(), studentId);
+        int used = summary == null || summary.getAttempts() == null ? 0 : summary.getAttempts().intValue();
+        return QuizResponse.MyAttempts.builder()
+                .attemptsUsed(used)
+                .attemptsRemaining(Math.max(0, quiz.getMaxAttempts() - used))
+                .bestScore(summary == null ? null : summary.getBestScore())
+                .passed(summary != null && summary.getPassed() != null && summary.getPassed() == 1)
+                .build();
     }
 
     // The course's school is checked here on every call; only then is the cached,
