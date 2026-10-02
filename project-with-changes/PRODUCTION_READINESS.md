@@ -427,3 +427,28 @@ The frontend team tested against the live API and reported 18 issues. Where a ch
 - a password-protected file and a fake PDF are rejected.
 
 Tests that uploaded the fake `"%PDF-1.4\n%%EOF"` now use real PDFs. Unit suite: 825 tests, green.
+
+## Daily Attendance with Location Check-In and Excel Registers (2026-10-02)
+
+Frontend tracker #5, plus the product owner's request for printable attendance sheets. Decisions: per-school time zone; student check-ins confirmed by an instructor or the admin of the school; LATE is manual only; students and instructors check in.
+
+**Migration (V20):**
+- `schools` gains `latitude`, `longitude`, `attendance_radius_meters` (default 150) and `time_zone` (default `Africa/Accra`).
+- New `daily_attendance` table (separate from live-session `attendances`) holding status, source, the check-in location, accuracy and distance, who confirmed or recorded it, and a reason. `UNIQUE (user_id, attendance_date)` enforces one record per person per school-local day.
+
+**Check-in:**
+- Rejected if the school hasn't set a location.
+- Rejected if accuracy is worse than 100 m, or if the haversine distance is beyond the radius. Both rejections are a 400 with details: `accuracyMeters` or `distanceMeters`/`radiusMeters`, via the new `DetailedBadRequestException`.
+- Rejected on a second check-in the same day.
+- Students start as `PENDING_CONFIRMATION`; instructors are `PRESENT`.
+
+**Staff:**
+- Confirm a pending check-in.
+- Record or correct a day manually (PRESENT/LATE/ABSENT; instructors only for students of their own school; no future dates).
+- Day list including people without a record (`NOT_CHECKED_IN` today, `ABSENT` for past days).
+- A person's history.
+- Excel exports built with Apache POI 5.5.1: a register (people x days, up to 62 days, P/L/A/? marks with totals) and a one-day detailed list. Both are laid out for printing.
+
+**Also:** `Clock` is now a bean (`ClockConfig`) so date rules can be tested.
+
+**Tests:** 22 new (`AttendanceServiceTest`, `AttendanceExportServiceTest`). The export test opens the generated workbook and checks cells and print setup. Unit suite: 853 tests, green.

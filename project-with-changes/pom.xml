@@ -173,6 +173,13 @@
             <artifactId>pdfbox</artifactId>
             <version>3.0.7</version>
         </dependency>
+
+        <!-- Apache POI - builds the printable .xlsx attendance registers -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.5.1</version>
+        </dependency>
     </dependencies>
 
     <build>

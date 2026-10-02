@@ -60,6 +60,17 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.failure("The resource you were updating no longer exists"));
     }
 
+    @ExceptionHandler(DetailedBadRequestException.class)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleDetailedBadRequest(DetailedBadRequestException ex) {
+        log.warn("Bad request: {} {}", ex.getMessage(), ex.getDetails());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.<Map<String, Object>>builder()
+                        .success(false)
+                        .message(ex.getMessage())
+                        .data(ex.getDetails())
+                        .build());
+    }
+
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ApiResponse<Void>> handleBadRequest(BadRequestException ex) {
         log.warn("Bad request: {}", ex.getMessage());
