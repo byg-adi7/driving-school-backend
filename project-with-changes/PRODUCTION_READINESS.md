@@ -525,3 +525,15 @@ Frontend tracker #6, previously deferred.
 **Where it appears:** `profileImageUrl` is returned in `/auth/me`, student and instructor profiles and lists, conversation contacts and conversations (`counterpartProfileImageUrl`), and the leaderboard and gamification summary.
 
 **Tests:** 9 new (`ProfilePhotoServiceTest`). Unit suite: 874 tests, green.
+
+## Rate Limits Per User, Not Per School Wi-Fi (2026-10-03)
+
+The frontend saw ordinary requests get "Too many requests" during a tablet check. Every limit was counted per internet address, and a whole school's Wi-Fi shares one address. A busy class shared 100 requests a minute, and the login bucket (10 a minute) couldn't fit a class logging in at once.
+
+**Now:**
+- A request with a valid access token is counted per user, at 300 a minute. The filter reads the JWT itself because it runs before the JWT filter; an invalid or expired token falls back to the address bucket.
+- Auth endpoints allow 60 a minute per address.
+- Password guessing is capped per account instead: 10 login attempts per 15 minutes, checked before the password, giving 429 with `Retry-After`.
+- Other anonymous requests stay at 100 a minute per address.
+
+**Tests:** filter tests for the per-user and invalid-token cases, plus the per-account login cap.
