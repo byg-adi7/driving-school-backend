@@ -121,7 +121,7 @@ class AuthServiceImplTest {
         when(authentication.getPrincipal()).thenReturn(principal);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(jwtTokenProvider.generateAccessToken(principal)).thenReturn("access");
-        when(jwtTokenProvider.generateRefreshToken(principal)).thenReturn("refresh");
+        when(jwtTokenProvider.generateRefreshToken(org.mockito.ArgumentMatchers.eq(principal), any())).thenReturn("refresh");
         when(authMapper.toAuthResponse(user, "access", "refresh")).thenReturn(expectedResponse);
 
         AuthResponse response = authService.login(request);
@@ -258,7 +258,7 @@ class AuthServiceImplTest {
         verify(studentProfileRepository).save(any());
         verify(instructorProfileRepository, never()).save(any());
         verify(jwtTokenProvider, never()).generateAccessToken(any());
-        verify(jwtTokenProvider, never()).generateRefreshToken(any());
+        verify(jwtTokenProvider, never()).generateRefreshToken(any(), any());
     }
 
     // --- refreshToken ---
@@ -327,11 +327,14 @@ class AuthServiceImplTest {
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
         when(jwtTokenProvider.getIssuedAtFromToken("refresh-token")).thenReturn(new java.util.Date());
         when(jwtTokenProvider.generateAccessToken(any(UserPrincipal.class))).thenReturn("new-access");
-        when(jwtTokenProvider.generateRefreshToken(any(UserPrincipal.class))).thenReturn("new-refresh");
+        JwtTokenProvider.Session session = new JwtTokenProvider.Session("s1", 1_790_000_000L, false);
+        when(jwtTokenProvider.getSessionFromToken("refresh-token")).thenReturn(session);
+        when(jwtTokenProvider.generateRefreshToken(any(UserPrincipal.class), eq(session))).thenReturn("new-refresh");
         when(authMapper.toAuthResponse(eq(user), eq("new-access"), eq("new-refresh"))).thenReturn(expectedResponse);
 
         AuthResponse response = authService.refreshToken(request);
 
+        // The new refresh token continues the same session (same start, same "remember me").
         assertThat(response).isEqualTo(expectedResponse);
         verify(jwtTokenProvider, times(1)).generateAccessToken(any(UserPrincipal.class));
     }
@@ -633,7 +636,7 @@ class AuthServiceImplTest {
         AuthResponse tokens = AuthResponse.builder().accessToken("access").build();
         when(accountVerificationService.confirm(request)).thenReturn(user);
         when(jwtTokenProvider.generateAccessToken(any())).thenReturn("access");
-        when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("refresh");
+        when(jwtTokenProvider.generateRefreshToken(any(), any())).thenReturn("refresh");
         when(authMapper.toAuthResponse(user, "access", "refresh")).thenReturn(tokens);
 
         assertThat(authService.confirmVerification(request)).isSameAs(tokens);
@@ -658,7 +661,7 @@ class AuthServiceImplTest {
         when(authentication.getPrincipal()).thenReturn(principal);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(jwtTokenProvider.generateAccessToken(principal)).thenReturn("access");
-        when(jwtTokenProvider.generateRefreshToken(principal)).thenReturn("refresh");
+        when(jwtTokenProvider.generateRefreshToken(org.mockito.ArgumentMatchers.eq(principal), any())).thenReturn("refresh");
         when(authMapper.toAuthResponse(user, "access", "refresh")).thenReturn(tokens);
 
         AuthResponse response = withoutVerification.login(LoginRequest.builder().email("new@example.com").password("password123").build());
@@ -666,5 +669,20 @@ class AuthServiceImplTest {
         assertThat(response).isSameAs(tokens);
         assertThat(user.isAccountVerified()).isFalse(); // still has to verify once the switch is back on
         verify(accountVerificationService, never()).startChallenge(any());
+    }
+
+    @Test
+    void login_withRememberMe_startsARememberMeSession() {
+        User user = existingUser(RoleName.STUDENT);
+        UserPrincipal principal = new UserPrincipal(user);
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(authentication);
+        when(authentication.getPrincipal()).thenReturn(principal);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        authService.login(LoginRequest.builder().email("user@example.com").password("password123").rememberMe(true).build());
+
+        org.mockito.ArgumentCaptor<JwtTokenProvider.Session> session = org.mockito.ArgumentCaptor.forClass(JwtTokenProvider.Session.class);
+        verify(jwtTokenProvider).generateRefreshToken(eq(principal), session.capture());
+        assertThat(session.getValue().rememberMe()).isTrue();
     }
 }

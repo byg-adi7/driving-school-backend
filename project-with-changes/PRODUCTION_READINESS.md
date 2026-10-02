@@ -452,3 +452,21 @@ Frontend tracker #5, plus the product owner's request for printable attendance s
 **Also:** `Clock` is now a bean (`ClockConfig`) so date rules can be tested.
 
 **Tests:** 22 new (`AttendanceServiceTest`, `AttendanceExportServiceTest`). The export test opens the generated workbook and checks cells and print setup. Unit suite: 853 tests, green.
+
+## Session Limits: "Keep Me Signed In" and an Inactivity Timeout (2026-10-02)
+
+Frontend tracker #10. Logins used to last up to 7 days on any computer (a 7-day refresh token re-issued on every refresh), which is risky on shared school computers. The product owner chose "remember me" plus a server-enforced idle timeout.
+
+**Rules:**
+- Login (and `/auth/verification/confirm`) takes an optional `rememberMe`.
+- A session lasts at most 12 hours without it and 7 days with it. Admin sessions are capped at 1 day either way.
+- A session that isn't refreshed for 2 hours ends.
+
+**How:**
+- The refresh token now carries its session: `sid`, start time `sst` and `rmb`.
+- Every refresh token expires at `min(now + idle timeout, session start + session maximum)`.
+- A refresh continues the same session, so activity extends it by the idle timeout but never past its maximum, and 2 hours without a refresh lets the token expire.
+- Refresh tokens issued before this change have no session claims. They count as a "remember me" session that started when they were issued, so nobody is logged out by the deploy.
+- All four limits are configurable (`JWT_REFRESH_EXPIRATION_MS`, `JWT_IDLE_TIMEOUT_MS`, `JWT_SESSION_MAX_MS`, `JWT_ADMIN_SESSION_MAX_MS`).
+
+**Tests:** five `JwtTokenProviderTest` cases (idle expiry, the 12-hour and admin caps, the session travelling in the token, old tokens), plus `AuthServiceImplTest` checks that login starts a "remember me" session and that a refresh continues the same session.

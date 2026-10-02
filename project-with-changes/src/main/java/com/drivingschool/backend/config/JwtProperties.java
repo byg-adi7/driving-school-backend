@@ -16,7 +16,14 @@ public class JwtProperties {
 
     private String secret;
     private long accessTokenExpirationMs;
+    /** Longest a "remember me" session can last (7 days by default). */
     private long refreshTokenExpirationMs;
+    /** A session not refreshed for this long ends (2 hours) - the inactivity timeout. */
+    private long idleTimeoutMs = 2 * 60 * 60 * 1000L;
+    /** Longest a session without "remember me" can last (12 hours). */
+    private long sessionMaxMs = 12 * 60 * 60 * 1000L;
+    /** Admins can delete schools and accounts: their sessions never outlast this (1 day). */
+    private long adminSessionMaxMs = 24 * 60 * 60 * 1000L;
 
     /**
      * Validate JWT configuration on initialization

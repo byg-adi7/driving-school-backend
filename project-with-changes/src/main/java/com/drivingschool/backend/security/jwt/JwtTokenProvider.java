@@ -29,6 +29,19 @@ public final class JwtTokenProvider {
     private static final String CLAIM_TOKEN_TYPE = "type";
     private static final String TOKEN_TYPE_ACCESS = "ACCESS";
     private static final String TOKEN_TYPE_REFRESH = "REFRESH";
+    private static final String CLAIM_SESSION_ID = "sid";
+    private static final String CLAIM_SESSION_START = "sst";
+    private static final String CLAIM_REMEMBER_ME = "rmb";
+
+    /**
+     * A login session, carried from refresh token to refresh token: when it started and
+     * whether the user ticked "keep me signed in". Decides how long it may last.
+     */
+    public record Session(String id, long startedAtEpochSeconds, boolean rememberMe) {
+        public static Session start(boolean rememberMe) {
+            return new Session(UUID.randomUUID().toString(), System.currentTimeMillis() / 1000, rememberMe);
+        }
+    }
 
     private final JwtProperties jwtProperties;
     private final SecretKey secretKey;
@@ -43,13 +56,53 @@ public final class JwtTokenProvider {
         return buildToken(principal, TOKEN_TYPE_ACCESS, jwtProperties.getAccessTokenExpirationMs());
     }
 
+    /** A refresh token for a brand-new session without "remember me". */
     public String generateRefreshToken(UserPrincipal principal) {
-        return buildToken(principal, TOKEN_TYPE_REFRESH, jwtProperties.getRefreshTokenExpirationMs());
+        return generateRefreshToken(principal, Session.start(false));
+    }
+
+    /**
+     * Expires after the idle timeout, or when the session reaches its maximum length -
+     * whichever is first. Each refresh issues a new one, so a session ends after that long
+     * without a refresh (inactivity) and can never outlive its maximum.
+     */
+    public String generateRefreshToken(UserPrincipal principal, Session session) {
+        long now = System.currentTimeMillis();
+        long sessionEnd = session.startedAtEpochSeconds() * 1000 + maxSessionMs(principal, session.rememberMe());
+        long expiry = Math.min(now + jwtProperties.getIdleTimeoutMs(), sessionEnd);
+        return buildToken(principal, TOKEN_TYPE_REFRESH, new Date(now), new Date(expiry), Map.of(
+                CLAIM_SESSION_ID, session.id(),
+                CLAIM_SESSION_START, session.startedAtEpochSeconds(),
+                CLAIM_REMEMBER_ME, session.rememberMe()));
+    }
+
+    /** Longest a session may last: 7 days with "remember me", 12 hours without; admins at most 1 day. */
+    public long maxSessionMs(UserPrincipal principal, boolean rememberMe) {
+        long max = rememberMe ? jwtProperties.getRefreshTokenExpirationMs() : jwtProperties.getSessionMaxMs();
+        boolean admin = principal.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        return admin ? Math.min(max, jwtProperties.getAdminSessionMaxMs()) : max;
+    }
+
+    /**
+     * The session a refresh token belongs to. Tokens issued before sessions existed carry
+     * no session claims: they count as a "remember me" session that started when issued.
+     */
+    public Session getSessionFromToken(String refreshToken) {
+        Claims claims = parseClaims(refreshToken);
+        String id = claims.get(CLAIM_SESSION_ID, String.class);
+        Long start = claims.get(CLAIM_SESSION_START, Long.class);
+        Boolean rememberMe = claims.get(CLAIM_REMEMBER_ME, Boolean.class);
+        return new Session(id != null ? id : claims.getId(),
+                start != null ? start : claims.getIssuedAt().getTime() / 1000,
+                rememberMe == null || rememberMe);
     }
 
     private String buildToken(UserPrincipal principal, String tokenType, long expirationMs) {
         Date now = new Date();
-        Date expiry = new Date(now.getTime() + expirationMs);
+        return buildToken(principal, tokenType, now, new Date(now.getTime() + expirationMs), Map.of());
+    }
+
+    private String buildToken(UserPrincipal principal, String tokenType, Date now, Date expiry, Map<String, Object> extraClaims) {
 
         List<String> roles = principal.getAuthorities().stream()
                 .map(auth -> auth.getAuthority().replace("ROLE_", ""))
@@ -61,6 +114,7 @@ public final class JwtTokenProvider {
                 .claim(CLAIM_USER_ID, principal.getId())
                 .claim(CLAIM_ROLES, roles)
                 .claim(CLAIM_TOKEN_TYPE, tokenType)
+                .claims(extraClaims)
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(secretKey)

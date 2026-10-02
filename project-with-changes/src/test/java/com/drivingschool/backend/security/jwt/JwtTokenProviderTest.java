@@ -105,4 +105,74 @@ class JwtTokenProviderTest {
 
         assertThat(shortLivedProvider.validateToken(token)).isFalse();
     }
+
+    // --- sessions: idle timeout, maximum length, remember me ---
+
+    private static final long HOUR = 3_600_000L;
+
+    private long expiresInMs(String token) {
+        return tokenProvider.getExpirationFromToken(token).getTime() - System.currentTimeMillis();
+    }
+
+    private UserPrincipal admin() {
+        User user = User.builder().email("admin@example.com").password("x").enabled(true).emailVerified(true).build();
+        ReflectionTestUtils.setField(user, "id", 7L);
+        user.addRole(Role.builder().name(RoleName.ADMIN).build());
+        return new UserPrincipal(user);
+    }
+
+    @Test
+    void aNewSessionsRefreshToken_expiresAfterTheIdleTimeout() {
+        String token = tokenProvider.generateRefreshToken(principal, JwtTokenProvider.Session.start(true));
+
+        assertThat(expiresInMs(token)).isBetween(2 * HOUR - 60_000, 2 * HOUR);
+    }
+
+    @Test
+    void refreshingCanNeverPushASessionPastItsMaximum_12HoursWithoutRememberMe() {
+        // Started 11 hours ago without "remember me": only one hour left, not two.
+        long started = System.currentTimeMillis() / 1000 - 11 * 3600;
+        String token = tokenProvider.generateRefreshToken(principal, new JwtTokenProvider.Session("s1", started, false));
+
+        assertThat(expiresInMs(token)).isBetween(HOUR - 60_000, HOUR);
+    }
+
+    @Test
+    void rememberMe_allowsSevenDays_butAdminsAreCappedAtOneDay() {
+        assertThat(tokenProvider.maxSessionMs(principal, true)).isEqualTo(7 * 24 * HOUR);
+        assertThat(tokenProvider.maxSessionMs(principal, false)).isEqualTo(12 * HOUR);
+        assertThat(tokenProvider.maxSessionMs(admin(), true)).isEqualTo(24 * HOUR);
+        assertThat(tokenProvider.maxSessionMs(admin(), false)).isEqualTo(12 * HOUR);
+
+        // An admin session started 23.5 hours ago with "remember me" has 30 minutes left.
+        long started = System.currentTimeMillis() / 1000 - (23 * 3600 + 1800);
+        String token = tokenProvider.generateRefreshToken(admin(), new JwtTokenProvider.Session("s2", started, true));
+        assertThat(expiresInMs(token)).isBetween(HOUR / 2 - 60_000, HOUR / 2);
+    }
+
+    @Test
+    void theSessionTravelsInsideTheRefreshToken() {
+        JwtTokenProvider.Session session = new JwtTokenProvider.Session("session-9", 1_790_000_000L, true);
+        String token = tokenProvider.generateRefreshToken(principal, new JwtTokenProvider.Session(
+                session.id(), System.currentTimeMillis() / 1000, true));
+
+        JwtTokenProvider.Session read = tokenProvider.getSessionFromToken(token);
+        assertThat(read.id()).isEqualTo("session-9");
+        assertThat(read.rememberMe()).isTrue();
+    }
+
+    @Test
+    void aRefreshTokenFromBeforeSessions_countsAsARememberMeSessionStartedWhenIssued() {
+        String legacy = io.jsonwebtoken.Jwts.builder()
+                .id("legacy-jti").subject("student@example.com").claim("userId", 42L).claim("type", "REFRESH")
+                .issuedAt(new java.util.Date(1_790_000_000_000L)).expiration(new java.util.Date(System.currentTimeMillis() + HOUR))
+                .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(SECRET.getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                .compact();
+
+        JwtTokenProvider.Session session = tokenProvider.getSessionFromToken(legacy);
+
+        assertThat(session.id()).isEqualTo("legacy-jti");
+        assertThat(session.startedAtEpochSeconds()).isEqualTo(1_790_000_000L);
+        assertThat(session.rememberMe()).isTrue();
+    }
 }
