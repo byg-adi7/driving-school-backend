@@ -124,6 +124,9 @@ app:
     secret: ${JWT_SECRET}
     access-token-expiration-ms: ${JWT_ACCESS_EXPIRATION_MS:900000}
     refresh-token-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000}
+    idle-timeout-ms: ${JWT_IDLE_TIMEOUT_MS:7200000}
+    session-max-ms: ${JWT_SESSION_MAX_MS:43200000}
+    admin-session-max-ms: ${JWT_ADMIN_SESSION_MAX_MS:86400000}
   cors:
     # No real-looking fallback domain on purpose: that would silently "work" (no
     # startup error, no runtime error either - CORS failures are a browser-side

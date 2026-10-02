@@ -17,4 +17,11 @@ public class ConfirmVerificationRequest {
     @NotBlank(message = "Code is required")
     @Pattern(regexp = "[0-9]{6}", message = "Code must be 6 digits")
     private final String code;
+
+    /** "Keep me signed in": up to 7 days instead of 12 hours (admins: 1 day either way). Optional. */
+    private final Boolean rememberMe;
+
+    public boolean isRememberMe() {
+        return Boolean.TRUE.equals(rememberMe);
+    }
 }

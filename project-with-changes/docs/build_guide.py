@@ -155,6 +155,7 @@ ENDPOINT("POST", "/auth/login", "Authenticate and receive tokens.",
     request=[
         ["email", "string", "yes", "valid email"],
         ["password", "string", "yes", "8-100 characters"],
+        ["rememberMe", "boolean", "no", "the \"Keep me signed in\" checkbox - see Sessions below"],
     ],
     example_req='{\n  "email": "instructor.smith@example.com",\n  "password": "SecurePass123!"\n}',
     response=[
@@ -169,6 +170,24 @@ ENDPOINT("POST", "/auth/login", "Authenticate and receive tokens.",
            "A NEW account's first login returns NO tokens: instead \"verificationRequired\": "
            "true and a \"verification\" object. Always check for this before looking for "
            "accessToken - see \"Account verification\" right below."])
+
+d.H(2, "Sessions: how long a login lasts")
+d.BULLETS([
+    "Access tokens last 15 minutes; refresh them with POST /auth/refresh-token (every refresh "
+    "returns a NEW refresh token - always store the latest one).",
+    "Inactivity: a session that isn't refreshed for 2 hours ends - the refresh token expires "
+    "and the user must log in again. Refresh only when the user actually does something "
+    "(e.g. on a 401 from a real request); pause background polling when the tab is hidden, "
+    "or an idle open tab will keep the session alive.",
+    "Maximum length, however active: 12 hours without \"Keep me signed in\", 7 days with it "
+    "(rememberMe: true on login, or on /auth/verification/confirm). Admin sessions never "
+    "last more than 1 day.",
+    "When the refresh call answers 401, clear the tokens and show the login screen with a "
+    "short \"Your session has ended\" message.",
+    "Without rememberMe, keep the refresh token in sessionStorage (gone when the browser "
+    "closes) rather than localStorage - that's what makes \"not remembered\" mean signed out on "
+    "a shared school computer.",
+])
 
 d.H(2, "Account verification (one-time code at first login)")
 d.P("Every account created from now on must be verified before it can log in: at its "
@@ -232,6 +251,7 @@ ENDPOINT("POST", "/auth/verification/confirm", "Confirm the code: verifies the a
     request=[
         ["challengeId", "string", "yes", "same as for /send"],
         ["code", "string", "yes", "exactly 6 digits"],
+        ["rememberMe", "boolean", "no", "repeat the login form's \"Keep me signed in\" choice"],
     ],
     example_req='{\n  "challengeId": "q4Jd0...Xw",\n  "code": "482913"\n}',
     response=[["Same shape as /auth/login's normal response", "", "accessToken, refreshToken, tokenType, expiresIn, user"]],
@@ -1391,9 +1411,10 @@ d.P("A summary of implementation requirements that aren't just \"call an endpoin
 
 d.H(2, "1. Auth token lifecycle")
 d.BULLETS([
-    "Store accessToken and refreshToken after login (e.g. in memory + a secure storage "
-    "mechanism appropriate for your platform — avoid plain localStorage for the refresh "
-    "token if you can help it, given it's valid for 7 days).",
+    "Store accessToken and refreshToken after login: with \"Keep me signed in\" the refresh "
+    "token may live in localStorage, without it use sessionStorage. Replace the stored refresh "
+    "token after every refresh. Sessions end after 2 hours without a refresh and after 12 "
+    "hours / 7 days at most (admins 1 day) - see \"Sessions\" in the Authentication section.",
     "Attach Authorization: Bearer <accessToken> to every request except the public auth "
     "endpoints listed at the top of this document.",
     "On a 401, call POST /auth/refresh-token once, retry the original request with the new "

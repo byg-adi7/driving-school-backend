@@ -62,7 +62,8 @@ In the web service's **Environment** tab, set:
 | `REDIS_PORT` | the port from the same URL | |
 | `REDIS_PASSWORD` | leave unset | Internal Key Value connections are unauthenticated by default; set it only if you enable auth on the instance |
 | `JWT_SECRET` | a random string, 32+ characters | e.g. `openssl rand -base64 48` |
-| `JWT_ACCESS_EXPIRATION_MS` / `JWT_REFRESH_EXPIRATION_MS` | leave unset | Token lifetimes: 900000 (15 minutes) and 604800000 (7 days) by default. |
+| `JWT_ACCESS_EXPIRATION_MS` / `JWT_REFRESH_EXPIRATION_MS` | leave unset | Access token lifetime 900000 (15 minutes); `JWT_REFRESH_EXPIRATION_MS` is the longest a "keep me signed in" session can last, 604800000 (7 days). |
+| `JWT_IDLE_TIMEOUT_MS` / `JWT_SESSION_MAX_MS` / `JWT_ADMIN_SESSION_MAX_MS` | leave unset | Session rules: a session not refreshed for 7200000 (2 hours) ends; without "keep me signed in" it lasts at most 43200000 (12 hours); admin sessions at most 86400000 (1 day). |
 | `BOOTSTRAP_ADMIN_ENABLED` | `true` for the very first deploy only | Flip back to `false` after you've logged in once and changed the password |
 | `BOOTSTRAP_ADMIN_EMAIL` | your admin email | |
 | `BOOTSTRAP_ADMIN_PASSWORD` | a strong password | Change it after first login regardless. **Do set this whenever `BOOTSTRAP_ADMIN_ENABLED=true`** - if left unset, the app now boots fine and simply skips creating the admin (logged as an error), rather than the startup crash this used to cause (an unresolvable placeholder was thrown as an exception from a `CommandLineRunner`, failing the whole app). |

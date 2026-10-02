@@ -147,7 +147,7 @@ public class AuthServiceImpl implements AuthService {
                     .build();
         }
 
-        return completeLogin(user, principal);
+        return completeLogin(user, principal, request.isRememberMe());
     }
 
     @Override
@@ -159,15 +159,15 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public AuthResponse confirmVerification(ConfirmVerificationRequest request) {
         User user = accountVerificationService.confirm(request);
-        return completeLogin(user, new UserPrincipal(user));
+        return completeLogin(user, new UserPrincipal(user), request.isRememberMe());
     }
 
-    private AuthResponse completeLogin(User user, UserPrincipal principal) {
+    private AuthResponse completeLogin(User user, UserPrincipal principal, boolean rememberMe) {
         user.recordLogin();
         userRepository.save(user);
 
         String accessToken = jwtTokenProvider.generateAccessToken(principal);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(principal);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(principal, JwtTokenProvider.Session.start(rememberMe));
 
         log.info("User logged in: {}", user.getEmail());
         return authMapper.toAuthResponse(user, accessToken, refreshToken);
@@ -286,7 +286,9 @@ public class AuthServiceImpl implements AuthService {
 
         UserPrincipal principal = new UserPrincipal(user);
         String newAccessToken = jwtTokenProvider.generateAccessToken(principal);
-        String newRefreshToken = jwtTokenProvider.generateRefreshToken(principal);
+        // Same session, new token: the session's start and "remember me" choice carry over,
+        // so refreshing extends it by the idle timeout but never past its maximum length.
+        String newRefreshToken = jwtTokenProvider.generateRefreshToken(principal, jwtTokenProvider.getSessionFromToken(refreshToken));
 
         return authMapper.toAuthResponse(user, newAccessToken, newRefreshToken);
     }
