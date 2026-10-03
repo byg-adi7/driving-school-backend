@@ -567,3 +567,20 @@ Frontend spec: when an admin or instructor creates an account, the creator no lo
 **Migration safety:** V24 only adds columns and a table, so the old instance keeps working during the rollover.
 
 **Tests:** `InviteServiceTest` (10), invite cases in `AuthServiceImplTest`, and an end-to-end `AccountInviteIntegrationTest`. Unit suite: 890, green.
+
+## School Logos (2026-10-03)
+
+Frontend request. A school's admin uploads a logo with `POST /schools/me/logo` (and removes it with `DELETE`).
+
+**Upload:**
+- Accepts JPEG, PNG, WebP or SVG up to 2 MB, recognised by content (the shared `ImageFiles` check).
+- Stored on Cloudinary as a public image scaled to fit 512x512 (never cropped or enlarged).
+- SVGs are converted to PNG on upload, because they can carry scripts.
+- A replaced or removed logo is deleted from Cloudinary after commit.
+
+**Where it appears:**
+- V25 adds `schools.logo_url` / `logo_public_id`.
+- `logoUrl` is on every school response, and the school caches are evicted when it changes.
+- `GET /auth/me` adds `schoolName` and `schoolLogoUrl`.
+
+**Tests:** 6 new (`SchoolLogoServiceTest`). Unit suite: 897, green.

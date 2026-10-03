@@ -38,6 +38,13 @@ public class School extends BaseEntity {
     @Column(nullable = false)
     private boolean active;
 
+    // V25: the logo's public Cloudinary URL, and Cloudinary's id for deleting it.
+    @Column(name = "logo_url", length = 500)
+    private String logoUrl;
+
+    @Column(name = "logo_public_id", length = 255)
+    private String logoPublicId;
+
     // Daily attendance (V20): where check-ins are measured from, how close they must be,
     // and the time zone that decides which calendar day a check-in belongs to.
     @Column(name = "latitude")
@@ -98,6 +105,16 @@ public class School extends BaseEntity {
         if (timeZone != null) {
             this.timeZone = timeZone;
         }
+    }
+
+    public void setLogo(String url, String publicId) {
+        this.logoUrl = url;
+        this.logoPublicId = publicId;
+    }
+
+    public void clearLogo() {
+        this.logoUrl = null;
+        this.logoPublicId = null;
     }
 
     public boolean hasLocation() {

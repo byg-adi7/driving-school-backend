@@ -15,6 +15,7 @@ public class SchoolMapper {
                 .phone(school.getPhone())
                 .email(school.getEmail())
                 .active(school.isActive())
+                .logoUrl(school.getLogoUrl())
                 .latitude(school.getLatitude())
                 .longitude(school.getLongitude())
                 .attendanceRadiusMeters(school.getAttendanceRadiusMeters())
