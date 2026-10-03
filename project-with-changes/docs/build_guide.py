@@ -186,6 +186,39 @@ ENDPOINT("POST", "/auth/login", "Authenticate and receive tokens.",
            "true and a \"verification\" object. Always check for this before looking for "
            "accessToken - see \"Account verification\" right below."])
 
+d.H(2, "Invites: new users choose their own password")
+d.P("When an admin or instructor creates an account WITHOUT a password, the account is "
+    "INVITED: it can't sign in, and the person is emailed a link "
+    "(.../accept-invite?token=...) to choose their own password - nobody else ever knows it. "
+    "Links last 72 hours and work once; resending replaces the old link. Accepting signs "
+    "them straight in, with no one-time code (the link proved the email). Until the company "
+    "has its own email domain most invite emails WON'T arrive (status FAILED) - share the "
+    "url returned to the creator instead, e.g. by WhatsApp.")
+ENDPOINT("GET", "/auth/invite/{token}", "Who an invite is for - greet them before they type anything.", access="Public (the token is the credential)",
+    response=[["firstName / email / schoolName / role / expiresAt", "", "email is masked (a***@gmail.com); firstName is absent for a school admin"]],
+    example_resp='{\n  "success": true,\n  "data": { "firstName": "Ransford", "email": "a***@gmail.com", "schoolName": "KINGSCHOOL", "role": "STUDENT", "expiresAt": "2026-10-06T10:00:00" }\n}',
+    notes=["400 with exactly one of these messages, written to be shown as-is: "
+           "\"This invite link has expired. Ask your school to send a new one.\" / "
+           "\"This invite link has already been used. Sign in instead.\" / "
+           "\"This invite link isn't valid.\""])
+ENDPOINT("POST", "/auth/invite/accept", "Choose a password and sign in.", access="Public (the token is the credential)",
+    request=[["token", "string", "yes", "from the link's ?token="],
+             ["password", "string", "yes", "8-100 chars"],
+             ["rememberMe", "boolean", "no", "same as login"]],
+    response=[["Same as a normal login", "", "accessToken, refreshToken, ... - they're signed in"]],
+    notes=["Same three 400 messages as above, plus the usual validation errors."])
+ENDPOINT("POST", "/users/{userId}/invite", "Resend an invite (the old link stops working).",
+    access="ADMIN for accounts of their school (bootstrap admin: anyone); INSTRUCTOR for students of their school",
+    response=[["status / expiresAt / url", "", "url only to you, as when creating"]],
+    notes=["400 \"This person has already set up their account.\"",
+           "429 with Retry-After if an invite was sent less than 60 seconds ago."])
+d.BULLETS([
+    "Signing in with an invited account answers 403: \"Your account isn't set up yet. Open the "
+    "invite link in your email to choose a password.\" - show it as-is.",
+    "Lists: show \"Invite pending\" (accountStatus INVITED, inviteExpiresAt in the future) or "
+    "\"Invite expired\" (in the past), with a Resend invite button.",
+])
+
 d.H(2, "Sessions: how long a login lasts")
 d.BULLETS([
     "Access tokens last 15 minutes; refresh them with POST /auth/refresh-token (every refresh "
@@ -285,6 +318,7 @@ ENDPOINT("GET", "/auth/me", "Get the current user's identity and profile IDs.",
          "(null for the bootstrap admin, who owns none)"],
         ["bootstrapAdmin", "boolean", "true only for the one permanent super-admin — decides which "
          "admin dashboard to render, see the Roles section above"],
+        ["accountStatus / inviteExpiresAt", "", "INVITED or ACTIVE (also on student and instructor profiles and school lists); inviteExpiresAt only while INVITED"],
         ["enabled / emailVerified", "boolean", "emailVerified is true once the account verified by email "
          "(false if it verified by WhatsApp instead) - you never need it for the login flow"],
     ],
@@ -301,7 +335,7 @@ ENDPOINT("POST", "/auth/register", "Create a STUDENT or INSTRUCTOR account.",
     access="ADMIN or INSTRUCTOR bearer token",
     request=[
         ["email", "string", "yes", ""],
-        ["password", "string", "yes", "8-100 chars"],
+        ["password", "string", "no", "8-100 chars. LEAVE IT OUT to invite the person instead: they get a link and choose their own password (see \"Invites\" below)"],
         ["firstName / lastName", "string", "yes", ""],
         ["phone", "string", "no", "max 20 chars. Collect it WITH the country code (+233...) - only "
          "then can the user receive their verification code on WhatsApp"],
@@ -315,7 +349,10 @@ ENDPOINT("POST", "/auth/register", "Create a STUDENT or INSTRUCTOR account.",
     example_req='{\n  "email": "student.jones@example.com",\n  "password": "SecurePass123!",\n  "firstName": "Jamie",\n  "lastName": "Jones",\n  "schoolId": 2,\n  "role": "STUDENT",\n  "licenseNumber": "LIC-2026-0031"\n}',
     response=[["user.id / user.email / user.roles", "", "the NEW user's identity only - no accessToken/refreshToken/tokenType/expiresIn. The account's creator never receives a session for it; the new user logs in themselves with the password they were given, and verifies the account with a one-time code at that first login"]],
     example_resp='{\n  "success": true,\n  "message": "Registration successful",\n  "data": {\n    "user": { "id": 31, "email": "student.jones@example.com", "roles": ["STUDENT"] }\n  }\n}',
-    notes=["An INSTRUCTOR or regular ADMIN caller creating an account in a DIFFERENT school than their own is rejected with 403 (so is an INSTRUCTOR trying to create an INSTRUCTOR).",
+    notes=["Without a password the response also has invite: { status: SENT | FAILED, expiresAt, url }. "
+           "url is the set-password link, returned ONLY to you (the creator) - offer \"Copy link\" / "
+           "\"Share on WhatsApp\", especially when status is FAILED (the email didn't go out).",
+           "An INSTRUCTOR or regular ADMIN caller creating an account in a DIFFERENT school than their own is rejected with 403 (so is an INSTRUCTOR trying to create an INSTRUCTOR).",
            "Calling it without a token gets 401 before the body is even checked.",
            "licenseNumber is required when role=INSTRUCTOR (a common mistake — don't forget it on an \"add instructor\" form)."])
 
@@ -348,7 +385,9 @@ ENDPOINT("POST", "/auth/logout", "Revoke a refresh token server-side.",
 ENDPOINT("POST", "/auth/forgot-password", "Request a password-reset email.",
     access="Public",
     request=[["email", "string", "yes", ""]],
-    notes=["Always returns the same generic success message regardless of whether the email "
+    notes=["For an account that was invited and never set up, this sends a fresh invite link "
+           "instead of a reset link - same generic reply.",
+           "Always returns the same generic success message regardless of whether the email "
            "exists, and regardless of whether the email actually sends — this is deliberate "
            "(don't leak account existence). Don't build UI that expects a different response for "
            "\"email not found\"."])
@@ -402,7 +441,7 @@ ENDPOINT("POST", "/schools", "Create a new school and its owning admin account t
         ["schoolPhone", "string", "no", "max 20 chars"],
         ["schoolEmail", "string", "no", "valid email, max 255 chars"],
         ["adminEmail", "string", "yes", "valid email — becomes the new admin's login"],
-        ["adminPassword", "string", "yes", "8-100 chars"],
+        ["adminPassword", "string", "no", "8-100 chars. Leave it out to invite the new admin (they choose their own password); the response then has invite { status, expiresAt, url }"],
     ],
     example_req='{\n  "schoolName": "Downtown Driving Academy",\n  "schoolAddress": "42 Main Street, Springfield",\n  "schoolPhone": "555-0142",\n  "schoolEmail": "info@downtowndriving.example",\n  "adminEmail": "owner@downtowndriving.example",\n  "adminPassword": "SecurePass123!"\n}',
     response=[
@@ -1640,6 +1679,18 @@ d.BULLETS([
     "the country code (+233...) - it's what makes WhatsApp codes possible.",
     "Verification may be switched off on the backend for now (login then just returns "
     "tokens). Build and keep this flow anyway - it turns on without a frontend release.",
+])
+
+d.H(2, "16. Invites")
+d.BULLETS([
+    "Create-account forms (student, instructor, school admin): make the password field optional, "
+    "or drop it and always invite. After creating, show the invite result: \"Invite sent to ...\" "
+    "or \"Email couldn't be sent\" - with Copy link / Share on WhatsApp using invite.url either way.",
+    "An /accept-invite page: read ?token=, call GET /auth/invite/{token} to greet them "
+    "(\"Hi Ransford, set a password for KINGSCHOOL\"), then a password form posting to "
+    "POST /auth/invite/accept and continue as after login. Show the 400 messages as-is.",
+    "Lists: Invite pending / Invite expired badges and a Resend invite button (POST /users/{id}/invite).",
+    "Login: show the 403 \"Your account isn't set up yet...\" message as-is.",
 ])
 
 d.H(2, "15. Profile photos")

@@ -4,8 +4,11 @@ import com.drivingschool.backend.common.base.BaseEntity;
 import com.drivingschool.backend.instructor.entity.InstructorProfile;
 import com.drivingschool.backend.role.entity.Role;
 import com.drivingschool.backend.student.entity.StudentProfile;
+import com.drivingschool.backend.user.enums.AccountStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
@@ -56,6 +59,14 @@ public class User extends BaseEntity {
 
     @Column(name = "profile_image_public_id", length = 255)
     private String profileImagePublicId;
+
+    // V24: INVITED until the person sets their password from the invite link.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "account_status", nullable = false, length = 20)
+    private AccountStatus accountStatus = AccountStatus.ACTIVE;
+
+    @Column(name = "invite_expires_at")
+    private LocalDateTime inviteExpiresAt;
 
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
@@ -109,6 +120,16 @@ public class User extends BaseEntity {
     public void clearProfilePhoto() {
         this.profileImageUrl = null;
         this.profileImagePublicId = null;
+    }
+
+    public void markInvited(LocalDateTime inviteExpiresAt) {
+        this.accountStatus = AccountStatus.INVITED;
+        this.inviteExpiresAt = inviteExpiresAt;
+    }
+
+    public void activate() {
+        this.accountStatus = AccountStatus.ACTIVE;
+        this.inviteExpiresAt = null;
     }
 
     public void recordLogin() {

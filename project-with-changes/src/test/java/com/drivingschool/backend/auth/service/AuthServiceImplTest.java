@@ -84,6 +84,7 @@ class AuthServiceImplTest {
     @Mock private AdminSchoolScope adminSchoolScope;
     @Mock private AccountVerificationService accountVerificationService;
     @Mock private com.drivingschool.backend.security.RateLimiter rateLimiter;
+    @Mock private InviteService inviteService;
 
     private AuthServiceImpl authService;
 
@@ -107,7 +108,7 @@ class AuthServiceImplTest {
                 schoolRepository, studentProfileRepository, instructorProfileRepository,
                 passwordEncoder, jwtTokenProvider, authMapper, currentUserMapper, currentUserService,
                 passwordResetTokenRepository, emailService, userService, refreshTokenRevocationService,
-                schoolDeletionRequestService, notificationService, adminSchoolScope, accountVerificationService, rateLimiter, 3_600_000L, true);
+                schoolDeletionRequestService, notificationService, adminSchoolScope, accountVerificationService, rateLimiter, inviteService, 3_600_000L, true);
     }
 
     // --- login ---
@@ -419,7 +420,7 @@ class AuthServiceImplTest {
                 .newPassword("newPassword123")
                 .build();
 
-        when(passwordResetTokenRepository.findByToken("valid-token")).thenReturn(Optional.of(resetToken));
+        when(passwordResetTokenRepository.findByToken(InviteService.hash("valid-token"))).thenReturn(Optional.of(resetToken));
         when(passwordEncoder.encode("newPassword123")).thenReturn("encoded-new-password");
 
         authService.resetPassword(request);
@@ -436,7 +437,7 @@ class AuthServiceImplTest {
                 .token("missing-token")
                 .newPassword("newPassword123")
                 .build();
-        when(passwordResetTokenRepository.findByToken("missing-token")).thenReturn(Optional.empty());
+        when(passwordResetTokenRepository.findByToken(InviteService.hash("missing-token"))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.resetPassword(request))
                 .isInstanceOf(BadRequestException.class);
@@ -454,7 +455,7 @@ class AuthServiceImplTest {
                 .token("expired-token")
                 .newPassword("newPassword123")
                 .build();
-        when(passwordResetTokenRepository.findByToken("expired-token")).thenReturn(Optional.of(resetToken));
+        when(passwordResetTokenRepository.findByToken(InviteService.hash("expired-token"))).thenReturn(Optional.of(resetToken));
 
         assertThatThrownBy(() -> authService.resetPassword(request))
                 .isInstanceOf(BadRequestException.class);
@@ -475,7 +476,7 @@ class AuthServiceImplTest {
                 .token("used-token")
                 .newPassword("newPassword123")
                 .build();
-        when(passwordResetTokenRepository.findByToken("used-token")).thenReturn(Optional.of(resetToken));
+        when(passwordResetTokenRepository.findByToken(InviteService.hash("used-token"))).thenReturn(Optional.of(resetToken));
 
         assertThatThrownBy(() -> authService.resetPassword(request))
                 .isInstanceOf(BadRequestException.class);
@@ -601,7 +602,7 @@ class AuthServiceImplTest {
                 .token("valid-token")
                 .expiresAt(LocalDateTime.now().plusHours(1))
                 .build();
-        when(passwordResetTokenRepository.findByToken("valid-token")).thenReturn(Optional.of(resetToken));
+        when(passwordResetTokenRepository.findByToken(InviteService.hash("valid-token"))).thenReturn(Optional.of(resetToken));
         when(passwordEncoder.encode("newPassword123")).thenReturn("encoded-new-password");
         when(jwtTokenProvider.getRefreshTokenExpirationMs()).thenReturn(604_800_000L);
 
@@ -654,7 +655,7 @@ class AuthServiceImplTest {
                 passwordEncoder, jwtTokenProvider, authMapper, currentUserMapper, currentUserService,
                 passwordResetTokenRepository, emailService, userService, refreshTokenRevocationService,
                 schoolDeletionRequestService, notificationService, adminSchoolScope, accountVerificationService,
-                rateLimiter, 3_600_000L, false);
+                rateLimiter, inviteService, 3_600_000L, false);
         User user = User.builder().email("new@example.com").password("encoded").enabled(true).emailVerified(false).build();
         ReflectionTestUtils.setField(user, "id", 1L);
         user.addRole(Role.builder().name(RoleName.STUDENT).build());
@@ -697,5 +698,45 @@ class AuthServiceImplTest {
         assertThatThrownBy(() -> authService.login(LoginRequest.builder().email(" User@Example.com ").password("password123").build()))
                 .isInstanceOf(com.drivingschool.backend.common.exception.TooManyRequestsException.class);
         verify(authenticationManager, never()).authenticate(any());
+    }
+
+    // --- invites ---
+
+    @Test
+    void login_forAnInvitedAccount_explainsWhatToDo() {
+        User invited = User.builder().email("new@example.com").password("x").enabled(true).emailVerified(false).build();
+        invited.markInvited(java.time.LocalDateTime.now().plusDays(3));
+        when(userRepository.findByEmail("new@example.com")).thenReturn(Optional.of(invited));
+
+        assertThatThrownBy(() -> authService.login(LoginRequest.builder().email("new@example.com").password("whatever1").build()))
+                .isInstanceOf(com.drivingschool.backend.common.exception.ForbiddenException.class)
+                .hasMessage("Your account isn't set up yet. Open the invite link in your email to choose a password.");
+        verify(authenticationManager, never()).authenticate(any());
+    }
+
+    @Test
+    void forgotPassword_forAnInvitedAccount_sendsAFreshInviteInsteadOfAReset() {
+        User invited = User.builder().email("new@example.com").password("x").enabled(true).emailVerified(false).build();
+        invited.markInvited(java.time.LocalDateTime.now().plusDays(3));
+        when(userRepository.findByEmail("new@example.com")).thenReturn(Optional.of(invited));
+
+        authService.forgotPassword(ForgotPasswordRequest.builder().email("new@example.com").build());
+
+        verify(inviteService).reinviteQuietly(invited);
+        verify(passwordResetTokenRepository, never()).save(any());
+        verify(emailService, never()).sendPasswordResetEmail(any(), any(), anyLong());
+    }
+
+    @Test
+    void acceptInvite_signsThePersonInLikeANormalLogin() {
+        User user = existingUser(RoleName.STUDENT);
+        AuthResponse tokens = AuthResponse.builder().accessToken("access").build();
+        when(inviteService.accept("tok", "MyOwnPass123")).thenReturn(user);
+        when(jwtTokenProvider.generateAccessToken(any())).thenReturn("access");
+        when(jwtTokenProvider.generateRefreshToken(any(), any())).thenReturn("refresh");
+        when(authMapper.toAuthResponse(user, "access", "refresh")).thenReturn(tokens);
+
+        assertThat(authService.acceptInvite(com.drivingschool.backend.auth.dto.AcceptInviteRequest.builder()
+                .token("tok").password("MyOwnPass123").build())).isSameAs(tokens);
     }
 }

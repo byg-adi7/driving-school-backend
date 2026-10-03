@@ -42,6 +42,22 @@ public class ResendEmailClient {
      * catching and handling that the same way they already treat any other
      * send failure (logged, not fatal to the caller's own operation).
      */
+    /** Sends a message with both an HTML version (e.g. a button) and a plain-text fallback. */
+    public void send(String fromAddress, String toAddress, String subject, String textBody, String htmlBody) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(config.getApiKey());
+
+        Map<String, Object> body = Map.of(
+                "from", fromAddress,
+                "to", toAddress,
+                "subject", subject,
+                "text", textBody,
+                "html", htmlBody);
+
+        restTemplate.postForObject(RESEND_API_URL, new HttpEntity<>(body, headers), String.class);
+    }
+
     public void send(String fromAddress, String toAddress, String subject, String textBody) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);

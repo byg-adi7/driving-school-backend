@@ -39,6 +39,7 @@ public class SchoolServiceImpl implements SchoolService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final com.drivingschool.backend.auth.service.InviteService inviteService;
     private final CurrentUserService currentUserService;
     private final SchoolDeletionRequestRepository schoolDeletionRequestRepository;
     private final SchoolAdminCascadeDeletionService cascadeDeletionService;
@@ -50,6 +51,7 @@ public class SchoolServiceImpl implements SchoolService {
                              UserRepository userRepository,
                              RoleRepository roleRepository,
                              PasswordEncoder passwordEncoder,
+                             com.drivingschool.backend.auth.service.InviteService inviteService,
                              CurrentUserService currentUserService,
                              SchoolDeletionRequestRepository schoolDeletionRequestRepository,
                              SchoolAdminCascadeDeletionService cascadeDeletionService,
@@ -60,6 +62,7 @@ public class SchoolServiceImpl implements SchoolService {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
+        this.inviteService = inviteService;
         this.currentUserService = currentUserService;
         this.schoolDeletionRequestRepository = schoolDeletionRequestRepository;
         this.cascadeDeletionService = cascadeDeletionService;
@@ -81,9 +84,10 @@ public class SchoolServiceImpl implements SchoolService {
         Role adminRole = roleRepository.findByName(RoleName.ADMIN)
                 .orElseThrow(() -> new ResourceNotFoundException("Role", "name", RoleName.ADMIN));
 
+        boolean invite = request.getAdminPassword() == null || request.getAdminPassword().isBlank();
         User admin = User.builder()
                 .email(request.getAdminEmail())
-                .password(passwordEncoder.encode(request.getAdminPassword()))
+                .password(invite ? inviteService.unusablePassword() : passwordEncoder.encode(request.getAdminPassword()))
                 .enabled(true)
                 // Verifies with a one-time code at first login, like every other created account.
                 .emailVerified(false)
@@ -107,6 +111,9 @@ public class SchoolServiceImpl implements SchoolService {
                 .school(schoolMapper.toResponse(savedSchool))
                 .adminUserId(savedAdmin.getId())
                 .adminEmail(savedAdmin.getEmail())
+                // Sent after the school exists, so the email can name it.
+                .invite(invite ? inviteService.invite(savedAdmin,
+                        userRepository.findById(currentUserService.requireUserId()).orElse(null)) : null)
                 .build();
     }
 

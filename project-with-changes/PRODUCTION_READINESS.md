@@ -537,3 +537,33 @@ The frontend saw ordinary requests get "Too many requests" during a tablet check
 - Other anonymous requests stay at 100 a minute per address.
 
 **Tests:** filter tests for the per-user and invalid-token cases, plus the per-account login cap.
+
+## Invites: New Users Choose Their Own Password (2026-10-03)
+
+Frontend spec: when an admin or instructor creates an account, the creator no longer sets the password. Decisions by the product owner: the invite link is also returned to the creator (email can't reach most users until there's a verified domain); links last 72 hours; `POST /schools` works the same way.
+
+**Creating accounts:**
+- `password` is optional on `/auth/register` and `/auth/admin/register`, and `adminPassword` on `/schools`.
+- Without one, the account is created `INVITED` with a random password nobody knows. The response includes `invite { status SENT|FAILED, expiresAt, url }`, with `url` for the creator only.
+- With one, nothing changes.
+
+**Tokens:** 32 random bytes, URL-safe. Only the SHA-256 hash is stored (`account_invites`, V24). They're single-use, expire after 72 hours, and resending deletes the old one.
+- The email goes through Resend, with HTML and text versions. The link sits next to the reset-password page (`INVITE_ACCEPT_URL` overrides it).
+
+**Endpoints:**
+- `GET /auth/invite/{token}` returns the greeting: first name, masked email, school, role, expiry.
+- `POST /auth/invite/accept` sets the password, activates the account, marks the email verified, uses up the token and returns a normal login response.
+- `POST /users/{userId}/invite` resends, with the photo access rules, "already set up" as a 400, and a 60-second cooldown (429).
+- The three user-facing 400 messages are exactly as specified.
+
+**Edge cases:**
+- Logging in to an `INVITED` account returns a 403 explaining what to do.
+- Forgot-password for an `INVITED` account sends a fresh invite (same generic reply).
+- A deleted user's link is invalid.
+- `accountStatus` and `inviteExpiresAt` appear in `/auth/me` and in student and instructor profiles and lists.
+
+**Also:** password-reset tokens are now stored hashed too (the spec assumed they already were). Reset links issued in the hour before deploy stop working.
+
+**Migration safety:** V24 only adds columns and a table, so the old instance keeps working during the rollover.
+
+**Tests:** `InviteServiceTest` (10), invite cases in `AuthServiceImplTest`, and an end-to-end `AccountInviteIntegrationTest`. Unit suite: 890, green.

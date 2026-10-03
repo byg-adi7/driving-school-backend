@@ -20,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -41,6 +42,19 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(ApiResponse.success("Login successful", response));
+    }
+
+    @GetMapping("/invite/{token}")
+    @Operation(summary = "Who an invite link is for - shown before they choose a password")
+    public ResponseEntity<ApiResponse<com.drivingschool.backend.auth.dto.InviteDetailsResponse>> invite(@PathVariable String token) {
+        return ResponseEntity.ok(ApiResponse.success(authService.getInvite(token)));
+    }
+
+    @PostMapping("/invite/accept")
+    @Operation(summary = "Choose a password from an invite link - signs the person in")
+    public ResponseEntity<ApiResponse<AuthResponse>> acceptInvite(
+            @Valid @RequestBody com.drivingschool.backend.auth.dto.AcceptInviteRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Account set up", authService.acceptInvite(request)));
     }
 
     @PostMapping("/verification/send")

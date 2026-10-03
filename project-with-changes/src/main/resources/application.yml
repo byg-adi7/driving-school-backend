@@ -129,6 +129,11 @@ app:
     # Frontend page that reads the ?token= query param and calls reset-password.
     reset-url: ${PASSWORD_RESET_URL:http://localhost:3000/reset-password}
 
+  invite:
+    # Page that reads ?token= and calls /auth/invite/accept. Empty = next to the
+    # reset-password page (PASSWORD_RESET_URL with /reset-password -> /accept-invite).
+    accept-url: ${INVITE_ACCEPT_URL:}
+
   verification:
     # Whether login requires a verified account (one-time code by email/WhatsApp).
     # Switch off with VERIFICATION_REQUIRED=false only while real users can't receive

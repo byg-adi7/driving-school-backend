@@ -19,4 +19,7 @@ public class CurrentUserResponse {
     private final boolean enabled;
     private final boolean emailVerified;
     private final boolean bootstrapAdmin;
+    // INVITED until the person sets their password; inviteExpiresAt only while INVITED.
+    private final String accountStatus;
+    private final java.time.LocalDateTime inviteExpiresAt;
 }

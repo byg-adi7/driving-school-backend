@@ -24,6 +24,9 @@ public class AuthResponse {
     private final Boolean verificationRequired;
     private final VerificationChallengeResponse verification;
 
+    // Only when an account was created without a password: the invite that was sent.
+    private final InviteResponse invite;
+
     @Getter
     @Builder
     public static class UserInfo {

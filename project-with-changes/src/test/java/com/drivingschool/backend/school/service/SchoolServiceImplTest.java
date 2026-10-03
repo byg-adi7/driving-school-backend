@@ -43,6 +43,7 @@ class SchoolServiceImplTest {
     @Mock private UserRepository userRepository;
     @Mock private RoleRepository roleRepository;
     @Mock private PasswordEncoder passwordEncoder;
+    @Mock private com.drivingschool.backend.auth.service.InviteService inviteService;
     @Mock private CurrentUserService currentUserService;
     @Mock private SchoolDeletionRequestRepository schoolDeletionRequestRepository;
     @Mock private SchoolAdminCascadeDeletionService cascadeDeletionService;
@@ -56,7 +57,7 @@ class SchoolServiceImplTest {
     void setUp() {
         accessValidator = new SchoolAccessValidator(schoolRepository);
         schoolService = new SchoolServiceImpl(schoolRepository, schoolMapper, userRepository, roleRepository,
-                passwordEncoder, currentUserService, schoolDeletionRequestRepository, cascadeDeletionService,
+                passwordEncoder, inviteService, currentUserService, schoolDeletionRequestRepository, cascadeDeletionService,
                 accessValidator, notificationService);
     }
 

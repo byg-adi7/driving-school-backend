@@ -2,6 +2,8 @@ package com.drivingschool.backend.auth.service;
 
 import com.drivingschool.backend.auth.dto.AdminRegisterRequest;
 import com.drivingschool.backend.auth.dto.AuthResponse;
+import com.drivingschool.backend.auth.dto.InviteDetailsResponse;
+import com.drivingschool.backend.auth.dto.AcceptInviteRequest;
 import com.drivingschool.backend.auth.dto.ConfirmVerificationRequest;
 import com.drivingschool.backend.auth.dto.CurrentUserResponse;
 import com.drivingschool.backend.auth.dto.ForgotPasswordRequest;
@@ -40,6 +42,7 @@ import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.enums.StudentStatus;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.user.entity.User;
+import com.drivingschool.backend.user.enums.AccountStatus;
 import com.drivingschool.backend.user.repository.UserRepository;
 import com.drivingschool.backend.user.service.UserService;
 import lombok.extern.slf4j.Slf4j;
@@ -79,6 +82,7 @@ public class AuthServiceImpl implements AuthService {
     private final AdminSchoolScope adminSchoolScope;
     private final AccountVerificationService accountVerificationService;
     private final RateLimiter rateLimiter;
+    private final InviteService inviteService;
     static final int LOGIN_ATTEMPTS_PER_ACCOUNT = 10;
     static final java.time.Duration LOGIN_WINDOW = java.time.Duration.ofMinutes(15);
     private final long passwordResetTokenExpirationMs;
@@ -104,6 +108,7 @@ public class AuthServiceImpl implements AuthService {
                            AdminSchoolScope adminSchoolScope,
                            AccountVerificationService accountVerificationService,
                            RateLimiter rateLimiter,
+                           InviteService inviteService,
                            @Value("${app.password-reset.token-expiration-ms}") long passwordResetTokenExpirationMs,
                            @Value("${app.verification.required:true}") boolean verificationRequired) {
         this.authenticationManager = authenticationManager;
@@ -126,6 +131,7 @@ public class AuthServiceImpl implements AuthService {
         this.adminSchoolScope = adminSchoolScope;
         this.accountVerificationService = accountVerificationService;
         this.rateLimiter = rateLimiter;
+        this.inviteService = inviteService;
         this.passwordResetTokenExpirationMs = passwordResetTokenExpirationMs;
         this.verificationRequired = verificationRequired;
         if (!verificationRequired) {
@@ -145,6 +151,12 @@ public class AuthServiceImpl implements AuthService {
             throw new TooManyRequestsException("Too many login attempts for this account - try again in a few minutes",
                     attempt.retryAfterSeconds());
         }
+        userRepository.findByEmail(request.getEmail())
+                .filter(u -> u.getAccountStatus() == AccountStatus.INVITED && !u.isDeleted())
+                .ifPresent(u -> {
+                    throw new ForbiddenException(
+                            "Your account isn't set up yet. Open the invite link in your email to choose a password.");
+                });
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
 
@@ -174,6 +186,21 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public AuthResponse confirmVerification(ConfirmVerificationRequest request) {
         User user = accountVerificationService.confirm(request);
+        return completeLogin(user, new UserPrincipal(user), request.isRememberMe());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public InviteDetailsResponse getInvite(String token) {
+        return inviteService.details(token);
+    }
+
+    // The link proved the email, so no one-time code - straight to a normal login response.
+    @Override
+    @Transactional
+    public AuthResponse acceptInvite(AcceptInviteRequest request) {
+        User user = inviteService.accept(request.getToken(), request.getPassword());
+        log.info("Invite accepted: {}", user.getEmail());
         return completeLogin(user, new UserPrincipal(user), request.isRememberMe());
     }
 
@@ -209,9 +236,10 @@ public class AuthServiceImpl implements AuthService {
 
         validateRoleSpecificFields(request);
 
+        boolean invite = request.getPassword() == null || request.getPassword().isBlank();
         User user = User.builder()
                 .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
+                .password(invite ? inviteService.unusablePassword() : passwordEncoder.encode(request.getPassword()))
                 .enabled(true)
                 .emailVerified(false)
                 .build();
@@ -227,8 +255,14 @@ public class AuthServiceImpl implements AuthService {
 
         sendWelcomeNotification(savedUser);
 
-        log.info("User registered: {} with role {}", savedUser.getEmail(), request.getRole());
-        return authMapper.toRegisteredUserResponse(savedUser);
+        log.info("User registered: {} with role {}{}", savedUser.getEmail(), request.getRole(), invite ? " (invited)" : "");
+        AuthResponse response = authMapper.toRegisteredUserResponse(savedUser);
+        if (!invite) {
+            return response;
+        }
+        User creator = userRepository.findById(currentUserService.requireUserId()).orElse(null);
+        return AuthResponse.builder().user(response.getUser())
+                .invite(inviteService.invite(savedUser, creator)).build();
     }
 
     @Override
@@ -315,12 +349,17 @@ public class AuthServiceImpl implements AuthService {
         // registered, so the response can never be used to enumerate
         // accounts.
         userRepository.findByEmail(request.getEmail()).ifPresent(user -> {
+            if (user.getAccountStatus() == AccountStatus.INVITED) {
+                // Never set a password yet: a fresh invite, not a reset (same reply either way).
+                inviteService.reinviteQuietly(user);
+                return;
+            }
             String token = UUID.randomUUID().toString();
             LocalDateTime expiresAt = LocalDateTime.now().plusNanos(passwordResetTokenExpirationMs * 1_000_000L);
 
             PasswordResetToken resetToken = PasswordResetToken.builder()
                     .user(user)
-                    .token(token)
+                    .token(InviteService.hash(token))
                     .expiresAt(expiresAt)
                     .build();
             passwordResetTokenRepository.save(resetToken);
@@ -333,7 +372,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
-        PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(request.getToken())
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(InviteService.hash(request.getToken()))
                 .orElseThrow(() -> new BadRequestException("Invalid or expired reset token"));
 
         if (resetToken.isUsed() || resetToken.isExpired()) {
