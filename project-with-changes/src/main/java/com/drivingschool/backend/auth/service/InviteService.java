@@ -108,7 +108,8 @@ public class InviteService {
 
     /** A password nobody knows, for an account that hasn't been set up yet. */
     public String unusablePassword() {
-        return passwordEncoder.encode(newToken() + newToken());
+        // 32 random bytes (43 chars): unguessable, and within BCrypt's 72-byte limit.
+        return passwordEncoder.encode(newToken());
     }
 
     /**

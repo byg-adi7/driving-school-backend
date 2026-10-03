@@ -215,4 +215,14 @@ class InviteServiceTest {
         assertThat(InviteService.siblingOf("http://localhost:3000/reset-password", "accept-invite"))
                 .isEqualTo("http://localhost:3000/accept-invite");
     }
+
+    @Test
+    void unusablePassword_fitsBcryptsLimit() {
+        InviteService real = new InviteService(inviteRepository, userRepository, studentProfileRepository,
+                instructorProfileRepository, schoolRepository, currentUserService, adminSchoolScope, rateLimiter,
+                new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder(), emailClient, resendConfig,
+                "from", "", "http://localhost:3000/reset-password", Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThat(real.unusablePassword()).startsWith("$2");
+    }
 }
