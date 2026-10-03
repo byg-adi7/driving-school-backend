@@ -48,6 +48,7 @@ class SchoolControllerSecurityTest {
     @Autowired private ObjectMapper objectMapper;
     @MockBean private SchoolService schoolService;
     @MockBean private SchoolDeletionRequestService schoolDeletionRequestService;
+    @MockBean private com.drivingschool.backend.school.service.SchoolLogoService schoolLogoService;
 
     @TestConfiguration
     @EnableMethodSecurity(prePostEnabled = true)

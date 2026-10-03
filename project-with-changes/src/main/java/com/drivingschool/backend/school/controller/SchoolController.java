@@ -7,12 +7,14 @@ import com.drivingschool.backend.school.dto.SchoolDeletionRequestResponse;
 import com.drivingschool.backend.school.dto.SchoolResponse;
 import com.drivingschool.backend.school.dto.SchoolWithAdminResponse;
 import com.drivingschool.backend.school.service.SchoolDeletionRequestService;
+import com.drivingschool.backend.school.service.SchoolLogoService;
 import com.drivingschool.backend.school.service.SchoolService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,7 +23,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -33,10 +37,13 @@ public class SchoolController {
 
     private final SchoolService schoolService;
     private final SchoolDeletionRequestService schoolDeletionRequestService;
+    private final SchoolLogoService schoolLogoService;
 
-    public SchoolController(SchoolService schoolService, SchoolDeletionRequestService schoolDeletionRequestService) {
+    public SchoolController(SchoolService schoolService, SchoolDeletionRequestService schoolDeletionRequestService,
+                            SchoolLogoService schoolLogoService) {
         this.schoolService = schoolService;
         this.schoolDeletionRequestService = schoolDeletionRequestService;
+        this.schoolLogoService = schoolLogoService;
     }
 
     @PostMapping
@@ -74,6 +81,20 @@ public class SchoolController {
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
         schoolService.deleteDirectly(id);
         return ResponseEntity.ok(ApiResponse.success("School and its owning admin deleted successfully", null));
+    }
+
+    @PostMapping(value = "/me/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload or replace my school's logo (JPEG/PNG/WebP/SVG, max 2 MB)")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<SchoolResponse>> uploadLogo(@RequestPart("file") MultipartFile file) {
+        return ResponseEntity.ok(ApiResponse.success("Logo saved", schoolLogoService.upload(file)));
+    }
+
+    @DeleteMapping("/me/logo")
+    @Operation(summary = "Remove my school's logo")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<SchoolResponse>> removeLogo() {
+        return ResponseEntity.ok(ApiResponse.success("Logo removed", schoolLogoService.remove()));
     }
 
     @DeleteMapping("/me")

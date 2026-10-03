@@ -12,6 +12,7 @@ import com.drivingschool.backend.instructor.repository.InstructorProfileReposito
 import com.drivingschool.backend.role.enums.RoleName;
 import com.drivingschool.backend.school.validator.AdminSchoolScope;
 import com.drivingschool.backend.security.CurrentUserService;
+import com.drivingschool.backend.storage.ImageFiles;
 import com.drivingschool.backend.student.entity.StudentProfile;
 import com.drivingschool.backend.student.repository.StudentProfileRepository;
 import com.drivingschool.backend.user.entity.User;
@@ -148,32 +149,11 @@ public class ProfilePhotoService {
         } catch (IOException e) {
             throw new BadRequestException("The photo could not be read");
         }
-        if (!isJpeg(content) && !isPng(content) && !isWebp(content)) {
+        ImageFiles.Type type = ImageFiles.detect(content);
+        if (type == null || type == ImageFiles.Type.SVG) {
             throw new BadRequestException("The photo must be a JPEG, PNG or WebP image");
         }
         return content;
-    }
-
-    private static boolean isJpeg(byte[] b) {
-        return b.length > 3 && (b[0] & 0xFF) == 0xFF && (b[1] & 0xFF) == 0xD8 && (b[2] & 0xFF) == 0xFF;
-    }
-
-    private static boolean isPng(byte[] b) {
-        byte[] sig = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
-        if (b.length < sig.length) {
-            return false;
-        }
-        for (int i = 0; i < sig.length; i++) {
-            if (b[i] != sig[i]) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static boolean isWebp(byte[] b) {
-        return b.length > 12 && b[0] == 'R' && b[1] == 'I' && b[2] == 'F' && b[3] == 'F'
-                && b[8] == 'W' && b[9] == 'E' && b[10] == 'B' && b[11] == 'P';
     }
 
     private Cloudinary client() {

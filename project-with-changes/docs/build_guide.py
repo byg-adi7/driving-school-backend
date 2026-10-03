@@ -318,6 +318,7 @@ ENDPOINT("GET", "/auth/me", "Get the current user's identity and profile IDs.",
          "(null for the bootstrap admin, who owns none)"],
         ["bootstrapAdmin", "boolean", "true only for the one permanent super-admin — decides which "
          "admin dashboard to render, see the Roles section above"],
+        ["schoolName / schoolLogoUrl", "string or absent", "the caller's school and its logo - show them in the app header straight after login (absent for the bootstrap admin / no logo)"],
         ["accountStatus / inviteExpiresAt", "", "INVITED or ACTIVE (also on student and instructor profiles and school lists); inviteExpiresAt only while INVITED"],
         ["enabled / emailVerified", "boolean", "emailVerified is true once the account verified by email "
          "(false if it verified by WhatsApp instead) - you never need it for the login flow"],
@@ -1327,6 +1328,15 @@ ENDPOINT("PUT", "/schools/me/location", "Set my school's location, check-in radi
     notes=["Nobody can check in until this is set (check-in answers 400 \"Your school hasn't set "
            "its attendance location yet\").",
            "The bootstrap admin uses PUT /schools/{schoolId}/location with the same body."])
+ENDPOINT("POST", "/schools/me/logo", "Upload or replace my school's logo.", access="ADMIN (the school's own admin)",
+    request=[["file", "file (multipart/form-data)", "yes", "JPEG, PNG, WebP or SVG, max 2 MB - checked by content"]],
+    response=[["the school", "", "same shape as GET /schools/{id}, with logoUrl - a public URL you can put straight in an <img>"]],
+    notes=["Scaled to fit 512 x 512 (never cropped or enlarged). An SVG is converted to PNG on "
+           "upload (SVGs can carry scripts), so logoUrl always points to a plain image.",
+           "logoUrl is also on every school response, and every signed-in user gets "
+           "schoolName / schoolLogoUrl from GET /auth/me.",
+           "400 for a non-image or a file over 2 MB; 503 if storage is unavailable."])
+ENDPOINT("DELETE", "/schools/me/logo", "Remove my school's logo.", access="ADMIN (the school's own admin)")
 ENDPOINT("PUT", "/schools/{schoolId}/location", "Same, for a given school.", access="ADMIN (bootstrap: any school; regular admin: their own)")
 
 d.H(2, "Checking in (student / instructor)")
@@ -1679,6 +1689,12 @@ d.BULLETS([
     "the country code (+233...) - it's what makes WhatsApp codes possible.",
     "Verification may be switched off on the backend for now (login then just returns "
     "tokens). Build and keep this flow anyway - it turns on without a frontend release.",
+])
+
+d.H(2, "17. School logo")
+d.BULLETS([
+    "Admin settings: an \"Upload logo\" control (device or cloud file picker) posting to POST /schools/me/logo, with Remove.",
+    "Everywhere: show schoolLogoUrl (from GET /auth/me) and schoolName in the header; fall back to the name alone.",
 ])
 
 d.H(2, "16. Invites")

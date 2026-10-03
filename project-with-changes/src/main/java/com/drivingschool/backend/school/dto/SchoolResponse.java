@@ -15,6 +15,7 @@ public class SchoolResponse {
     private final String phone;
     private final String email;
     private final boolean active;
+    private final String logoUrl;
     // Daily attendance settings - latitude/longitude are null until the school sets them.
     private final Double latitude;
     private final Double longitude;

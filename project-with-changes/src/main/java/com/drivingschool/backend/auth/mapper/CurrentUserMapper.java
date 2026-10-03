@@ -13,14 +13,10 @@ import java.util.stream.Collectors;
 public class CurrentUserMapper {
 
     public CurrentUserResponse toResponse(User user, StudentProfile student, InstructorProfile instructor, School ownedSchool) {
-        Long schoolId = null;
-        if (student != null) {
-            schoolId = student.getSchool().getId();
-        } else if (instructor != null) {
-            schoolId = instructor.getSchool().getId();
-        } else if (ownedSchool != null) {
-            schoolId = ownedSchool.getId();
-        }
+        School school = student != null ? student.getSchool()
+                : instructor != null ? instructor.getSchool()
+                : ownedSchool;
+        Long schoolId = school != null ? school.getId() : null;
 
         return CurrentUserResponse.builder()
                 .userId(user.getId())
@@ -31,6 +27,8 @@ public class CurrentUserMapper {
                 .studentProfileId(student != null ? student.getId() : null)
                 .instructorProfileId(instructor != null ? instructor.getId() : null)
                 .schoolId(schoolId)
+                .schoolName(school != null ? school.getName() : null)
+                .schoolLogoUrl(school != null ? school.getLogoUrl() : null)
                 .profileImageUrl(user.getProfileImageUrl())
                 .accountStatus(user.getAccountStatus().name())
                 .inviteExpiresAt(user.getInviteExpiresAt())
