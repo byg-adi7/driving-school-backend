@@ -22,4 +22,7 @@ public class StudentProfileResponse {
     private final String profileImageUrl;
     private final Long schoolId;
     private final String schoolName;
+    // INVITED until the person sets their password; inviteExpiresAt only while INVITED.
+    private final String accountStatus;
+    private final java.time.LocalDateTime inviteExpiresAt;
 }

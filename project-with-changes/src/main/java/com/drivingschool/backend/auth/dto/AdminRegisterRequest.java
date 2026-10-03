@@ -20,7 +20,7 @@ public class AdminRegisterRequest {
     @Email(message = "Email must be valid")
     private final String email;
 
-    @NotBlank(message = "Password is required")
+    // Optional: leave it out to email the person an invite to choose their own.
     @Size(min = 8, max = 100, message = "Password must be between 8 and 100 characters")
     private final String password;
 

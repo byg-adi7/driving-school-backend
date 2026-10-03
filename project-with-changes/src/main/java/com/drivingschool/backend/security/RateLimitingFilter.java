@@ -108,6 +108,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
                 requestURI.contains("/api/v1/auth/refresh-token") ||
                 requestURI.contains("/api/v1/auth/forgot-password") ||
                 requestURI.contains("/api/v1/auth/reset-password") ||
-                requestURI.contains("/api/v1/auth/verification/");
+                requestURI.contains("/api/v1/auth/verification/") ||
+                requestURI.contains("/api/v1/auth/invite/");
     }
 }

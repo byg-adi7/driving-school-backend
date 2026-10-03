@@ -32,7 +32,7 @@ public class CreateSchoolWithAdminRequest {
     @Email(message = "Admin email must be valid")
     private final String adminEmail;
 
-    @NotBlank(message = "Admin password is required")
+    // Optional: leave it out to email the new admin an invite to choose their own.
     @Size(min = 8, max = 100, message = "Admin password must be between 8 and 100 characters")
     private final String adminPassword;
 }

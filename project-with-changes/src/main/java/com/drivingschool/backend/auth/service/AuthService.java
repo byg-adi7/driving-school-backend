@@ -15,6 +15,10 @@ public interface AuthService {
 
     AuthResponse login(LoginRequest request);
 
+    com.drivingschool.backend.auth.dto.InviteDetailsResponse getInvite(String token);
+
+    AuthResponse acceptInvite(com.drivingschool.backend.auth.dto.AcceptInviteRequest request);
+
     void sendVerificationCode(SendVerificationCodeRequest request);
 
     AuthResponse confirmVerification(ConfirmVerificationRequest request);

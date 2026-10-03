@@ -21,4 +21,7 @@ public class InstructorProfileResponse {
     private final boolean active;
     private final Long schoolId;
     private final String schoolName;
+    // INVITED until the person sets their password; inviteExpiresAt only while INVITED.
+    private final String accountStatus;
+    private final java.time.LocalDateTime inviteExpiresAt;
 }

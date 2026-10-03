@@ -23,9 +23,12 @@ import org.springframework.web.multipart.MultipartFile;
 public class ProfilePhotoController {
 
     private final ProfilePhotoService photoService;
+    private final com.drivingschool.backend.auth.service.InviteService inviteService;
 
-    public ProfilePhotoController(ProfilePhotoService photoService) {
+    public ProfilePhotoController(ProfilePhotoService photoService,
+                                  com.drivingschool.backend.auth.service.InviteService inviteService) {
         this.photoService = photoService;
+        this.inviteService = inviteService;
     }
 
     @PostMapping(value = "/me/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -48,6 +51,13 @@ public class ProfilePhotoController {
     public ResponseEntity<ApiResponse<ProfilePhotoService.PhotoResponse>> upload(@PathVariable Long userId,
                                                                                  @RequestPart("file") MultipartFile file) {
         return ResponseEntity.ok(ApiResponse.success("Photo saved", photoService.upload(userId, file)));
+    }
+
+    @PostMapping("/{userId}/invite")
+    @Operation(summary = "Resend someone's invite (replaces the old link): admin for their school, instructor for their students")
+    @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
+    public ResponseEntity<ApiResponse<com.drivingschool.backend.auth.dto.InviteResponse>> resendInvite(@PathVariable Long userId) {
+        return ResponseEntity.ok(ApiResponse.success("Invite sent", inviteService.resend(userId)));
     }
 
     @DeleteMapping("/{userId}/photo")
